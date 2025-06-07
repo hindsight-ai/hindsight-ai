@@ -1,6 +1,6 @@
 # PostgreSQL Database Persistence and Backup Guide
 
-This document explains how your PostgreSQL database data is kept safe and how you can create backups to prevent data loss, especially for the `memory_db` used by the `memory-service`.
+This document explains how your PostgreSQL database data is kept safe and how you can create backups to prevent data loss, especially for the `hindsight_db` used by the `memory-service`.
 
 ## 1. Understanding Data Persistence with Docker Volumes
 
@@ -58,14 +58,14 @@ You can run `pg_dump` from your computer's terminal. The easiest way is to run i
     Open your terminal and run the following command. Replace `<container_id_or_name>` with the actual ID or name you found in the previous step.
 
     ```bash
-    docker exec -t <container_id_or_name> pg_dump -U user memory_db > backup_$(date +%Y%m%d_%H%M%S).sql
+    docker exec -t <container_id_or_name> pg_dump -U user hindsight_db > backup_$(date +%Y%m%d_%H%M%S).sql
     ```
 
     **Let's break down this command:**
     *   `docker exec -t <container_id_or_name>`: This tells Docker to run a command *inside* your specified container. `-t` allocates a pseudo-TTY, which is good practice.
     *   `pg_dump`: This is the PostgreSQL backup utility.
     *   `-U user`: This specifies the username to connect to the database. In our `docker-compose.yml`, the `POSTGRES_USER` is `user`.
-    *   `memory_db`: This is the name of the database you want to back up. In our `docker-compose.yml`, the `POSTGRES_DB` is `memory_db`.
+    *   `hindsight_db`: This is the name of the database you want to back up. In our `docker-compose.yml`, the `POSTGRES_DB` is `hindsight_db`.
     *   `>`: This is a standard Linux/macOS shell operator that redirects the output of the `pg_dump` command (which is the SQL dump) into a file.
     *   `backup_$(date +%Y%m%d_%H%M%S).sql`: This creates a unique filename for your backup.
         *   `backup_`: A prefix for your backup file.
@@ -94,7 +94,7 @@ Think of it as a built-in alarm clock for your computer that can run specific co
     Add the following line to the end of the file. Remember to replace `<container_id_or_name>` with your actual container ID/name and `/path/to/your/backups/` with the directory where you want to store your backup files.
 
     ```cron
-    0 2 * * * docker exec -t <container_id_or_name> pg_dump -U user memory_db > /path/to/your/backups/backup_$(date +\%Y\%m\%d_\%H\%M\%S).sql 2>&1
+    0 2 * * * docker exec -t <container_id_or_name> pg_dump -U user hindsight_db > /path/to/your/backups/backup_$(date +\%Y\%m\%d_\%H\%M\%S).sql 2>&1
     ```
 
     **Explanation of the cron entry:**
@@ -105,7 +105,7 @@ Think of it as a built-in alarm clock for your computer that can run specific co
         *   `*`: Every month
         *   `*`: Every day of the week
         So, this job will run every day at 2:00 AM.
-    *   `docker exec -t <container_id_or_name> pg_dump -U user memory_db`: This is the same `pg_dump` command we used for manual backup.
+    *   `docker exec -t <container_id_or_name> pg_dump -U user hindsight_db`: This is the same `pg_dump` command we used for manual backup.
     *   `> /path/to/your/backups/backup_$(date +\%Y\%m\%d_\%H\%M\%S).sql`: This redirects the output to a file in your specified backup directory. Note the `\%` before `Y`, `m`, `d`, `H`, `M`, `S` – this is important in cron jobs to prevent `%` from being interpreted as a newline.
     *   `2>&1`: This redirects any error messages (standard error) to the same place as the regular output (standard output). This is useful for debugging if your cron job doesn't work as expected, as errors will be logged.
 
@@ -127,14 +127,14 @@ If you ever need to restore your database from a backup file, you can use the `p
     Open your terminal and run the following command. Replace `<container_id_or_name>` with your actual container ID/name and `backup_file.sql` with the name of your backup file.
 
     ```bash
-    docker exec -i <container_id_or_name> psql -U user memory_db < backup_file.sql
+    docker exec -i <container_id_or_name> psql -U user hindsight_db < backup_file.sql
     ```
 
     **Let's break down this command:**
     *   `docker exec -i <container_id_or_name>`: Runs a command inside your container. `-i` keeps `STDIN` open, which is necessary for piping a file into the command.
     *   `psql`: The PostgreSQL interactive terminal.
     *   `-U user`: Specifies the username (`user`).
-    *   `memory_db`: Specifies the database name (`memory_db`).
+    *   `hindsight_db`: Specifies the database name (`hindsight_db`).
     *   `< backup_file.sql`: This is a standard Linux/macOS shell operator that redirects the content of `backup_file.sql` as input to the `psql` command. `psql` will then execute all the SQL commands in the file, effectively restoring your database.
 
     **Important Note:** Restoring a database typically overwrites existing data in the target database. Be careful when restoring, especially in production environments. You might want to create a fresh, empty database or drop the existing one before restoring if you want a clean slate.
