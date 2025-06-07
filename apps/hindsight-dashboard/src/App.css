@@ -1,0 +1,172 @@
+/* General Styles */
+body {
+  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f0f2f5; /* Lighter, softer background */
+  color: #333;
+}
+
+.container {
+  max-width: 1280px; /* Slightly wider container */
+  margin: 30px auto; /* More vertical margin */
+  padding: 25px; /* Increased padding */
+  background-color: #fff;
+  border-radius: 10px; /* More rounded corners */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); /* Stronger, softer shadow */
+}
+
+h1, h2, h3 {
+  color: #2c3e50;
+  margin-top: 0;
+  font-weight: 600; /* Slightly bolder headings */
+}
+
+h2 {
+  border-bottom: 1px solid #e0e0e0; /* Lighter border */
+  padding-bottom: 12px; /* Slightly more padding */
+  margin-bottom: 25px; /* More margin */
+}
+
+/* App Header & Navigation */
+.App-header {
+  background-color: #ffffff; /* White header background */
+  padding: 20px 30px; /* Increased padding */
+  border-bottom: 1px solid #e0e0e0; /* Lighter border */
+  display: flex;
+  flex-direction: column; /* Stack content vertically */
+  gap: 15px; /* Space between header sections */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); /* Subtle shadow for header */
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end; /* Align title and button at the bottom */
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 2.2em; /* Slightly larger font size */
+  color: #2c3e50;
+  font-weight: 700;
+  letter-spacing: -0.03em; /* Tighter letter spacing */
+}
+
+.header-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.main-nav {
+  width: auto; /* Allow nav to take natural width */
+  border-bottom: none; /* Remove border from nav container */
+  padding-bottom: 0;
+  margin-top: 0;
+}
+
+.nav-tabs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 20px; /* More space between tabs */
+}
+
+.nav-item {
+  /* No specific margin-right needed due to gap */
+}
+
+.nav-link {
+  text-decoration: none;
+  color: #666; /* Softer default tab color */
+  font-weight: 600;
+  padding: 10px 0; /* Adjusted padding */
+  transition: color 0.3s ease, border-bottom 0.3s ease;
+  border-bottom: 2px solid transparent; /* Thicker underline effect */
+}
+
+.nav-link:hover {
+  color: #007bff; /* Primary blue for hover */
+}
+
+.nav-link.active {
+  color: #007bff; /* Primary blue for active tab */
+  border-bottom-color: #007bff; /* Active tab underline */
+}
+
+.header-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.add-button {
+  background-color: #28a745; /* Green for add action */
+  color: white;
+  border: none;
+  padding: 12px 25px; /* Larger padding */
+  border-radius: 6px; /* Slightly more rounded */
+  cursor: pointer;
+  font-size: 1.05em; /* Slightly larger font */
+  font-weight: 600; /* Bolder text */
+  text-decoration: none;
+  transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+  box-shadow: 0 2px 5px rgba(40, 167, 69, 0.2); /* Subtle shadow */
+  margin-left: auto; /* Push button to the right */
+  margin-top: 0; /* Align with tabs */
+}
+
+.add-button:hover {
+  background-color: #218838;
+  transform: translateY(-1px); /* Slight lift effect */
+  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+/* Navigation (existing, might be redundant or for other navs) */
+.navbar {
+  background-color: #34495e;
+  padding: 15px 20px;
+  color: #ecf0f1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+  font-size: 1.8em;
+  font-weight: bold;
+  color: #ecf0f1;
+  text-decoration: none;
+}
+
+.navbar-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+
+.nav-item {
+  margin-left: 25px;
+}
+
+.nav-link {
+  color: #ecf0f1;
+  text-decoration: none;
+  font-size: 1.1em;
+  padding: 5px 0;
+  transition: color 0.3s ease;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: #3498db;
+}
