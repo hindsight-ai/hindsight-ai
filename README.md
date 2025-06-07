@@ -14,11 +14,13 @@ Hindsight AI aims to provide a robust and scalable solution for:
 The monorepo is organized into two primary top-level directories:
 
 -   **`apps/`**: Contains individual applications that form the Hindsight AI system.
-    -   `hindsight-dashboard`: The frontend application for visualizing and interacting with the memory service.
-    -   `hindsight-service`: The core backend service responsible for managing AI agent memories, keyword extraction, and database interactions.
+    -   [`hindsight-dashboard`](apps/hindsight-dashboard/README.md): The frontend application for visualizing and interacting with the memory service.
+    -   [`hindsight-service`](apps/hindsight-service/README.md): The core backend service responsible for managing AI agent memories, keyword extraction, and database interactions.
 -   **`infra/`**: Contains infrastructure-related components and configurations.
     -   `postgres`: Docker Compose setup for the PostgreSQL database.
     -   `migrations`: SQL scripts for initial database schema setup.
+-   **`mcp-servers/`**: Contains Model Context Protocol (MCP) servers that extend AI agent capabilities.
+    -   [`hindsight-mcp`](mcp-servers/hindsight-mcp/README.md): An MCP server providing tools for interacting with the Hindsight AI Agent Memory Service.
 
 These components are designed to integrate seamlessly, with the `hindsight-service` interacting with the PostgreSQL database and exposing an API consumed by the `hindsight-dashboard`.
 
