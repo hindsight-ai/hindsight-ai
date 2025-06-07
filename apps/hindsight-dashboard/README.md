@@ -1,10 +1,20 @@
-# Getting Started with Create React App
+# Hindsight Dashboard
 
 ![Hindsight Dashboard Screenshot](docs/2025-06-07_22-52-memory-dashboard.png)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+The Hindsight Dashboard serves as the intuitive frontend application for interacting with the Hindsight AI memory service. It provides a user-friendly interface to visualize, manage, and analyze the AI agent's memories.
+
+## Key Features
+
+*   **Memory Visualization:** Browse and view detailed information about individual memory blocks.
+*   **Search and Filtering:** Efficiently search for memories using keywords and apply various filters (e.g., by date, type, relevance).
+*   **Keyword Management:** View and manage keywords associated with memory blocks, aiding in better organization and retrieval.
+*   **Bulk Actions:** Perform operations on multiple memory blocks simultaneously.
+*   **Feedback Mechanism:** Provide feedback on memory blocks to improve the AI's learning process.
 
 ## Available Scripts
+
+This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 In the project directory, you can run:
 
@@ -41,32 +51,12 @@ Instead, it will copy all the configuration files and the transitive dependencie
 
 You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
+## Further Documentation
+
+For more detailed information on UX/design considerations, mockups, and additional screenshots, please refer to the `docs/` directory within this project.
+
 ## Learn More
 
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
 
 To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)

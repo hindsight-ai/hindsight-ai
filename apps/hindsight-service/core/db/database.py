@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 
 # Database connection URL
 # This should ideally come from environment variables for production
-DATABASE_URL = "postgresql://user:password@localhost:5432/memory_db"
+DATABASE_URL = "postgresql://user:password@localhost:5432/hindsight_db"
 
 # Create the SQLAlchemy engine
 engine = create_engine(DATABASE_URL)

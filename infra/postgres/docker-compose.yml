@@ -5,7 +5,7 @@ services:
     image: postgres:13
     restart: always
     environment:
-      POSTGRES_DB: memory_db
+      POSTGRES_DB: hindsight_db
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
     ports:

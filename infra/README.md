@@ -1,6 +1,11 @@
 # Infrastructure Setup and Migrations
 
-This directory contains infrastructure-related configurations and database migration scripts.
+This directory contains all infrastructure-related components and configurations for the Hindsight AI project. It includes:
+
+*   **`migrations/`**: SQL scripts for setting up the initial database schema.
+*   **`postgres/`**: Docker Compose setup for the PostgreSQL database service.
+
+These components are designed to provide a robust and easily deployable database environment for the `hindsight-service`.
 
 ## PostgreSQL Database Setup
 
@@ -27,6 +32,6 @@ To set up the initial database schema, follow these steps:
     
     Then, execute the SQL script inside the container. Replace `[CONTAINER_ID]` with the ID obtained from the previous step:
     ```bash
-    PGPASSWORD=password docker exec -i [CONTAINER_ID] psql -U user -d memory_db < infra/migrations/V1__initial_schema.sql
+    PGPASSWORD=password docker exec -i [CONTAINER_ID] psql -U postgres -d hindsight_db < infra/migrations/V1__initial_schema.sql
     ```
     This command will create all necessary tables and indexes as defined in the SQL file.
