@@ -35,15 +35,15 @@ This service is the core backend logic for managing the AI agent's memory. It ha
 To start the memory service, run the following command from the `hindsight-service` directory:
 
 ```bash
-uv run uvicorn memory_service.api.main:app --host 0.0.0.0 --port 8000
+uv run main.py --host 0.0.0.0 --port 8000
 ```
 This will start the FastAPI application, typically accessible at `http://localhost:8000`.
 
 ## 📂 Project Structure
 
--   `src/memory_service/api/`: Contains the FastAPI application entry point and API routes.
--   `src/memory_service/db/`: Houses database models (SQLAlchemy ORM), database session management, and CRUD operations.
--   `src/memory_service/core/`: Contains core business logic, such as keyword extraction (MVP currently simple) and feedback processing.
+-   `core/api/`: Contains the FastAPI application entry point and API routes.
+-   `core/db/`: Houses database models (SQLAlchemy ORM), database session management, and CRUD operations.
+-   `core/core/`: Contains core business logic, such as keyword extraction and feedback processing.
 
 ## 🧪 Running Tests
 
