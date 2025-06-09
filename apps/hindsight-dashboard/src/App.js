@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Route, Routes, Link, useLocation } from 'react
 import MemoryBlockList from './components/MemoryBlockList';
 import MemoryBlockDetail from './components/MemoryBlockDetail';
 import KeywordManager from './components/KeywordManager';
+import AgentManagementPage from './components/AgentManagementPage';
 import './App.css';
 
 function AppContent() {
@@ -30,15 +31,22 @@ function AppContent() {
                   Keywords
                 </Link>
               </li>
+              <li className="nav-item">
+                <Link to="/agents" className={`nav-link ${location.pathname === '/agents' ? 'active' : ''}`}>
+                  Agents
+                </Link>
+              </li>
             </ul>
           </nav>
         </div>
       </header>
       <main>
         <Routes>
-          <Route path="/" element={<MemoryBlockList />} />
+          <Route path="/" element={<MemoryBlockList key={location.pathname} />} />
+          <Route path="/memory-blocks" element={<MemoryBlockList key={location.pathname} />} /> {/* Added explicit route for /memory-blocks */}
           <Route path="/memory-blocks/:id" element={<MemoryBlockDetail />} />
           <Route path="/keywords" element={<KeywordManager />} />
+          <Route path="/agents" element={<AgentManagementPage key={location.pathname} />} />
         </Routes>
       </main>
     </div>

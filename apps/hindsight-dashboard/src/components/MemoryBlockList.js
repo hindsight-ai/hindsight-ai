@@ -1,7 +1,7 @@
 // Refactored MemoryBlockList component
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BulkActionBar } from './BulkActionBar';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom'; // Import useLocation
 import memoryService from '../api/memoryService';
 import MemoryBlockFilterBar from './MemoryBlockFilterBar';
 import MemoryBlockTable from './MemoryBlockTable';
@@ -40,16 +40,60 @@ const MemoryBlockList = () => {
   // Debounce logic for search term
   const debounceTimeoutRef = useRef(null);
 
+  // Memoize fetch functions to ensure stable references for useEffect dependencies
+  const fetchMemoryBlocks = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await memoryService.getMemoryBlocks({
+        ...filters,
+        min_feedback_score: filters.feedback_score_range[0],
+        max_feedback_score: filters.feedback_score_range[1],
+        min_retrieval_count: filters.retrieval_count_range[0],
+        max_retrieval_count: filters.retrieval_count_range[1],
+        page: pagination.page,
+        per_page: pagination.per_page,
+        sort_by: sort.field,
+        sort_order: sort.order,
+        keywords: filters.keywords.join(','), // Convert array to comma-separated string
+      });
+      setMemoryBlocks(response.items);
+      setPagination((prevPagination) => ({
+        ...prevPagination,
+        total_items: response.total_items,
+        total_pages: response.total_pages,
+      }));
+    } catch (err) {
+      setError('Failed to fetch memory blocks: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters, pagination.page, pagination.per_page, sort]); // Dependencies for useCallback
+
+  const fetchKeywords = useCallback(async () => {
+    try {
+      const response = await memoryService.getKeywords();
+      setAvailableKeywords(response);
+    } catch (err) {
+      console.error('Failed to fetch keywords:', err);
+    }
+  }, []); // No dependencies, as keywords are static
+
   useEffect(() => {
     // Clear selections when memory blocks change (e.g., after fetch or delete)
     setSelectedMemoryBlocks([]);
   }, [memoryBlocks]);
 
   // Effect to trigger fetch when filters (excluding search), pagination, or sort change
+  const location = useLocation(); // Get location object
+
   useEffect(() => {
+    // Reset memory blocks and set loading state immediately on navigation/dependency change
+    setMemoryBlocks([]);
+    setLoading(true);
     fetchMemoryBlocks();
     fetchKeywords();
-  }, [filters, pagination.page, pagination.per_page, sort]);
+  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchMemoryBlocks, fetchKeywords]); // Add location.pathname and memoized functions as dependencies
 
   // Effect to debounce search term and update filters.search
   useEffect(() => {
@@ -70,44 +114,6 @@ const MemoryBlockList = () => {
       }
     };
   }, [searchTerm]); // Only re-run if searchTerm changes
-
-  const fetchMemoryBlocks = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await memoryService.getMemoryBlocks({
-        ...filters,
-        min_feedback_score: filters.feedback_score_range[0],
-        max_feedback_score: filters.feedback_score_range[1],
-        min_retrieval_count: filters.retrieval_count_range[0],
-        max_retrieval_count: filters.retrieval_count_range[1],
-        page: pagination.page,
-        per_page: pagination.per_page,
-        sort_by: sort.field,
-        sort_order: sort.order,
-        keywords: filters.keywords.join(','), // Convert array to comma-separated string
-      });
-      setMemoryBlocks(response.items);
-      setPagination({
-        ...pagination,
-        total_items: response.total_items,
-        total_pages: response.total_pages,
-      });
-    } catch (err) {
-      setError('Failed to fetch memory blocks: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchKeywords = async () => {
-    try {
-      const response = await memoryService.getKeywords();
-      setAvailableKeywords(response);
-    } catch (err) {
-      console.error('Failed to fetch keywords:', err);
-    }
-  };
 
   const toggleFilters = () => {
     setShowFilters(!showFilters);
