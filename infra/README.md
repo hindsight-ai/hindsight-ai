@@ -4,8 +4,15 @@ This directory contains all infrastructure-related components and configurations
 
 *   **`migrations/`**: SQL scripts for setting up the initial database schema.
 *   **`postgres/`**: Docker Compose setup for the PostgreSQL database service.
+*   **`scripts/`**: Contains utility scripts for database backup and restoration.
 
-These components are designed to provide a robust and easily deployable database environment for the `hindsight-service`.
+These components are designed to provide a robust and easily deployable database environment for the Hindsight AI project.
+
+## Database Backup and Restore
+
+For detailed instructions on how to back up and restore the PostgreSQL database, including automated hourly backups and managing Alembic migrations, please refer to:
+
+*   [PostgreSQL Database Persistence and Backup Guide](../../apps/hindsight-service/docs/DATABASE_BACKUP.md)
 
 ## PostgreSQL Database Setup
 

@@ -38,50 +38,66 @@ Your data will only be lost if you explicitly remove the Docker volume itself. T
 
 To protect against accidental removal of the volume, it's crucial to create backups.
 
-## 2. Creating Backups of Your PostgreSQL Database (`pg_dump`)
+## 2. Automated Database Backup and Restore
 
-`pg_dump` is a command-line utility that comes with PostgreSQL. It allows you to "dump" (export) the contents of a PostgreSQL database into a single file, usually a `.sql` file. This file contains all the commands needed to recreate your database, including its structure (tables, indexes, etc.) and all your data.
+To simplify database backup and restoration, two shell scripts have been created: `backup_db.sh` and `restore_db.sh`. These scripts are located in `infra/scripts/`.
 
-### How to Perform a Manual Backup
+### 2.1. Backup Script (`infra/scripts/backup_db.sh`)
 
-You can run `pg_dump` from your computer's terminal. The easiest way is to run it directly from your running PostgreSQL Docker container.
+This script automates the process of creating a timestamped backup of the `hindsight_db` database. It also captures the current Alembic migration revision and includes it in the backup filename. It manages old backups, ensuring only a configurable number of recent backups are kept.
 
-**Step-by-step guide:**
+*   **Location:** `infra/scripts/backup_db.sh`
+*   **Backup Storage:** Backups are stored in `~/hindsight_db_backups/data/`.
+*   **Filename Format:** Backups are named `hindsight_db_backup_YYYYMMDD_HHMMSS_ALEMBICREV.sql`. The `ALEMBICREV` is the 12-character hexadecimal revision ID of the database schema at the time of backup. If the revision cannot be determined, `unknown` will be used.
+*   **File Roll:** The script is configured to keep a maximum of `100` backup files by default. When a new backup is created, if the total number of backups exceeds this limit, the oldest files are automatically removed. This `MAX_BACKUPS` value can be changed by editing the `infra/scripts/backup_db.sh` script.
 
-1.  **Ensure your PostgreSQL container is running.** You can check its status with:
+**How to use:**
+
+1.  **Ensure the script is executable:**
     ```bash
-    docker ps
+    chmod +x infra/scripts/backup_db.sh
     ```
-    Look for a container named something like `infra-db-1` or similar, with `postgres:13` as its image. Note down its `CONTAINER ID` or `NAMES`.
+    (This should have been done automatically during setup.)
 
-2.  **Execute the `pg_dump` command.**
-    Open your terminal and run the following command. Replace `<container_id_or_name>` with the actual ID or name you found in the previous step.
-
+2.  **Run a manual backup:**
     ```bash
-    docker exec -t <container_id_or_name> pg_dump -U user hindsight_db > backup_$(date +%Y%m%d_%H%M%S).sql
+    ./infra/scripts/backup_db.sh
     ```
+    This will create a new backup file (e.g., `hindsight_db_backup_20250609_213000_2a9c8674c949.sql`) in the `~/hindsight_db_backups/data/` directory.
 
-    **Let's break down this command:**
-    *   `docker exec -t <container_id_or_name>`: This tells Docker to run a command *inside* your specified container. `-t` allocates a pseudo-TTY, which is good practice.
-    *   `pg_dump`: This is the PostgreSQL backup utility.
-    *   `-U user`: This specifies the username to connect to the database. In our `docker-compose.yml`, the `POSTGRES_USER` is `user`.
-    *   `hindsight_db`: This is the name of the database you want to back up. In our `docker-compose.yml`, the `POSTGRES_DB` is `hindsight_db`.
-    *   `>`: This is a standard Linux/macOS shell operator that redirects the output of the `pg_dump` command (which is the SQL dump) into a file.
-    *   `backup_$(date +%Y%m%d_%H%M%S).sql`: This creates a unique filename for your backup.
-        *   `backup_`: A prefix for your backup file.
-        *   `$(date +%Y%m%d_%H%M%S)`: This part automatically generates the current date and time (YearMonthDay_HourMinuteSecond), making each backup file unique (e.g., `backup_20250607_130000.sql`).
-        *   `.sql`: The standard file extension for SQL dump files.
+### 2.2. Restore Script (`infra/scripts/restore_db.sh`)
 
-    After running this command, you will find a new `.sql` file in the directory where you executed the command. This file is your database backup!
+This script allows you to restore the `hindsight_db` database from a previously created backup file. It handles stopping and starting the PostgreSQL container and running Alembic migrations to ensure the database schema is precisely aligned with the backup.
 
-### Automating Backups with Cron Jobs (Linux/macOS)
+*   **Location:** `infra/scripts/restore_db.sh`
 
-For regular, automatic backups, you can use a "cron job." A cron job is a task that your operating system (Linux or macOS) runs automatically at a scheduled time or interval.
+**How to use:**
 
-**What is a Cron Job?**
-Think of it as a built-in alarm clock for your computer that can run specific commands. You tell it *when* to run and *what* command to run.
+1.  **Ensure the script is executable:**
+    ```bash
+    chmod +x infra/scripts/restore_db.sh
+    ```
+    (This should have been done automatically during setup.)
 
-**Step-by-step guide to set up a daily backup:**
+2.  **Run the restore process:**
+    ```bash
+    ./infra/scripts/restore_db.sh
+    ```
+    The script will list all available backup files in `~/hindsight_db_backups/data/` and prompt you to select which one to restore.
+    It will then:
+    *   Stop the `db` Docker container.
+    *   Drop and recreate the `hindsight_db` database.
+    *   Restore the selected backup into the `hindsight_db`.
+    *   Start the `db` Docker container.
+    *   **Crucially, it extracts the Alembic revision from the selected backup filename and runs `uv run alembic upgrade <extracted_revision>` to migrate the database to the exact schema version that existed when the backup was taken.** If the revision cannot be determined, it will attempt to upgrade to `head`.
+
+    **Important Note:** Restoring a database will **overwrite** the current data in the `hindsight_db` database. Use with caution, especially in production environments.
+
+### 2.3. Automating Hourly Backups with Cron Jobs (Linux/macOS)
+
+To ensure regular, automatic backups, you can schedule the `backup_db.sh` script to run hourly using a "cron job."
+
+**How to set up an hourly backup:**
 
 1.  **Open your crontab for editing.**
     In your terminal, type:
@@ -91,50 +107,26 @@ Think of it as a built-in alarm clock for your computer that can run specific co
     This will open a text editor (often `nano` or `vi`) where you can add your scheduled tasks.
 
 2.  **Add the backup command.**
-    Add the following line to the end of the file. Remember to replace `<container_id_or_name>` with your actual container ID/name and `/path/to/your/backups/` with the directory where you want to store your backup files.
+    Add the following line to the end of the file:
 
     ```cron
-    0 2 * * * docker exec -t <container_id_or_name> pg_dump -U user hindsight_db > /path/to/your/backups/backup_$(date +\%Y\%m\%d_\%H\%M\%S).sql 2>&1
+    0 * * * * /home/jean/git/hindsight-ai/infra/scripts/backup_db.sh >> /home/jean/hindsight_db_backups/logs/backup.log 2>&1
     ```
 
     **Explanation of the cron entry:**
-    *   `0 2 * * *`: This is the schedule part. It means:
+    *   `0 * * * *`: This is the schedule part. It means:
         *   `0`: At minute 0 (the start of the hour)
-        *   `2`: At hour 2 (2 AM)
+        *   `*`: Every hour
         *   `*`: Every day of the month
         *   `*`: Every month
         *   `*`: Every day of the week
-        So, this job will run every day at 2:00 AM.
-    *   `docker exec -t <container_id_or_name> pg_dump -U user hindsight_db`: This is the same `pg_dump` command we used for manual backup.
-    *   `> /path/to/your/backups/backup_$(date +\%Y\%m\%d_\%H\%M\%S).sql`: This redirects the output to a file in your specified backup directory. Note the `\%` before `Y`, `m`, `d`, `H`, `M`, `S` – this is important in cron jobs to prevent `%` from being interpreted as a newline.
-    *   `2>&1`: This redirects any error messages (standard error) to the same place as the regular output (standard output). This is useful for debugging if your cron job doesn't work as expected, as errors will be logged.
+        So, this job will run every hour at the start of the hour (e.g., 1:00, 2:00, 3:00, etc.).
+    *   `/home/jean/git/hindsight-ai/infra/scripts/backup_db.sh`: This is the full path to the backup script.
+    *   `>> /home/jean/hindsight_db_backups/logs/backup.log`: This redirects the standard output of the script to a log file, appending new output to the end of the file. You might need to create the `logs` directory first: `mkdir -p ~/hindsight_db_backups/logs`.
+    *   `2>&1`: This redirects any error messages (standard error) to the same log file as the regular output. This is useful for debugging if your cron job doesn't work as expected.
 
 3.  **Save and exit the crontab editor.**
     *   If using `nano`: Press `Ctrl+X`, then `Y` to confirm saving, then `Enter`.
     *   If using `vi`: Press `Esc`, then type `:wq` and press `Enter`.
 
-Your cron job is now set up! It will automatically create backups at the scheduled time.
-
-## 3. Restoring Your PostgreSQL Database from a Backup (`psql`)
-
-If you ever need to restore your database from a backup file, you can use the `psql` command-line utility. `psql` is a terminal-based front-end to PostgreSQL.
-
-**Step-by-step guide:**
-
-1.  **Ensure your PostgreSQL container is running.** (Same as step 1 for backup).
-
-2.  **Restore the database.**
-    Open your terminal and run the following command. Replace `<container_id_or_name>` with your actual container ID/name and `backup_file.sql` with the name of your backup file.
-
-    ```bash
-    docker exec -i <container_id_or_name> psql -U user hindsight_db < backup_file.sql
-    ```
-
-    **Let's break down this command:**
-    *   `docker exec -i <container_id_or_name>`: Runs a command inside your container. `-i` keeps `STDIN` open, which is necessary for piping a file into the command.
-    *   `psql`: The PostgreSQL interactive terminal.
-    *   `-U user`: Specifies the username (`user`).
-    *   `hindsight_db`: Specifies the database name (`hindsight_db`).
-    *   `< backup_file.sql`: This is a standard Linux/macOS shell operator that redirects the content of `backup_file.sql` as input to the `psql` command. `psql` will then execute all the SQL commands in the file, effectively restoring your database.
-
-    **Important Note:** Restoring a database typically overwrites existing data in the target database. Be careful when restoring, especially in production environments. You might want to create a fresh, empty database or drop the existing one before restoring if you want a clean slate.
+Your cron job is now set up! It will automatically create hourly backups. Remember to create the `logs` directory: `mkdir -p ~/hindsight_db_backups/logs`.

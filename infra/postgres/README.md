@@ -51,24 +51,28 @@ docker ps --filter "name=hindsight-ai-db" --format "{{.ID}}"
 ```
 Then, connect using `psql` from your host machine (assuming `psql` is installed):
 ```bash
-psql -h localhost -p 5432 -U postgres -d hindsight_db
+psql -h localhost -p 5432 -U user -d hindsight_db
 ```
 *   **Host**: `localhost` (or the IP address of your Docker host)
 *   **Port**: `5432` (default PostgreSQL port)
-*   **User**: `postgres` (as defined in `docker-compose.yml`)
+*   **User**: `user` (as defined in `docker-compose.yml`)
 *   **Database**: `hindsight_db` (as defined in `docker-compose.yml`)
 
 Alternatively, you can execute `psql` directly inside the container:
 ```bash
-docker exec -it [CONTAINER_ID] psql -U postgres hindsight_db
+docker exec -it [CONTAINER_ID] psql -U user hindsight_db
 ```
 Replace `[CONTAINER_ID]` with the actual ID obtained from `docker ps`.
 
 ### Default Credentials
 
-The `docker-compose.yml` file typically defines default credentials for the PostgreSQL database. For this setup, the default user is `postgres` and the password is `password`. The database name is `hindsight_db`.
+The `docker-compose.yml` file defines the default credentials for the PostgreSQL database. For this setup, the default user is `user` and the password is `password`. The database name is `hindsight_db`.
 
 **It is highly recommended to change these default credentials for production deployments.**
+
+## Database Backup and Restore
+
+For instructions on how to back up and restore the PostgreSQL database, including managing Alembic migrations, please refer to the dedicated documentation: `apps/hindsight-service/docs/DATABASE_BACKUP.md`.
 
 ## Further Information
 
