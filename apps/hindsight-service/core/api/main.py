@@ -43,6 +43,30 @@ def create_agent_endpoint(agent: schemas.AgentCreate, db: Session = Depends(get_
         raise HTTPException(status_code=400, detail="Agent with this name already exists")
     return crud.create_agent(db=db, agent=agent)
 
+@app.get("/agents/", response_model=List[schemas.Agent])
+def get_all_agents_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    agents = crud.get_agents(db, skip=skip, limit=limit)
+    return agents
+
+@app.get("/agents/{agent_id}", response_model=schemas.Agent)
+def get_agent_endpoint(agent_id: uuid.UUID, db: Session = Depends(get_db)):
+    db_agent = crud.get_agent(db, agent_id=agent_id)
+    if not db_agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return db_agent
+
+@app.get("/agents/search/", response_model=List[schemas.Agent])
+def search_agents_endpoint(query: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    agents = crud.search_agents(db, query=query, skip=skip, limit=limit)
+    return agents
+
+@app.delete("/agents/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_agent_endpoint(agent_id: uuid.UUID, db: Session = Depends(get_db)):
+    success = crud.delete_agent(db, agent_id=agent_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {"message": "Agent deleted successfully"}
+
 @app.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks) # Changed response_model
 def get_all_memory_blocks_endpoint(
     agent_id: Optional[str] = None,
