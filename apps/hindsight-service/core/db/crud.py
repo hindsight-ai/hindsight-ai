@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from . import models, schemas
 import uuid
 from datetime import datetime
-from sqlalchemy import or_
+from sqlalchemy import or_, func # Import func
 from typing import List, Optional
 
 # CRUD for Agent
@@ -22,6 +22,16 @@ def get_agent_by_name(db: Session, agent_name: str):
 def get_agents(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Agent).offset(skip).limit(limit).all()
 
+def search_agents(db: Session, query: str, skip: int = 0, limit: int = 100):
+    # Use pg_trgm's similarity for fuzzy matching
+    # A similarity threshold of 0.3 is a common starting point, adjust as needed
+    SIMILARITY_THRESHOLD = 0.3
+    return db.query(models.Agent).filter(
+        func.similarity(models.Agent.agent_name, query) >= SIMILARITY_THRESHOLD
+    ).order_by(
+        func.similarity(models.Agent.agent_name, query).desc() # Order by similarity score
+    ).offset(skip).limit(limit).all()
+
 def update_agent(db: Session, agent_id: uuid.UUID, agent: schemas.AgentUpdate):
     db_agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
     if db_agent:
@@ -34,9 +44,17 @@ def update_agent(db: Session, agent_id: uuid.UUID, agent: schemas.AgentUpdate):
 def delete_agent(db: Session, agent_id: uuid.UUID):
     db_agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
     if db_agent:
+        # Delete associated AgentTranscript records
+        db.query(models.AgentTranscript).filter(models.AgentTranscript.agent_id == agent_id).delete(synchronize_session=False)
+        
+        # Delete associated MemoryBlock records
+        db.query(models.MemoryBlock).filter(models.MemoryBlock.agent_id == agent_id).delete(synchronize_session=False)
+        
+        # Now delete the agent
         db.delete(db_agent)
         db.commit()
-    return db_agent
+        return True # Indicate successful deletion
+    return False # Indicate agent not found or deletion failed
 
 # CRUD for AgentTranscript
 def create_agent_transcript(db: Session, transcript: schemas.AgentTranscriptCreate):
