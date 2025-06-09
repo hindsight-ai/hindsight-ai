@@ -75,6 +75,14 @@ const isValidReportFeedbackPayload = (payload: any): payload is ReportFeedbackPa
   );
 };
 
+const isValidSearchAgentsPayload = (payload: any): payload is { query: string } => {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    typeof payload.query === 'string'
+  );
+};
+
 // --- MCP Server Setup ---
 const server = new Server(
   {
@@ -245,6 +253,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["memory_block_id"],
         },
       },
+      {
+        name: "search_agents",
+        description: "Search for agents by name using a query string.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "The search query for the agent name (required).",
+            },
+          },
+          required: ["query"],
+        },
+      },
     ],
   };
 });
@@ -297,11 +319,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       const result = await memoryServiceClient.getAllMemoryBlocks(agent_id, limit);
-      const filteredResult = result.map(block => ({
-        content: block.content,
-        errors: block.errors,
-        timestamp: block.timestamp
-      }));
+      console.error("DEBUG: Result from getAllMemoryBlocks:", result); // Add this line for debugging
+      
+      let filteredResult: any[] = [];
+      // Assuming result is { items: MemoryBlock[], total_items: number, total_pages: number }
+      if (result && Array.isArray((result as any).items)) { // Cast to any to access .items
+        filteredResult = (result as any).items.map((block: MemoryBlock) => ({ // Map over items
+          content: block.content,
+          errors: block.errors,
+          timestamp: block.timestamp
+        }));
+      } else {
+        console.error("WARNING: getAllMemoryBlocks did not return an object with an 'items' array. Received:", result);
+      }
       return {
         content: [{ type: "text", text: JSON.stringify(filteredResult, null, 2) }]
       };
@@ -390,6 +420,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
         return {
           content: [{ type: "text", text: JSON.stringify(filteredResult, null, 2) }]
+        };
+      }
+
+      // --- search_agents ---
+      else if (toolName === "search_agents") {
+        if (!isValidSearchAgentsPayload(typedArgs)) {
+          throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for search_agents. Requires 'query' (string).");
+        }
+        const query: string = typedArgs.query;
+        const response = await axios.get(`${MEMORY_SERVICE_BASE_URL}/agents/search/?query=${encodeURIComponent(query)}`);
+        return {
+          content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }]
         };
       }
 
