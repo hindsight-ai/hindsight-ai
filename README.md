@@ -26,6 +26,15 @@ These components are designed to integrate seamlessly, with the `hindsight-servi
 
 ## Quick Start Guide
 
+For a quick setup and teardown of all Hindsight AI services, use the provided convenience scripts:
+
+*   **Start All Services**: `./start_hindsight.sh`
+    This script will start the PostgreSQL database, apply migrations, and launch both the backend service (on port 8000) and the frontend dashboard (on port 3000). It includes checks to prevent starting services that are already running.
+*   **Stop All Services**: `./stop_hindsight.sh`
+    This script will gracefully terminate processes listening on ports 3000 and 8000, and shut down the Dockerized PostgreSQL database.
+
+For detailed, step-by-step setup, continue with the instructions below:
+
 To set up and run the entire Hindsight AI project locally, follow these steps:
 
 1.  **Prerequisites**:
