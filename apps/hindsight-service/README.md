@@ -35,7 +35,7 @@ This service is the core backend logic for managing the AI agent's memory. It ha
 To start the memory service, run the following command from the `hindsight-service` directory:
 
 ```bash
-uv run main.py --host 0.0.0.0 --port 8000
+uv run uvicorn core.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 This will start the FastAPI application, typically accessible at `http://localhost:8000`.
 
