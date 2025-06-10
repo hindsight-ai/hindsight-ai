@@ -71,7 +71,7 @@ To set up and run the entire Hindsight AI project locally, follow these steps:
     ```bash
     cd ../../apps/hindsight-service
     uv sync # or poetry install / pipenv install
-    uv run main.py # or poetry run python main.py / pipenv run python main.py
+    uv run uvicorn core.api.main:app --reload
     ```
     The backend service should now be running, typically on `http://localhost:8000`.
 

@@ -354,19 +354,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       const result = await memoryServiceClient.getAllMemoryBlocks(agent_id, limit);
-      console.error("DEBUG: Result from getAllMemoryBlocks:", result); // Add this line for debugging
-      
-      let filteredResult: any[] = [];
-      // Assuming result is { items: MemoryBlock[], total_items: number, total_pages: number }
-      if (result && Array.isArray((result as any).items)) { // Cast to any to access .items
-        filteredResult = (result as any).items.map((block: MemoryBlock) => ({ // Map over items
-          content: block.content,
-          errors: block.errors,
-          timestamp: block.timestamp
-        }));
-      } else {
-        console.error("WARNING: getAllMemoryBlocks did not return an object with an 'items' array. Received:", result);
-      }
+      // Safely ensure result is an array before mapping
+      const memories = Array.isArray(result) ? result : []; 
+      const filteredResult = memories.map(block => ({
+        content: block.content,
+        errors: block.errors,
+        timestamp: block.timestamp
+      }));
       return {
         content: [{ type: "text", text: JSON.stringify(filteredResult, null, 2) }]
       };

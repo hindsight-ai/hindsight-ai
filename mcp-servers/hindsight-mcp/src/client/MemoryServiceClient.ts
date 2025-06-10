@@ -24,6 +24,17 @@ export interface MemoryBlock {
   updated_at: string; // TIMESTAMP
 }
 
+export interface Agent {
+  agent_id: string; // UUID
+  agent_name: string;
+  created_at: string; // TIMESTAMP
+  updated_at: string; // TIMESTAMP
+}
+
+export interface CreateAgentPayload {
+  agent_name: string;
+}
+
 export interface RetrieveMemoriesPayload {
   query_text: string;
   keywords: string; // Keywords for search
@@ -68,6 +79,19 @@ export class MemoryServiceClient {
   async createMemoryBlock(payload: CreateMemoryBlockPayload): Promise<{ memory_id: string }> {
     const response = await this.client.post<{ memory_id: string }>(
       '/memory-blocks',
+      payload
+    );
+    return response.data;
+  }
+
+  /**
+   * Creates a new agent.
+   * @param payload The data to create the agent with (agent_name).
+   * @returns The created agent object.
+   */
+  async createAgent(payload: CreateAgentPayload): Promise<Agent> {
+    const response = await this.client.post<Agent>(
+      '/agents/',
       payload
     );
     return response.data;
