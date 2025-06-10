@@ -9,7 +9,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import axios, { AxiosError } from 'axios';
-import { MemoryServiceClient, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock } from './client/MemoryServiceClient';
+import { MemoryServiceClient, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload } from './client/MemoryServiceClient';
 
 // --- Configuration ---
 const MEMORY_SERVICE_BASE_URL = process.env.MEMORY_SERVICE_BASE_URL || 'http://localhost:8000'; // Default to localhost:8000
@@ -141,6 +141,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ["content", "lessons_learned"],
+        },
+      },
+      {
+        name: "create_agent",
+        description: "Create a new agent in the AI agent memory service. Requires an agent_name.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            agent_name: {
+              type: "string",
+              description: "The name of the agent to create (required).",
+            },
+          },
+          required: ["agent_name"],
         },
       },
       {
@@ -281,16 +295,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     // --- create_memory_block ---
     if (toolName === "create_memory_block") {
-      if (!DEFAULT_AGENT_ID) {
-        throw new McpError(ErrorCode.InvalidParams, "DEFAULT_AGENT_ID environment variable is not set.");
+      const agent_id = (typedArgs?.agent_id as string | undefined) || DEFAULT_AGENT_ID;
+      const conversation_id = (typedArgs?.conversation_id as string | undefined) || DEFAULT_CONVERSATION_ID;
+
+      if (!agent_id) {
+        throw new McpError(ErrorCode.InvalidParams, "Agent ID is required for create_memory_block and not provided via arguments or DEFAULT_AGENT_ID environment variable.");
       }
-      if (!DEFAULT_CONVERSATION_ID) {
-        throw new McpError(ErrorCode.InvalidParams, "DEFAULT_CONVERSATION_ID environment variable is not set.");
+      if (!conversation_id) {
+        throw new McpError(ErrorCode.InvalidParams, "Conversation ID is required for create_memory_block and not provided via arguments or DEFAULT_CONVERSATION_ID environment variable.");
       }
 
       const payload: CreateMemoryBlockPayload = {
-        agent_id: DEFAULT_AGENT_ID,
-        conversation_id: DEFAULT_CONVERSATION_ID,
+        agent_id: agent_id,
+        conversation_id: conversation_id,
         content: typedArgs.content,
         lessons_learned: typedArgs.lessons_learned,
         errors: typedArgs.errors,
@@ -306,6 +323,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const result = await memoryServiceClient.createMemoryBlock(payload);
       return {
         content: [{ type: "text", text: `Successfully created memory block with ID: ${result.memory_id}` }]
+      };
+    }
+
+    // --- create_agent ---
+    else if (toolName === "create_agent") {
+      const payload: CreateAgentPayload = {
+        agent_name: typedArgs.agent_name,
+      };
+
+      if (typeof payload.agent_name !== 'string' || payload.agent_name.trim() === '') {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          "Invalid arguments for create_agent. 'agent_name' (string) is required."
+        );
+      }
+      const result = await memoryServiceClient.createAgent(payload);
+      return {
+        content: [{ type: "text", text: `Successfully created agent with ID: ${result.agent_id} and name: ${result.agent_name}` }]
       };
     }
 
