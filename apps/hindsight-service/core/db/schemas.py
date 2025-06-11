@@ -111,6 +111,39 @@ class Keyword(KeywordBase):
     class Config:
         orm_mode = True
 
+# Consolidation Suggestion Schemas
+class ConsolidationSuggestionBase(BaseModel):
+    group_id: uuid.UUID
+    suggested_content: str
+    suggested_lessons_learned: str
+    suggested_keywords: List[str]
+    original_memory_ids: List[str] # Changed from List[uuid.UUID] to List[str]
+    status: str = "pending"
+
+class ConsolidationSuggestionCreate(ConsolidationSuggestionBase):
+    pass
+
+class ConsolidationSuggestionUpdate(BaseModel):
+    status: Optional[str] = None
+    suggested_content: Optional[str] = None
+    suggested_lessons_learned: Optional[str] = None
+    suggested_keywords: Optional[List[str]] = None
+
+class ConsolidationSuggestion(ConsolidationSuggestionBase):
+    suggestion_id: uuid.UUID
+    timestamp: datetime
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+class PaginatedConsolidationSuggestions(BaseModel):
+    items: List[ConsolidationSuggestion]
+    total_items: int
+    total_pages: int
+
 class PaginatedMemoryBlocks(BaseModel):
     items: List[MemoryBlock]
     total_items: int
