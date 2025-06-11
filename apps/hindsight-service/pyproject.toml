@@ -12,6 +12,9 @@ dependencies = [
     "sqlalchemy>=2.0.41",
     "uvicorn>=0.34.3",
     "alembic>=1.13.1",
+    "requests>=2.32.4",
+    "scikit-learn>=1.7.0",
+    "google-genai>=1.19.0",
 ]
 
 [tool.setuptools.packages.find]
