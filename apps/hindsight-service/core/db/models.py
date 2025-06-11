@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, ForeignKey, Index
+from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, ForeignKey, Index, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -44,6 +44,7 @@ class MemoryBlock(Base):
     metadata_col = Column('metadata', JSONB)
     feedback_score = Column(Integer, default=0)
     retrieval_count = Column(Integer, default=0) # Added retrieval_count
+    archived = Column(Boolean, default=False) # Added archived column
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -90,3 +91,22 @@ class MemoryBlockKeyword(Base):
 
     memory_block = relationship("MemoryBlock", back_populates="memory_block_keywords")
     keyword = relationship("Keyword", back_populates="memory_block_keywords")
+
+
+class ConsolidationSuggestion(Base):
+    __tablename__ = 'consolidation_suggestions'
+    suggestion_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    group_id = Column(UUID(as_uuid=True), nullable=False, unique=True)
+    suggested_content = Column(Text, nullable=False)
+    suggested_lessons_learned = Column(Text, nullable=False)
+    suggested_keywords = Column(JSONB, nullable=False)
+    original_memory_ids = Column(JSONB, nullable=False)
+    status = Column(String(20), nullable=False, default='pending')
+    timestamp = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('idx_consolidation_suggestions_status', 'status'),
+        Index('idx_consolidation_suggestions_group_id', 'group_id'),
+    )

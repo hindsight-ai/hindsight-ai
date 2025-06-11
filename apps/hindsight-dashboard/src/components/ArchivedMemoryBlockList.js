@@ -1,24 +1,22 @@
-// Refactored MemoryBlockList component
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { BulkActionBar } from './BulkActionBar';
-import { useNavigate, useLocation } from 'react-router-dom'; // Import useLocation
+import { useNavigate, useLocation } from 'react-router-dom';
 import memoryService from '../api/memoryService';
 import MemoryBlockFilterBar from './MemoryBlockFilterBar';
 import MemoryBlockTable from './MemoryBlockTable';
 import PaginationControls from './PaginationControls';
-import './MemoryBlockList.css'; // Import the new CSS file
+import './MemoryBlockList.css'; // Reuse styles from MemoryBlockList
 
-const MemoryBlockList = () => {
+const ArchivedMemoryBlockList = () => {
   const [memoryBlocks, setMemoryBlocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState(''); // Separate state for the search input value
+  const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
-    search: '', // This will be updated by the debounced searchTerm
+    search: '',
     agent_id: '',
     conversation_id: '',
-    feedback_score_range: [0, 100], // Default range for feedback score
-    retrieval_count_range: [0, 1000], // Default range for retrieval count
+    feedback_score_range: [0, 100],
+    retrieval_count_range: [0, 1000],
     start_date: '',
     end_date: '',
     keywords: [],
@@ -34,18 +32,16 @@ const MemoryBlockList = () => {
     order: 'desc',
   });
   const [availableKeywords, setAvailableKeywords] = useState([]);
-  const [selectedMemoryBlocks, setSelectedMemoryBlocks] = useState([]);
-  const [showFilters, setShowFilters] = useState(true); // State for toggling filter visibility
+  const [selectedMemoryBlocks, setSelectedMemoryBlocks] = useState([]); // Keep for consistency, but bulk actions won't be used
+  const [showFilters, setShowFilters] = useState(true);
 
-  // Debounce logic for search term
   const debounceTimeoutRef = useRef(null);
 
-  // Memoize fetch functions to ensure stable references for useEffect dependencies
-  const fetchMemoryBlocks = useCallback(async () => {
+  const fetchArchivedMemoryBlocks = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await memoryService.getMemoryBlocks({
+      const response = await memoryService.getArchivedMemoryBlocks({
         ...filters,
         min_feedback_score: filters.feedback_score_range[0],
         max_feedback_score: filters.feedback_score_range[1],
@@ -55,8 +51,7 @@ const MemoryBlockList = () => {
         per_page: pagination.per_page,
         sort_by: sort.field,
         sort_order: sort.order,
-        keywords: filters.keywords.join(','), // Convert array to comma-separated string
-        include_archived: false, // Filter out archived blocks by default
+        keywords: filters.keywords.join(','),
       });
       setMemoryBlocks(response.items);
       setPagination((prevPagination) => ({
@@ -65,11 +60,11 @@ const MemoryBlockList = () => {
         total_pages: response.total_pages,
       }));
     } catch (err) {
-      setError('Failed to fetch memory blocks: ' + err.message);
+      setError('Failed to fetch archived memory blocks: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [filters, pagination.page, pagination.per_page, sort]); // Dependencies for useCallback
+  }, [filters, pagination.page, pagination.per_page, sort]);
 
   const fetchKeywords = useCallback(async () => {
     try {
@@ -78,25 +73,21 @@ const MemoryBlockList = () => {
     } catch (err) {
       console.error('Failed to fetch keywords:', err);
     }
-  }, []); // No dependencies, as keywords are static
+  }, []);
 
   useEffect(() => {
-    // Clear selections when memory blocks change (e.g., after fetch or delete)
     setSelectedMemoryBlocks([]);
   }, [memoryBlocks]);
 
-  // Effect to trigger fetch when filters (excluding search), pagination, or sort change
-  const location = useLocation(); // Get location object
+  const location = useLocation();
 
   useEffect(() => {
-    // Reset memory blocks and set loading state immediately on navigation/dependency change
     setMemoryBlocks([]);
     setLoading(true);
-    fetchMemoryBlocks();
+    fetchArchivedMemoryBlocks();
     fetchKeywords();
-  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchMemoryBlocks, fetchKeywords]); // Add location.pathname and memoized functions as dependencies
+  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchArchivedMemoryBlocks, fetchKeywords]);
 
-  // Effect to debounce search term and update filters.search
   useEffect(() => {
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
@@ -107,14 +98,14 @@ const MemoryBlockList = () => {
         ...prevFilters,
         search: searchTerm,
       }));
-    }, 500); // 500ms debounce delay
+    }, 500);
 
     return () => {
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current);
       }
     };
-  }, [searchTerm]); // Only re-run if searchTerm changes
+  }, [searchTerm]);
 
   const toggleFilters = () => {
     setShowFilters(!showFilters);
@@ -123,7 +114,7 @@ const MemoryBlockList = () => {
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     if (name === 'search') {
-      setSearchTerm(value); // Update searchTerm for debouncing
+      setSearchTerm(value);
     } else {
       setFilters((prevFilters) => ({
         ...prevFilters,
@@ -144,8 +135,6 @@ const MemoryBlockList = () => {
       ...prevFilters,
       keywords: selectedKeywords,
     }));
-    // For dropdowns, still apply immediately for better UX
-    // No need to call fetchMemoryBlocks here, as the state change will trigger it via useEffect
   };
 
   const handleSortChange = (field) => {
@@ -159,10 +148,9 @@ const MemoryBlockList = () => {
     setPagination((prevPagination) => ({
       ...prevPagination,
       per_page: parseInt(e.target.value),
-      page: 1, // Reset to first page when per_page changes
+      page: 1,
     }));
-    // For dropdowns, still apply immediately for better UX
-    fetchMemoryBlocks();
+    fetchArchivedMemoryBlocks();
   };
 
   const handlePageChange = (newPage) => {
@@ -203,74 +191,44 @@ const MemoryBlockList = () => {
 
   const handleActionChange = async (e, id) => {
     const selectedAction = e.target.value;
-    // Reset the select to "Actions" after selection
     e.target.value = ""; 
 
     if (selectedAction === 'view_edit') {
       navigate(`/memory-blocks/${id}`);
-    } else if (selectedAction === 'archive') { // Changed action to 'archive'
-      if (window.confirm('Are you sure you want to archive this memory block?')) {
+    } else if (selectedAction === 'hard_delete') { // New action for hard delete
+      if (window.confirm('Are you sure you want to PERMANENTLY delete this archived memory block? This action cannot be undone.')) {
         try {
-          await memoryService.archiveMemoryBlock(id); // Use archiveMemoryBlock
-          fetchMemoryBlocks(); // Refresh the list after archiving
+          await memoryService.deleteMemoryBlock(id); // Use the hard delete endpoint
+          fetchArchivedMemoryBlocks(); // Refresh the list after deletion
         } catch (err) {
-          setError('Failed to archive memory block: ' + err.message);
+          setError('Failed to hard delete memory block: ' + err.message);
+        }
+      }
+    } else if (selectedAction === 'unarchive') { // New action to unarchive
+      if (window.confirm('Are you sure you want to unarchive this memory block? It will reappear in the main Memory Blocks list.')) {
+        try {
+          // Assuming an unarchive endpoint or update endpoint that sets archived to false
+          await memoryService.updateMemoryBlock(id, { archived: false }); 
+          fetchArchivedMemoryBlocks(); // Refresh the list after unarchiving
+        } catch (err) {
+          setError('Failed to unarchive memory block: ' + err.message);
         }
       }
     }
   };
 
-  const handleBulkArchive = async () => { // Renamed function to handleBulkArchive
-    if (window.confirm(`Are you sure you want to archive ${selectedMemoryBlocks.length} memory blocks?`)) {
-      try {
-        await Promise.all(selectedMemoryBlocks.map(id => memoryService.archiveMemoryBlock(id))); // Use archiveMemoryBlock
-        fetchMemoryBlocks(); // Refresh the list after archiving
-        setSelectedMemoryBlocks([]); // Clear selection
-      } catch (err) {
-        setError('Failed to archive memory blocks: ' + err.message);
-      }
-    }
-  };
-
-  const handleBulkTag = () => {
-    alert('Bulk Tag functionality coming soon!');
-    // Placeholder for bulk tagging logic
-  };
-
-  const handleBulkExport = () => {
-    alert('Bulk Export functionality coming soon!');
-    // Placeholder for bulk export logic
-  };
-
-  const resetFilters = () => {
-    setSearchTerm(''); // Reset search term
-    setFilters({
-      search: '',
-      agent_id: '',
-      conversation_id: '',
-      feedback_score_range: [0, 100],
-      retrieval_count_range: [0, 1000],
-      start_date: '',
-      end_date: '',
-      keywords: [],
-    });
-    // No need to call fetchMemoryBlocks here, as the state change will trigger it via useEffect
-  };
-
-  // Function to check if any filter is active
   const areFiltersActive = () => {
     return Object.entries(filters).some(([key, value]) => {
       if (Array.isArray(value)) {
-        // For range sliders, check if values are not at their default min/max
         if (key === 'feedback_score_range') return value[0] !== 0 || value[1] !== 100;
         if (key === 'retrieval_count_range') return value[0] !== 0 || value[1] !== 1000;
-        return value.length > 0; // For other arrays like keywords
+        return value.length > 0;
       }
       return value !== '';
     });
   };
 
-  if (loading) return <p className="loading-message">Loading memory blocks...</p>;
+  if (loading) return <p className="loading-message">Loading archived memory blocks...</p>;
   if (error) return <p className="error-message">Error: {error}</p>;
 
   return (
@@ -278,55 +236,49 @@ const MemoryBlockList = () => {
       {/* Empty State Message */}
       {!loading && !error && memoryBlocks.length === 0 && !areFiltersActive() && (
         <div className="empty-state-message">
-          <p>No Memory Blocks Found</p>
+          <p>No Archived Memory Blocks Found</p>
           <p>
-            It looks like there are no memory blocks in your system.
-            Start by creating a new one!
+            There are no memory blocks currently archived.
           </p>
-          {/* The "Add New Memory Block" button is now in App.js header */}
         </div>
       )}
 
       {/* Empty State Message when filters are active but no results */}
       {!loading && !error && memoryBlocks.length === 0 && areFiltersActive() && (
         <div className="empty-state-message">
-          <p>No Memory Blocks Match Your Filters</p>
+          <p>No Archived Memory Blocks Match Your Filters</p>
           <p>
-            We couldn't find any memory blocks that match your current search criteria.
-            Try adjusting your filters or clearing them to see all memory blocks.
+            We couldn't find any archived memory blocks that match your current search criteria.
+            Try adjusting your filters or clearing them.
           </p>
-          <button onClick={resetFilters}>
+          <button onClick={() => setFilters({
+            search: '', agent_id: '', conversation_id: '', feedback_score_range: [0, 100],
+            retrieval_count_range: [0, 1000], start_date: '', end_date: '', keywords: [],
+          })}>
             Clear Active Filters
           </button>
         </div>
       )}
 
-      {/* Render content only if there are memory blocks or filters are active */}
       {(!loading && !error && (memoryBlocks.length > 0 || areFiltersActive())) && (
-        <div> {/* Replaced React.Fragment with a div */}
+        <div>
           <MemoryBlockFilterBar
             filters={filters}
-            searchTerm={searchTerm} // Pass searchTerm to the filter bar
+            searchTerm={searchTerm}
             onFilterChange={handleFilterChange}
             onRangeFilterChange={handleRangeFilterChange}
             onKeywordChange={handleKeywordChange}
             availableKeywords={availableKeywords}
             showFilters={showFilters}
             toggleFilters={toggleFilters}
-            resetFilters={resetFilters}
+            resetFilters={() => setFilters({
+              search: '', agent_id: '', conversation_id: '', feedback_score_range: [0, 100],
+              retrieval_count_range: [0, 1000], start_date: '', end_date: '', keywords: [],
+            })}
             areFiltersActive={areFiltersActive}
           />
 
-          {selectedMemoryBlocks.length > 0 && (
-            <div> {/* Added wrapper div */}
-              <BulkActionBar
-                selectedCount={selectedMemoryBlocks.length}
-                onBulkRemove={handleBulkArchive}
-                onBulkTag={handleBulkTag}
-                onBulkExport={handleBulkExport}
-              />
-            </div>
-          )}
+          {/* No BulkActionBar for archived blocks */}
 
           <MemoryBlockTable
             memoryBlocks={memoryBlocks}
@@ -338,6 +290,7 @@ const MemoryBlockList = () => {
             onActionChange={handleActionChange}
             onKeywordClick={handleKeywordChange}
             navigate={navigate}
+            isArchivedView={true} // Pass a prop to indicate archived view
           />
 
           <PaginationControls
@@ -345,7 +298,7 @@ const MemoryBlockList = () => {
             onPageChange={handlePageChange}
             onPerPageChange={handlePerPageChange}
             onPageInputChange={handlePageInputChange}
-            fetchMemoryBlocks={fetchMemoryBlocks}
+            fetchMemoryBlocks={fetchArchivedMemoryBlocks}
           />
         </div>
       )}
@@ -353,4 +306,4 @@ const MemoryBlockList = () => {
   );
 };
 
-export default MemoryBlockList;
+export default ArchivedMemoryBlockList;

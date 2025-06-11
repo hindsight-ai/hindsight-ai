@@ -1,4 +1,6 @@
-import logging
+import logging # Moved to top
+import os
+from dotenv import load_dotenv, dotenv_values # Import dotenv_values
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -7,12 +9,28 @@ from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 import math # Import math for ceil
 
-from core.db import models, schemas, crud
-from core.db.database import engine, get_db
-
-# Configure logging
+# Configure logging (Moved to top)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Load environment variables from .env file
+# The .env file is in the parent directory (apps/hindsight-service)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+base_dir = os.path.dirname(parent_dir)
+dotenv_path = os.path.join(base_dir, '.env')
+logger.info(f"Attempting to load .env file from path: {dotenv_path}")
+logger.info(f"Does .env file exist at path: {os.path.exists(dotenv_path)}")
+# Use dotenv_values to load values and then manually set them in os.environ
+config_values = dotenv_values(dotenv_path)
+logger.info(f"Loaded config values from .env: {config_values.keys()}")
+for key, value in config_values.items():
+    os.environ[key] = value
+    logger.info(f"Set environment variable {key} from .env")
+logger.info(f"LLM_API_KEY after manual os.environ update: {os.getenv('LLM_API_KEY')}")
+
+from core.db import models, schemas, crud
+from core.db.database import engine, get_db
 
 # models.Base.metadata.create_all(bind=engine) # Removed: Database schema is now managed by Alembic migrations.
 
@@ -83,6 +101,7 @@ def get_all_memory_blocks_endpoint(
     sort_order: Optional[str] = "asc",
     skip: int = 0, # Changed type to int and set default
     limit: int = 50, # Changed type to int and set default
+    include_archived: Optional[bool] = False, # Added include_archived parameter
     db: Session = Depends(get_db)
 ):
     """
@@ -219,7 +238,135 @@ def get_all_memory_blocks_endpoint(
         sort_order=sort_order,
         skip=processed_skip,
         limit=processed_limit,
-        get_total=True # Add a parameter to crud function to get total count
+        get_total=True, # Add a parameter to crud function to get total count
+        include_archived=include_archived # Pass the include_archived parameter
+    )
+
+    total_pages = math.ceil(total_items / processed_limit) if processed_limit > 0 else 0
+
+    return {
+        "items": memories,
+        "total_items": total_items,
+        "total_pages": total_pages
+    }
+
+@app.get("/memory-blocks/archived/", response_model=schemas.PaginatedMemoryBlocks)
+def get_archived_memory_blocks_endpoint(
+    agent_id: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    search_query: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    min_feedback_score: Optional[str] = None,
+    max_feedback_score: Optional[str] = None,
+    min_retrieval_count: Optional[str] = None,
+    max_retrieval_count: Optional[str] = None,
+    keywords: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "asc",
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve all archived memory blocks with advanced filtering, searching, and sorting capabilities.
+    """
+    processed_agent_id: Optional[uuid.UUID] = None
+    if agent_id:
+        try:
+            processed_agent_id = uuid.UUID(agent_id)
+        except ValueError:
+            if agent_id != "":
+                raise HTTPException(status_code=422, detail="Invalid UUID format for agent_id.")
+            processed_agent_id = None
+
+    processed_conversation_id: Optional[uuid.UUID] = None
+    if conversation_id:
+        try:
+            processed_conversation_id = uuid.UUID(conversation_id)
+        except ValueError:
+            if conversation_id != "":
+                raise HTTPException(status_code=422, detail="Invalid UUID format for conversation_id.")
+            processed_conversation_id = None
+
+    processed_start_date: Optional[datetime] = None
+    if start_date and start_date != "":
+        try:
+            processed_start_date = datetime.fromisoformat(start_date)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid datetime format for start_date. Expected ISO 8601.")
+
+    processed_end_date: Optional[datetime] = None
+    if end_date and end_date != "":
+        try:
+            processed_end_date = datetime.fromisoformat(end_date)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid datetime format for end_date. Expected ISO 8601.")
+
+    processed_min_feedback_score: Optional[int] = None
+    if min_feedback_score:
+        try:
+            processed_min_feedback_score = int(min_feedback_score)
+        except ValueError:
+            if min_feedback_score != "":
+                raise HTTPException(status_code=422, detail="Invalid integer format for min_feedback_score.")
+
+    processed_max_feedback_score: Optional[int] = None
+    if max_feedback_score:
+        try:
+            processed_max_feedback_score = int(max_feedback_score)
+        except ValueError:
+            if max_feedback_score != "":
+                raise HTTPException(status_code=422, detail="Invalid integer format for max_feedback_score.")
+
+    processed_min_retrieval_count: Optional[int] = None
+    if min_retrieval_count:
+        try:
+            processed_min_retrieval_count = int(min_retrieval_count)
+        except ValueError:
+            if min_retrieval_count != "":
+                raise HTTPException(status_code=422, detail="Invalid integer format for min_retrieval_count.")
+
+    processed_max_retrieval_count: Optional[int] = None
+    if max_retrieval_count:
+        try:
+            processed_max_retrieval_count = int(max_retrieval_count)
+        except ValueError:
+            if max_retrieval_count != "":
+                raise HTTPException(status_code=422, detail="Invalid integer format for max_retrieval_count.")
+
+    processed_keyword_ids: Optional[List[uuid.UUID]] = None
+    if keywords and keywords != "":
+        try:
+            processed_keyword_ids = [uuid.UUID(kw.strip()) for kw in keywords.split(',') if kw.strip()]
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid UUID format in keywords parameter.")
+
+    search_query = search_query if search_query else None
+    sort_by = sort_by if sort_by else None
+    sort_order = sort_order if sort_order else "asc"
+
+    processed_skip = skip
+    processed_limit = limit
+
+    memories, total_items = crud.get_all_memory_blocks(
+        db=db,
+        agent_id=processed_agent_id,
+        conversation_id=processed_conversation_id,
+        search_query=search_query,
+        start_date=processed_start_date,
+        end_date=processed_end_date,
+        max_feedback_score=processed_max_feedback_score,
+        min_retrieval_count=processed_min_retrieval_count,
+        max_retrieval_count=processed_max_retrieval_count,
+        keyword_ids=processed_keyword_ids,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        skip=processed_skip,
+        limit=processed_limit,
+        get_total=True,
+        include_archived=True, # Explicitly include archived blocks
+        is_archived=True # Filter for only archived blocks
     )
 
     total_pages = math.ceil(total_items / processed_limit) if processed_limit > 0 else 0
@@ -258,12 +405,25 @@ def update_memory_block_endpoint(
         raise HTTPException(status_code=404, detail="Memory block not found")
     return db_memory_block
 
-@app.delete("/memory-blocks/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
+@app.post("/memory-blocks/{memory_id}/archive", response_model=schemas.MemoryBlock)
+def archive_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Archives a memory block by setting its 'archived' flag to True.
+    """
+    db_memory_block = crud.archive_memory_block(db, memory_id=memory_id)
+    if not db_memory_block:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    return db_memory_block
+
+@app.delete("/memory-blocks/{memory_id}/hard-delete", status_code=status.HTTP_204_NO_CONTENT)
+def hard_delete_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Performs a hard delete of a memory block from the database.
+    """
     success = crud.delete_memory_block(db, memory_id=memory_id)
     if not success:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    return {"message": "Memory block deleted successfully"}
+    return {"message": "Memory block hard deleted successfully"}
 
 @app.post("/memory-blocks/{memory_id}/feedback/", response_model=schemas.MemoryBlock)
 def report_memory_feedback_endpoint(
@@ -402,6 +562,132 @@ def get_memory_block_keywords_endpoint(memory_id: uuid.UUID, db: Session = Depen
     
     keywords = crud.get_memory_block_keywords(db, memory_id=memory_id)
     return keywords
+
+# Consolidation Trigger Endpoint
+@app.post("/consolidation/trigger/", status_code=status.HTTP_202_ACCEPTED)
+def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
+    """
+    Trigger the memory block consolidation process manually.
+    This endpoint initiates the worker process to analyze memory blocks for duplicates
+    and generate consolidation suggestions.
+    """
+    from core.core.consolidation_worker import run_consolidation_analysis
+    logger.info("Manual trigger of consolidation process received")
+    
+    # Retrieve LLM_API_KEY from environment variables
+    llm_api_key = os.getenv("LLM_API_KEY")
+    if not llm_api_key:
+        logger.warning("LLM_API_KEY is not set. LLM-based consolidation will not occur.")
+        # Optionally, you might raise an HTTPException here if LLM is strictly required
+        # raise HTTPException(status_code=500, detail="LLM_API_KEY is not set, LLM-based consolidation cannot proceed.")
+
+    try:
+        # Run the consolidation process in a non-blocking way if possible
+        # For simplicity in this implementation, we run it synchronously
+        run_consolidation_analysis(llm_api_key)
+        return {"message": "Consolidation process triggered successfully"}
+    except Exception as e:
+        logger.error(f"Error triggering consolidation process: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error triggering consolidation process: {str(e)}")
+
+# Consolidation Suggestions Endpoints
+@app.get("/consolidation-suggestions/", response_model=schemas.PaginatedConsolidationSuggestions)
+def get_consolidation_suggestions_endpoint(
+    status: Optional[str] = None,
+    group_id: Optional[uuid.UUID] = None,
+    sort_by: Optional[str] = "timestamp",
+    sort_order: Optional[str] = "desc",
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve all consolidation suggestions with filtering, sorting, and pagination.
+    """
+    logger.info(f"Fetching consolidation suggestions with filters: status={status}, group_id={group_id}")
+    
+    # Get paginated suggestions
+    suggestions = crud.get_consolidation_suggestions(
+        db=db,
+        status=status,
+        group_id=group_id,
+        skip=skip,
+        limit=limit
+    )
+    
+    # Calculate total items (assuming suggestions is a list)
+    total_items = len(suggestions) if suggestions else 0
+    total_pages = math.ceil(total_items / limit) if limit > 0 else 0
+
+    return {
+        "items": suggestions,
+        "total_items": total_items,
+        "total_pages": total_pages
+    }
+
+@app.get("/consolidation-suggestions/{suggestion_id}", response_model=schemas.ConsolidationSuggestion)
+def get_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Retrieve a specific consolidation suggestion by ID.
+    """
+    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+    return suggestion
+
+@app.post("/consolidation-suggestions/{suggestion_id}/validate/", response_model=schemas.ConsolidationSuggestion)
+def validate_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Validate a consolidation suggestion, replacing original memory blocks with the consolidated version.
+    """
+    logger.info(f"Validating consolidation suggestion {suggestion_id}")
+    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+    if suggestion.status != "pending":
+        raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
+
+    try:
+        crud.apply_consolidation(db, suggestion_id=suggestion_id)
+        # Fetch the updated suggestion to return
+        updated_suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
+        if not updated_suggestion:
+            raise HTTPException(status_code=404, detail="Updated consolidation suggestion not found")
+        # Update status to 'validated' if not already set by apply_consolidation
+        if updated_suggestion.status == "pending":
+            update_schema = schemas.ConsolidationSuggestionUpdate(status="validated")
+            updated_suggestion = crud.update_consolidation_suggestion(db, suggestion_id=suggestion_id, suggestion=update_schema)
+        return updated_suggestion
+    except Exception as e:
+        logger.error(f"Error validating suggestion {suggestion_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error validating suggestion: {str(e)}")
+
+@app.post("/consolidation-suggestions/{suggestion_id}/reject/", response_model=schemas.ConsolidationSuggestion)
+def reject_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Reject a consolidation suggestion, marking it as rejected.
+    """
+    logger.info(f"Rejecting consolidation suggestion {suggestion_id}")
+    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+    if suggestion.status != "pending":
+        raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
+
+    # Create a schema object for the update
+    update_schema = schemas.ConsolidationSuggestionUpdate(status="rejected")
+    updated_suggestion = crud.update_consolidation_suggestion(db, suggestion_id=suggestion_id, suggestion=update_schema)
+    return updated_suggestion
+
+@app.delete("/consolidation-suggestions/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Deletes a consolidation suggestion from the database.
+    """
+    success = crud.delete_consolidation_suggestion(db, suggestion_id=suggestion_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+    return {"message": "Consolidation suggestion deleted successfully"}
 
 # Health check endpoint
 @app.get("/health")
