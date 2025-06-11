@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload # Import joinedload
 from . import models, schemas
 import uuid
 from datetime import datetime
@@ -172,15 +172,7 @@ def get_memory_blocks_by_agent(db: Session, agent_id: uuid.UUID, skip: int = 0, 
 def get_memory_blocks_by_conversation(db: Session, conversation_id: uuid.UUID, skip: int = 0, limit: int = 100):
     return db.query(models.MemoryBlock).filter(models.MemoryBlock.conversation_id == conversation_id).offset(skip).limit(limit).all()
 
-from sqlalchemy.orm import Session, joinedload # Import joinedload
-from . import models, schemas
-import uuid
-from datetime import datetime
-from sqlalchemy import or_
-from typing import List, Optional
-
-# ... (rest of the file)
-
+# CRUD for MemoryBlock
 def get_all_memory_blocks(
     db: Session,
     agent_id: Optional[uuid.UUID] = None,
@@ -197,9 +189,16 @@ def get_all_memory_blocks(
     sort_order: Optional[str] = "asc", # "asc" or "desc"
     skip: int = 0,
     limit: int = 100,
-    get_total: bool = False # New parameter to indicate if total count is needed
+    get_total: bool = False, # New parameter to indicate if total count is needed
+    include_archived: bool = False, # New parameter to include archived blocks
+    is_archived: Optional[bool] = None # New parameter to explicitly filter by archived status
 ):
     query = db.query(models.MemoryBlock).options(joinedload(models.MemoryBlock.memory_block_keywords).joinedload(models.MemoryBlockKeyword.keyword)) # Eager load keywords
+
+    if is_archived is not None:
+        query = query.filter(models.MemoryBlock.archived == is_archived)
+    elif not include_archived: # Only apply this filter if is_archived is not explicitly set
+        query = query.filter(models.MemoryBlock.archived == False)
 
     if agent_id:
         query = query.filter(models.MemoryBlock.agent_id == agent_id)
@@ -279,12 +278,23 @@ def update_memory_block(db: Session, memory_id: uuid.UUID, memory_block: schemas
         db.refresh(db_memory_block)
     return db_memory_block
 
+def archive_memory_block(db: Session, memory_id: uuid.UUID):
+    db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
+    if db_memory_block:
+        db_memory_block.archived = True
+        db.commit()
+        db.refresh(db_memory_block)
+        return True
+    return False
+
 def delete_memory_block(db: Session, memory_id: uuid.UUID):
+    # This function now performs a hard delete, used for actual removal, not archiving
     db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
     if db_memory_block:
         db.delete(db_memory_block)
         db.commit()
-    return db_memory_block
+        return True
+    return False
 
 def retrieve_relevant_memories(
     db: Session,
@@ -403,3 +413,86 @@ def get_memory_block_keywords(db: Session, memory_id: uuid.UUID):
     return db.query(models.Keyword).join(models.MemoryBlockKeyword).filter(
         models.MemoryBlockKeyword.memory_id == memory_id
     ).all()
+
+
+# CRUD for ConsolidationSuggestion
+def create_consolidation_suggestion(db: Session, suggestion: schemas.ConsolidationSuggestionCreate):
+    db_suggestion = models.ConsolidationSuggestion(
+        group_id=suggestion.group_id,
+        suggested_content=suggestion.suggested_content,
+        suggested_lessons_learned=suggestion.suggested_lessons_learned,
+        suggested_keywords=suggestion.suggested_keywords,
+        original_memory_ids=suggestion.original_memory_ids,
+        status=suggestion.status or 'pending'
+    )
+    db.add(db_suggestion)
+    db.commit()
+    db.refresh(db_suggestion)
+    return db_suggestion
+
+def get_consolidation_suggestion(db: Session, suggestion_id: uuid.UUID):
+    return db.query(models.ConsolidationSuggestion).filter(models.ConsolidationSuggestion.suggestion_id == suggestion_id).first()
+
+def get_consolidation_suggestions(db: Session, status: Optional[str] = 'pending', group_id: Optional[uuid.UUID] = None, skip: int = 0, limit: int = 100):
+    query = db.query(models.ConsolidationSuggestion)
+    if status:
+        query = query.filter(models.ConsolidationSuggestion.status == status)
+    if group_id:
+        query = query.filter(models.ConsolidationSuggestion.group_id == group_id)
+    return query.offset(skip).limit(limit).all()
+
+def update_consolidation_suggestion(db: Session, suggestion_id: uuid.UUID, suggestion: schemas.ConsolidationSuggestionUpdate):
+    db_suggestion = db.query(models.ConsolidationSuggestion).filter(models.ConsolidationSuggestion.suggestion_id == suggestion_id).first()
+    if db_suggestion:
+        update_data = suggestion.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_suggestion, key, value)
+        db.commit()
+        db.refresh(db_suggestion)
+    return db_suggestion
+
+def delete_consolidation_suggestion(db: Session, suggestion_id: uuid.UUID):
+    db_suggestion = db.query(models.ConsolidationSuggestion).filter(models.ConsolidationSuggestion.suggestion_id == suggestion_id).first()
+    if db_suggestion:
+        db.delete(db_suggestion)
+        db.commit()
+        return True
+    return False
+
+def apply_consolidation(db: Session, suggestion_id: uuid.UUID):
+    db_suggestion = db.query(models.ConsolidationSuggestion).filter(models.ConsolidationSuggestion.suggestion_id == suggestion_id).first()
+    if db_suggestion and db_suggestion.status == 'pending':
+        # Create a new MemoryBlock with the consolidated content
+        original_memory_ids = db_suggestion.original_memory_ids
+        if original_memory_ids:
+            first_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == original_memory_ids[0]).first()
+            if first_memory_block:
+                new_memory_block = models.MemoryBlock(
+                    agent_id=first_memory_block.agent_id,
+                    conversation_id=first_memory_block.conversation_id,
+                    content=db_suggestion.suggested_content,
+                    lessons_learned=db_suggestion.suggested_lessons_learned,
+                    metadata_col={"consolidated_from": original_memory_ids}
+                )
+                db.add(new_memory_block)
+                db.flush()
+
+                # Add keywords to the new memory block
+                for keyword_text in db_suggestion.suggested_keywords:
+                    keyword = _get_or_create_keyword(db, keyword_text)
+                    db_mbk = models.MemoryBlockKeyword(memory_id=new_memory_block.id, keyword_id=keyword.keyword_id)
+                    db.add(db_mbk)
+
+                # Archive original memory blocks instead of deleting them
+                for memory_id in original_memory_ids:
+                    db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
+                    if db_memory_block:
+                        db_memory_block.archived = True # Set archived to True
+                        db.add(db_memory_block) # Re-add to session to mark as dirty
+
+                # Update suggestion status
+                db_suggestion.status = 'validated'
+                db.commit()
+                db.refresh(new_memory_block)
+                return new_memory_block
+    return None

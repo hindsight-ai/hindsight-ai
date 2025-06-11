@@ -11,3 +11,6 @@ wheels/
 
 # Process ID files
 .backend.pid
+
+# Environment variables
+.env
