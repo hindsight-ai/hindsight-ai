@@ -1,0 +1,112 @@
+/* AddAgentDialog.css */
+
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.dialog-box {
+  background-color: #fff; /* White background, similar to main container */
+  color: #333; /* Dark text color */
+  padding: 25px;
+  border-radius: 10px; /* More rounded corners */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); /* Stronger, softer shadow */
+  width: 400px;
+  max-width: 90%;
+  border: 1px solid #e0e0e0; /* Lighter border */
+}
+
+.dialog-box h2 {
+  color: #2c3e50; /* Heading color */
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 1.5em;
+  text-align: center;
+}
+
+.dialog-content label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600; /* Bolder font weight */
+  color: #2c3e50; /* Heading color */
+}
+
+.dialog-content input[type="text"] {
+  width: calc(100% - 22px); /* Adjust for padding and border */
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc; /* Lighter border for input */
+  border-radius: 5px; /* Slightly more rounded */
+  background-color: #fdfdfd; /* Very light input background */
+  color: #333; /* Input text color */
+  font-size: 1em;
+}
+
+.dialog-content input[type="text"]:focus {
+  outline: none;
+  border-color: #007bff; /* Primary blue for focus */
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Softer shadow on focus */
+}
+
+.dialog-content .hint {
+  font-size: 0.85em;
+  color: #666; /* Softer muted color for hints */
+  margin-top: -10px;
+  margin-bottom: 20px;
+}
+
+.dialog-content .error-message {
+  color: #dc3545; /* Bootstrap-like error red */
+  margin-top: 10px;
+  font-size: 0.9em;
+  font-weight: 500;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.dialog-actions button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1em;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.dialog-actions button:first-child { /* Cancel button */
+  background-color: #6c757d; /* Muted gray */
+  color: #fff;
+  font-weight: 500;
+}
+
+.dialog-actions button:first-child:hover:not(:disabled) {
+  background-color: #5a6268;
+}
+
+.dialog-actions button:last-child { /* Add Agent button */
+  background-color: #28a745; /* Green for add action */
+  color: white;
+  font-weight: 600;
+}
+
+.dialog-actions button:last-child:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.dialog-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

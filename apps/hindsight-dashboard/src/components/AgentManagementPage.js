@@ -2,15 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import agentService from '../api/agentService';
 import PaginationControls from './PaginationControls';
 import { CopyToClipboardButton } from './CopyToClipboardButton';
-import { BulkActionBar } from './BulkActionBar'; // Import BulkActionBar
+import { BulkActionBar } from './BulkActionBar';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
+import AddAgentDialog from './AddAgentDialog'; // Import the new dialog component
 import './MemoryBlockList.css'; // Reusing existing styles
 
 const AgentManagementPage = () => {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [newAgentName, setNewAgentName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [pagination, setPagination] = useState({
     page: 1,
@@ -20,19 +20,19 @@ const AgentManagementPage = () => {
   });
   const [sort, setSort] = useState({ field: 'created_at', order: 'desc' });
   const [selectedAgents, setSelectedAgents] = useState([]);
+  const [showAddAgentDialog, setShowAddAgentDialog] = useState(false); // State for dialog visibility
+  const [confirmationMessage, setConfirmationMessage] = useState(null); // State for confirmation message
 
   const fetchAgents = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let data;
       let fetchedData;
       if (searchTerm) {
         fetchedData = await agentService.searchAgents(searchTerm);
-        // Search API might not return pagination info, so we'll simulate it
         setPagination(prev => ({
-          ...prev, // Keep existing page and per_page
-          total_pages: 1, // For search, assume one page of results
+          ...prev,
+          total_pages: 1,
           total_items: fetchedData.length,
         }));
       } else {
@@ -48,7 +48,6 @@ const AgentManagementPage = () => {
           total_items: fetchedData.total_items,
         }));
       }
-      // Ensure fetchedData is an array or has an items property that is an array
       const agentsArray = Array.isArray(fetchedData) ? fetchedData : (fetchedData.items || []);
       setAgents(agentsArray);
     } catch (err) {
@@ -60,25 +59,24 @@ const AgentManagementPage = () => {
   }, [pagination.page, pagination.per_page, searchTerm, sort.field, sort.order]);
 
   useEffect(() => {
-    setAgents([]); // Explicitly clear agents
-    setLoading(true); // Set loading state immediately
+    setAgents([]);
+    setLoading(true);
     fetchAgents();
   }, [fetchAgents]);
 
-  const handleAddAgent = async (e) => {
-    e.preventDefault();
-    if (!newAgentName.trim()) {
-      alert('Agent name cannot be empty.');
-      return;
-    }
+  const handleAddAgent = async (agentName) => {
+    setError(null); // Clear previous errors
+    setLoading(true);
     try {
-      setLoading(true);
-      await agentService.createAgent({ agent_name: newAgentName });
-      setNewAgentName('');
+      await agentService.createAgent({ agent_name: agentName });
+      setConfirmationMessage(`Agent "${agentName}" created successfully!`);
+      setShowAddAgentDialog(false); // Close dialog on success
       await fetchAgents(); // Refresh the list
+      // Clear confirmation message after a few seconds
+      setTimeout(() => setConfirmationMessage(null), 5000);
     } catch (err) {
       console.error('Failed to create agent:', err);
-      setError('Failed to create agent. Please try again.');
+      setError(`Failed to create agent: ${err.response?.data?.detail || err.message}. Please try again.`);
     } finally {
       setLoading(false);
     }
@@ -89,8 +87,8 @@ const AgentManagementPage = () => {
       try {
         setLoading(true);
         await agentService.deleteAgent(agentId);
-        await fetchAgents(); // Refresh the list
-        setSelectedAgents(prevSelected => prevSelected.filter(id => id !== agentId)); // Update selected state
+        await fetchAgents();
+        setSelectedAgents(prevSelected => prevSelected.filter(id => id !== agentId));
       } catch (err) {
         console.error('Failed to delete agent:', err);
         setError('Failed to delete agent. Please try again.');
@@ -102,7 +100,7 @@ const AgentManagementPage = () => {
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    setPagination(prev => ({ ...prev, page: 1 })); // Reset to first page on search
+    setPagination(prev => ({ ...prev, page: 1 }));
   };
 
   const handlePageChange = (newPage) => {
@@ -147,10 +145,9 @@ const AgentManagementPage = () => {
     if (window.confirm(`Are you sure you want to delete ${selectedAgents.length} selected agents and all their associated data? This action cannot be undone.`)) {
       try {
         setLoading(true);
-        // Perform deletion for each selected agent
         await Promise.all(selectedAgents.map(agentId => agentService.deleteAgent(agentId)));
-        setSelectedAgents([]); // Clear selection after deletion
-        await fetchAgents(); // Refresh the list
+        setSelectedAgents([]);
+        await fetchAgents();
       } catch (err) {
         console.error('Failed to bulk delete agents:', err);
         setError('Failed to bulk delete agents. Please try again.');
@@ -164,8 +161,8 @@ const AgentManagementPage = () => {
     { id: 'select', label: 'Select', size: 3, isResizable: false, minSize: 3, maxSize: 3 },
     { id: 'id', label: 'ID', size: 8, isSortable: true },
     { id: 'created_at', label: 'Creation Date', size: 7, isSortable: true },
-    { id: 'agent_name', label: 'Agent Name', size: 70, isSortable: true }, // Adjusted size to accommodate 'select'
-    { id: 'actions', label: 'Actions', size: 12, isResizable: false, minSize: 12, maxSize: 12 }, // Adjusted size for actions
+    { id: 'agent_name', label: 'Agent Name', size: 70, isSortable: true },
+    { id: 'actions', label: 'Actions', size: 12, isResizable: false, minSize: 12, maxSize: 12 },
   ];
 
   const initialColumnLayout = columnDefinitions.map(col => col.size);
@@ -228,7 +225,7 @@ const AgentManagementPage = () => {
   );
 
   const renderCellContent = (agent, columnId) => {
-    if (!agent) return null; // Add a check for undefined agent
+    if (!agent) return null;
 
     switch (columnId) {
       case 'select':
@@ -280,25 +277,25 @@ const AgentManagementPage = () => {
         <button onClick={fetchAgents} className="filter-toggle-button">Search</button>
       </div>
 
-      <form onSubmit={handleAddAgent} className="add-agent-form search-bar-container">
-        <input
-          type="text"
-          placeholder="New Agent Name"
-          value={newAgentName}
-          onChange={(e) => setNewAgentName(e.target.value)}
-          className="search-input-large"
-        />
-        <button type="submit" className="filter-toggle-button">Add Agent</button>
-      </form>
+      {/* Removed the direct input field for new agent name */}
+      <div className="add-agent-section">
+        <button onClick={() => setShowAddAgentDialog(true)} className="filter-toggle-button">Add Agent</button>
+      </div>
 
       {selectedAgents.length > 0 && (
         <BulkActionBar selectedCount={selectedAgents.length} onBulkRemove={handleBulkDelete} />
       )}
 
-      {agents.length === 0 && !loading && !error ? (
+      {confirmationMessage && (
+        <div className="confirmation-message">
+          {confirmationMessage}
+        </div>
+      )}
+
+      {agents.length === 0 && !loading && !error && !searchTerm ? ( // Adjusted condition for empty state
         <div className="empty-state-message">
-          <p>No agents found. Create a new agent to get started!</p>
-          <button onClick={() => document.querySelector('.add-agent-form input').focus()}>Add First Agent</button>
+          <p>No agents found. Click "Add Agent" to create your first agent!</p>
+          <button onClick={() => setShowAddAgentDialog(true)}>Add First Agent</button>
         </div>
       ) : (
         <>
@@ -308,17 +305,25 @@ const AgentManagementPage = () => {
               {agents.map(renderRow)}
             </div>
           </div>
-          {!searchTerm && ( // Only show pagination if not searching
+          {!searchTerm && (
             <PaginationControls
               pagination={pagination}
               onPageChange={handlePageChange}
               onPerPageChange={handlePerPageChange}
               onPageInputChange={handlePageInputChange}
-              fetchMemoryBlocks={fetchAgents} // Reusing prop name, but it fetches agents
+              fetchMemoryBlocks={fetchAgents}
             />
           )}
         </>
       )}
+
+      <AddAgentDialog
+        show={showAddAgentDialog}
+        onClose={() => setShowAddAgentDialog(false)}
+        onCreate={handleAddAgent}
+        loading={loading}
+        error={error}
+      />
     </div>
   );
 };
