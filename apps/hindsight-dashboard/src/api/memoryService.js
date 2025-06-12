@@ -136,7 +136,7 @@ const memoryService = {
   },
 
   // Consolidation Suggestions
-  getConsolidationSuggestions: async (filters = {}) => {
+  getConsolidationSuggestions: async (filters = {}, signal) => {
     const { skip, limit, status, group_id, start_date, end_date, sort_by, sort_order } = filters;
     const params = new URLSearchParams({
       skip: skip || 0,
@@ -148,7 +148,7 @@ const memoryService = {
       ...(sort_by && { sort_by }),
       ...(sort_order && { sort_order })
     });
-    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/?${params.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/?${params.toString()}`, { signal });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
