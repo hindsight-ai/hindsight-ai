@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BulkActionBar } from './BulkActionBar';
 import { useNavigate, useLocation } from 'react-router-dom'; // Import useLocation
 import memoryService from '../api/memoryService';
+import agentService from '../api/agentService'; // Import agentService
 import MemoryBlockFilterBar from './MemoryBlockFilterBar';
 import MemoryBlockTable from './MemoryBlockTable';
 import PaginationControls from './PaginationControls';
@@ -13,9 +14,10 @@ const MemoryBlockList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState(''); // Separate state for the search input value
+  const [agentIdInput, setAgentIdInput] = useState(''); // Local state for agent ID input
   const [filters, setFilters] = useState({
     search: '', // This will be updated by the debounced searchTerm
-    agent_id: '',
+    agent_id: '', // This will be updated only on explicit apply/enter
     conversation_id: '',
     feedback_score_range: [0, 100], // Default range for feedback score
     retrieval_count_range: [0, 1000], // Default range for retrieval count
@@ -23,6 +25,7 @@ const MemoryBlockList = () => {
     end_date: '',
     keywords: [],
   });
+
   const [pagination, setPagination] = useState({
     page: 1,
     per_page: 10,
@@ -36,6 +39,7 @@ const MemoryBlockList = () => {
   const [availableKeywords, setAvailableKeywords] = useState([]);
   const [selectedMemoryBlocks, setSelectedMemoryBlocks] = useState([]);
   const [showFilters, setShowFilters] = useState(true); // State for toggling filter visibility
+  const [availableAgentIds, setAvailableAgentIds] = useState([]); // New state for agent IDs
 
   // Debounce logic for search term
   const debounceTimeoutRef = useRef(null);
@@ -43,7 +47,8 @@ const MemoryBlockList = () => {
   // Memoize fetch functions to ensure stable references for useEffect dependencies
   const fetchMemoryBlocks = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setError(null); // Clear previous errors
+    console.log('fetchMemoryBlocks called with filters.agent_id:', filters.agent_id); // Debugging line
     try {
       const response = await memoryService.getMemoryBlocks({
         ...filters,
@@ -78,7 +83,16 @@ const MemoryBlockList = () => {
     } catch (err) {
       console.error('Failed to fetch keywords:', err);
     }
-  }, []); // No dependencies, as keywords are static
+  }, []);
+
+  const fetchAgentIds = useCallback(async () => {
+    try {
+      const response = await agentService.getAgents({ per_page: 1000 }); // Fetch a reasonable number of agents
+      setAvailableAgentIds(response.items.map(agent => agent.id));
+    } catch (err) {
+      console.error('Failed to fetch agent IDs:', err);
+    }
+  }, []);
 
   useEffect(() => {
     // Clear selections when memory blocks change (e.g., after fetch or delete)
@@ -94,7 +108,8 @@ const MemoryBlockList = () => {
     setLoading(true);
     fetchMemoryBlocks();
     fetchKeywords();
-  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchMemoryBlocks, fetchKeywords]); // Add location.pathname and memoized functions as dependencies
+    fetchAgentIds(); // Fetch agent IDs
+  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchMemoryBlocks, fetchKeywords, fetchAgentIds]); // Add location.pathname and memoized functions as dependencies
 
   // Effect to debounce search term and update filters.search
   useEffect(() => {
@@ -120,16 +135,46 @@ const MemoryBlockList = () => {
     setShowFilters(!showFilters);
   };
 
+  // Helper function to validate UUID format
+  const isValidUUID = (uuidString) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuidString);
+  };
+
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     if (name === 'search') {
       setSearchTerm(value); // Update searchTerm for debouncing
-    } else {
+    } else if (name === 'agent_id') {
+      setAgentIdInput(value); // Update local agentIdInput state
+      // No immediate filtering or validation for agent_id here.
+      // Validation and filter application will happen on Enter key press via handleAgentIdApply.
+    }
+    else {
       setFilters((prevFilters) => ({
         ...prevFilters,
         [name]: value,
       }));
     }
+  };
+
+  const handleAgentIdApply = (agentId) => {
+    if (agentId === '' || isValidUUID(agentId)) {
+      setError(null); // Clear error if input is valid or empty
+      setFilters((prevFilters) => ({
+        ...prevFilters,
+        agent_id: agentId,
+      }));
+      setAgentIdInput(agentId); // Ensure agentIdInput reflects the applied filter
+    } else {
+      setError('Invalid Agent ID format. Please enter a valid UUID or select from suggestions.');
+      setFilters((prevFilters) => ({
+        ...prevFilters,
+        agent_id: '', // Clear filter to prevent 422 errors
+      }));
+      setAgentIdInput(''); // Clear agentIdInput on invalid input
+    }
+    // The useEffect with 'filters' dependency will handle triggering fetchMemoryBlocks.
   };
 
   const handleRangeFilterChange = (name, value) => {
@@ -244,6 +289,7 @@ const MemoryBlockList = () => {
 
   const resetFilters = () => {
     setSearchTerm(''); // Reset search term
+    setAgentIdInput(''); // Reset agent ID input
     setFilters({
       search: '',
       agent_id: '',
@@ -254,6 +300,7 @@ const MemoryBlockList = () => {
       end_date: '',
       keywords: [],
     });
+
     // No need to call fetchMemoryBlocks here, as the state change will trigger it via useEffect
   };
 
@@ -271,6 +318,7 @@ const MemoryBlockList = () => {
   };
 
   if (loading) return <p className="loading-message">Loading memory blocks...</p>;
+  // Display error message if there is one
   if (error) return <p className="error-message">Error: {error}</p>;
 
   return (
@@ -307,10 +355,13 @@ const MemoryBlockList = () => {
           <MemoryBlockFilterBar
             filters={filters}
             searchTerm={searchTerm} // Pass searchTerm to the filter bar
+            agentIdInput={agentIdInput} // Pass agentIdInput to the filter bar
             onFilterChange={handleFilterChange}
             onRangeFilterChange={handleRangeFilterChange}
             onKeywordChange={handleKeywordChange}
+            onAgentIdApply={handleAgentIdApply} // Pass new handler
             availableKeywords={availableKeywords}
+            availableAgentIds={availableAgentIds} // Pass available agent IDs
             showFilters={showFilters}
             toggleFilters={toggleFilters}
             resetFilters={resetFilters}

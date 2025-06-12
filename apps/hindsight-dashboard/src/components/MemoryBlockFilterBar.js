@@ -6,10 +6,13 @@ import './MemoryBlockList.css'; // Assuming shared styles
 const MemoryBlockFilterBar = ({
   filters,
   searchTerm, // New prop for immediate search input value
+  agentIdInput, // New prop for local agent ID input value
   onFilterChange,
   onRangeFilterChange,
   onKeywordChange,
+  onAgentIdApply, // New prop for applying agent ID filter
   availableKeywords,
+  availableAgentIds = [], // Initialize with empty array to prevent undefined errors
   showFilters,
   toggleFilters,
   resetFilters,
@@ -56,9 +59,20 @@ const MemoryBlockFilterBar = ({
                 id="agent-id"
                 name="agent_id"
                 placeholder="Agent ID"
-                value={filters.agent_id}
+                value={agentIdInput} // Use agentIdInput for the input value
                 onChange={onFilterChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    onAgentIdApply(e.target.value);
+                  }
+                }}
+                list="agent-ids" // Associate with datalist
               />
+              <datalist id="agent-ids">
+                {availableAgentIds.map((id) => (
+                  <option key={id} value={id} />
+                ))}
+              </datalist>
               <label htmlFor="conversation-id">Conversation ID</label>
               <input
                 type="text"
