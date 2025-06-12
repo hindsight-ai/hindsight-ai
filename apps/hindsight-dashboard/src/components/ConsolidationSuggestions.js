@@ -33,7 +33,7 @@ const ConsolidationSuggestions = () => {
   });
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState([]); // New state for selected items
   const [filterStatus, setFilterStatus] = useState('all'); // New state for status filter
-  const [columnLayout, setColumnLayout] = useState(initialColumnLayout);
+  const [, setColumnLayout] = useState(initialColumnLayout);
 
   // Reset column layout when component mounts
   useEffect(() => {

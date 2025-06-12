@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import memoryService from '../api/memoryService';
+import agentService from '../api/agentService'; // Import agentService
 import MemoryBlockFilterBar from './MemoryBlockFilterBar';
 import MemoryBlockTable from './MemoryBlockTable';
 import PaginationControls from './PaginationControls';
@@ -11,6 +12,7 @@ const ArchivedMemoryBlockList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [agentIdInput, setAgentIdInput] = useState(''); // Local state for agent ID input
   const [filters, setFilters] = useState({
     search: '',
     agent_id: '',
@@ -34,6 +36,7 @@ const ArchivedMemoryBlockList = () => {
   const [availableKeywords, setAvailableKeywords] = useState([]);
   const [selectedMemoryBlocks, setSelectedMemoryBlocks] = useState([]); // Keep for consistency, but bulk actions won't be used
   const [showFilters, setShowFilters] = useState(true);
+  const [availableAgentIds, setAvailableAgentIds] = useState([]); // New state for agent IDs
 
   const debounceTimeoutRef = useRef(null);
 
@@ -75,6 +78,15 @@ const ArchivedMemoryBlockList = () => {
     }
   }, []);
 
+  const fetchAgentIds = useCallback(async () => {
+    try {
+      const response = await agentService.getAgents({ per_page: 1000 }); // Fetch a reasonable number of agents
+      setAvailableAgentIds(response.items.map(agent => agent.id));
+    } catch (err) {
+      console.error('Failed to fetch agent IDs:', err);
+    }
+  }, []);
+
   useEffect(() => {
     setSelectedMemoryBlocks([]);
   }, [memoryBlocks]);
@@ -86,7 +98,8 @@ const ArchivedMemoryBlockList = () => {
     setLoading(true);
     fetchArchivedMemoryBlocks();
     fetchKeywords();
-  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchArchivedMemoryBlocks, fetchKeywords]);
+    fetchAgentIds();
+  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchArchivedMemoryBlocks, fetchKeywords, fetchAgentIds]);
 
   useEffect(() => {
     if (debounceTimeoutRef.current) {
@@ -111,15 +124,41 @@ const ArchivedMemoryBlockList = () => {
     setShowFilters(!showFilters);
   };
 
+  // Helper function to validate UUID format
+  const isValidUUID = (uuidString) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuidString);
+  };
+
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     if (name === 'search') {
       setSearchTerm(value);
+    } else if (name === 'agent_id') {
+      setAgentIdInput(value);
     } else {
       setFilters((prevFilters) => ({
         ...prevFilters,
         [name]: value,
       }));
+    }
+  };
+
+  const handleAgentIdApply = (agentId) => {
+    if (agentId === '' || isValidUUID(agentId)) {
+      setError(null);
+      setFilters((prevFilters) => ({
+        ...prevFilters,
+        agent_id: agentId,
+      }));
+      setAgentIdInput(agentId);
+    } else {
+      setError('Invalid Agent ID format. Please enter a valid UUID or select from suggestions.');
+      setFilters((prevFilters) => ({
+        ...prevFilters,
+        agent_id: '',
+      }));
+      setAgentIdInput('');
     }
   };
 
@@ -217,6 +256,21 @@ const ArchivedMemoryBlockList = () => {
     }
   };
 
+  const resetFilters = () => {
+    setSearchTerm('');
+    setAgentIdInput('');
+    setFilters({
+      search: '',
+      agent_id: '',
+      conversation_id: '',
+      feedback_score_range: [0, 100],
+      retrieval_count_range: [0, 1000],
+      start_date: '',
+      end_date: '',
+      keywords: [],
+    });
+  };
+
   const areFiltersActive = () => {
     return Object.entries(filters).some(([key, value]) => {
       if (Array.isArray(value)) {
@@ -251,10 +305,7 @@ const ArchivedMemoryBlockList = () => {
             We couldn't find any archived memory blocks that match your current search criteria.
             Try adjusting your filters or clearing them.
           </p>
-          <button onClick={() => setFilters({
-            search: '', agent_id: '', conversation_id: '', feedback_score_range: [0, 100],
-            retrieval_count_range: [0, 1000], start_date: '', end_date: '', keywords: [],
-          })}>
+          <button onClick={resetFilters}>
             Clear Active Filters
           </button>
         </div>
@@ -265,16 +316,16 @@ const ArchivedMemoryBlockList = () => {
           <MemoryBlockFilterBar
             filters={filters}
             searchTerm={searchTerm}
+            agentIdInput={agentIdInput}
             onFilterChange={handleFilterChange}
             onRangeFilterChange={handleRangeFilterChange}
             onKeywordChange={handleKeywordChange}
+            onAgentIdApply={handleAgentIdApply}
             availableKeywords={availableKeywords}
+            availableAgentIds={availableAgentIds}
             showFilters={showFilters}
             toggleFilters={toggleFilters}
-            resetFilters={() => setFilters({
-              search: '', agent_id: '', conversation_id: '', feedback_score_range: [0, 100],
-              retrieval_count_range: [0, 1000], start_date: '', end_date: '', keywords: [],
-            })}
+            resetFilters={resetFilters}
             areFiltersActive={areFiltersActive}
           />
 
