@@ -1,9 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { getConsolidationSuggestions, validateConsolidationSuggestion, rejectConsolidationSuggestion, triggerConsolidation, deleteConsolidationSuggestion } from '../api/memoryService';
 import PaginationControls from './PaginationControls'; // Import PaginationControls
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels'; // Import PanelGroup and Panel
 import './MemoryBlockList.css'; // Reuse styles from MemoryBlockList if applicable
+
+const allColumnDefinitions = [
+  { id: 'select', label: 'Select', size: 3, isResizable: false, minSize: 3, maxSize: 3 },
+  { id: 'suggestion_id', label: 'ID', size: 10, isSortable: true },
+  { id: 'group_id', label: 'Group ID', size: 10, isSortable: true },
+  { id: 'suggested_content', label: 'Suggested Content', size: 50 },
+  { id: 'original_memories', label: 'Original Memories', size: 10 },
+  { id: 'status', label: 'Status', size: 7, isSortable: true },
+  { id: 'actions', label: 'Actions', size: 10 },
+];
+
+const initialColumnLayout = allColumnDefinitions.map(col => col.size);
 
 const ConsolidationSuggestions = () => {
   const [suggestions, setSuggestions] = useState([]);
@@ -21,29 +33,16 @@ const ConsolidationSuggestions = () => {
   });
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState([]); // New state for selected items
   const [filterStatus, setFilterStatus] = useState('all'); // New state for status filter
-
-  const allColumnDefinitions = [
-    { id: 'select', label: 'Select', size: 3, isResizable: false, minSize: 3, maxSize: 3 },
-    { id: 'suggestion_id', label: 'ID', size: 10, isSortable: true },
-    { id: 'group_id', label: 'Group ID', size: 10, isSortable: true },
-    { id: 'suggested_content', label: 'Suggested Content', size: 50 },
-    { id: 'original_memories', label: 'Original Memories', size: 10 },
-    { id: 'status', label: 'Status', size: 7, isSortable: true },
-    { id: 'actions', label: 'Actions', size: 10 },
-  ];
-
-  const initialColumnLayout = allColumnDefinitions.map(col => col.size);
   const [columnLayout, setColumnLayout] = useState(initialColumnLayout);
 
-  // Reset column layout when component mounts or dependencies change (though not strictly needed here as it's static)
+  // Reset column layout when component mounts
   useEffect(() => {
     setColumnLayout(initialColumnLayout);
-  }, [initialColumnLayout]); // Added initialColumnLayout to dependencies
+  }, []);
 
-  // Memoize fetch function to ensure stable reference for useEffect dependencies
-  const fetchSuggestions = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchSuggestions = useCallback(async (signal, isMounted = true) => {
+    if (isMounted) setLoading(true);
+    if (isMounted) setError(null);
     try {
       const skip = (pagination.page - 1) * pagination.per_page;
       const filtersToSend = {
@@ -51,34 +50,46 @@ const ConsolidationSuggestions = () => {
         limit: pagination.per_page,
         sort_by: sort.field,
         sort_order: sort.order,
-        status: filterStatus === 'all' ? undefined : filterStatus, // Add status filter
+        status: filterStatus === 'all' ? undefined : filterStatus,
       };
-      console.log('Fetching suggestions with filters:', filtersToSend); // Log the filters
-      const response = await getConsolidationSuggestions(filtersToSend);
+      console.log('Fetching suggestions with filters:', filtersToSend);
+      const response = await getConsolidationSuggestions(filtersToSend, signal); // Pass signal to API call
 
-      setSuggestions(response.items || []);
-      setPagination((prevPagination) => ({
-        ...prevPagination,
-        total_items: response.total_items,
-        total_pages: response.total_pages,
-      }));
-      setSelectedSuggestionIds([]); // Clear selections on new data fetch
+      if (!signal.aborted && isMounted) { // Only update state if not aborted and mounted
+        setSuggestions(response.items || []);
+        setPagination((prevPagination) => ({
+          ...prevPagination,
+          total_items: response.total_items,
+          total_pages: response.total_pages,
+        }));
+        setSelectedSuggestionIds([]);
+      }
     } catch (err) {
-      setError('Failed to load consolidation suggestions. Please check if the backend server is running or try again later. Error: ' + err.message);
-      console.error(err);
+      if (err.name === 'AbortError') {
+        console.log('Fetch aborted');
+      } else if (isMounted) {
+        setError('Failed to load consolidation suggestions. Please check if the backend server is running or try again later. Error: ' + err.message);
+        console.error(err);
+      }
     } finally {
-      setLoading(false);
+      if (!signal.aborted && isMounted) {
+        setLoading(false);
+      }
     }
-  }, [pagination.page, pagination.per_page, sort, filterStatus]); // Added filterStatus to dependencies
-
-  const location = useLocation();
+  }, [pagination.page, pagination.per_page, sort, filterStatus]); // Dependencies for useCallback
 
   useEffect(() => {
-    // Reset suggestions and set loading state immediately on navigation/dependency change
-    setSuggestions([]);
-    setLoading(true);
-    fetchSuggestions();
-  }, [pagination.page, pagination.per_page, sort, filterStatus, location.pathname, fetchSuggestions]);
+    let isMounted = true;
+    const abortController = new AbortController();
+    const signal = abortController.signal;
+
+    fetchSuggestions(signal, isMounted);
+
+    return () => {
+      isMounted = false;
+      abortController.abort(); // Abort fetch request on unmount
+    };
+  }, [fetchSuggestions]); // Dependency for useEffect
 
   const handleSelectAll = (event) => {
     if (event.target.checked) {
@@ -105,7 +116,8 @@ const ConsolidationSuggestions = () => {
       try {
         await Promise.all(selectedSuggestionIds.map(id => deleteConsolidationSuggestion(id)));
         alert('Selected consolidation suggestions deleted successfully.');
-        fetchSuggestions(); // Refresh the list after deletion
+        // Reset pagination to trigger a re-fetch via useEffect
+        setPagination(prev => ({ ...prev, page: 1 }));
       } catch (err) {
         alert(`Failed to delete selected suggestions. Error: ${err.message}`);
         console.error(err);
@@ -123,12 +135,12 @@ const ConsolidationSuggestions = () => {
   };
 
   const handlePerPageChange = (e) => {
-    setPagination((prevPagination) => ({
-      ...prevPagination,
-      per_page: parseInt(e.target.value),
-      page: 1, // Reset to first page when per_page changes
-    }));
-    fetchSuggestions();
+      setPagination((prevPagination) => ({
+        ...prevPagination,
+        per_page: parseInt(e.target.value),
+        page: 1, // Reset to first page when per_page changes
+      }));
+    // fetchSuggestions will be called by the useEffect due to pagination.per_page change
   };
 
   const handlePageChange = (newPage) => {
@@ -182,7 +194,8 @@ const ConsolidationSuggestions = () => {
     try {
       await triggerConsolidation();
       alert('Consolidation process triggered successfully.');
-      fetchSuggestions(); // Refresh suggestions after triggering
+      // Reset pagination to trigger a re-fetch via useEffect
+      setPagination(prev => ({ ...prev, page: 1 }));
     } catch (err) {
       alert(`Failed to trigger consolidation process. Error: ${err.message}`);
       console.error(err);
@@ -335,7 +348,11 @@ const ConsolidationSuggestions = () => {
                   <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
                     <div className="data-cell actions-cell">
                     <button
-                      onClick={() => navigate(`/consolidation-suggestions/${suggestion.suggestion_id}`)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        navigate(`/consolidation-suggestions/${suggestion.suggestion_id}`);
+                      }}
                       className="action-icon-button view-edit-button"
                       title="View Details"
                     >
