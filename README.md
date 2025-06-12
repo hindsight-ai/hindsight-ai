@@ -29,7 +29,12 @@ These components are designed to integrate seamlessly, with the `hindsight-servi
 For a quick setup and teardown of all Hindsight AI services, use the provided convenience scripts:
 
 *   **Start All Services**: `./start_hindsight.sh`
-    This script will start the PostgreSQL database, apply migrations, and launch both the backend service (on port 8000) and the frontend dashboard (on port 3000). It includes checks to prevent starting services that are already running.
+    This script automates the setup and launch of all Hindsight AI components:
+    1.  **PostgreSQL Database**: Starts the database using Docker Compose.
+    2.  **Database Migrations**: Applies necessary database schema migrations for the backend service.
+    3.  **Backend Service**: Launches the Python FastAPI backend on `http://localhost:8000`.
+    4.  **Frontend Dashboard**: Starts the React development server for the dashboard on `http://localhost:3000`.
+    The script includes checks to prevent starting services that are already running.
 *   **Stop All Services**: `./stop_hindsight.sh`
     This script will gracefully terminate processes listening on ports 3000 and 8000, and shut down the Dockerized PostgreSQL database.
 
@@ -85,3 +90,45 @@ To set up and run the entire Hindsight AI project locally, follow these steps:
     The frontend dashboard should open in your browser, typically on `http://localhost:3000`.
 
 You now have the entire Hindsight AI system running locally.
+
+## Manual Control and Troubleshooting
+
+For development, debugging, or when you need to inspect logs directly, you might want to manually control individual services.
+
+### Stopping Individual Services
+
+While `./stop_hindsight.sh` stops all services, you can stop individual components manually:
+
+*   **Backend Service (Port 8000)**:
+    To find and kill the process running on port 8000:
+    ```bash
+    lsof -t -i:8000 | xargs kill -9
+    ```
+    This command finds the process ID (PID) listening on port 8000 and then forcefully terminates it.
+
+*   **Frontend Dashboard (Port 3000)**:
+    To find and kill the process running on port 3000:
+    ```bash
+    lsof -t -i:3000 | xargs kill -9
+    ```
+    This command finds the process ID (PID) listening on port 3000 and then forcefully terminates it.
+
+### Starting Individual Services Manually (with Hot Reload)
+
+To start services with direct log output and hot-reloading capabilities (useful for development):
+
+*   **Hindsight Service (Backend)**:
+    Navigate to the `apps/hindsight-service` directory and run:
+    ```bash
+    cd apps/hindsight-service
+    uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000 --reload
+    ```
+    The `--reload` flag enables hot-reloading, meaning the server will automatically restart when code changes are detected. Logs will be visible directly in your terminal.
+
+*   **Hindsight Dashboard (Frontend)**:
+    Navigate to the `apps/hindsight-dashboard` directory and run:
+    ```bash
+    cd apps/hindsight-dashboard
+    npm start
+    ```
+    `npm start` typically includes hot-reloading by default for React applications, and logs will be displayed in your terminal.
