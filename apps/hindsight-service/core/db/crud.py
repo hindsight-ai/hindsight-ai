@@ -433,13 +433,17 @@ def create_consolidation_suggestion(db: Session, suggestion: schemas.Consolidati
 def get_consolidation_suggestion(db: Session, suggestion_id: uuid.UUID):
     return db.query(models.ConsolidationSuggestion).filter(models.ConsolidationSuggestion.suggestion_id == suggestion_id).first()
 
-def get_consolidation_suggestions(db: Session, status: Optional[str] = 'pending', group_id: Optional[uuid.UUID] = None, skip: int = 0, limit: int = 100):
+def get_consolidation_suggestions(db: Session, status: Optional[str] = None, group_id: Optional[uuid.UUID] = None, skip: int = 0, limit: int = 100):
     query = db.query(models.ConsolidationSuggestion)
-    if status:
+    if status: # Only filter if status is provided (not None or empty string)
         query = query.filter(models.ConsolidationSuggestion.status == status)
     if group_id:
         query = query.filter(models.ConsolidationSuggestion.group_id == group_id)
-    return query.offset(skip).limit(limit).all()
+    
+    total_items = query.count() # Get total count before applying limit and offset
+    suggestions = query.offset(skip).limit(limit).all()
+    
+    return suggestions, total_items
 
 def update_consolidation_suggestion(db: Session, suggestion_id: uuid.UUID, suggestion: schemas.ConsolidationSuggestionUpdate):
     db_suggestion = db.query(models.ConsolidationSuggestion).filter(models.ConsolidationSuggestion.suggestion_id == suggestion_id).first()

@@ -20,6 +20,7 @@ const ConsolidationSuggestions = () => {
     order: 'desc',
   });
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState([]); // New state for selected items
+  const [filterStatus, setFilterStatus] = useState('all'); // New state for status filter
 
   const allColumnDefinitions = [
     { id: 'select', label: 'Select', size: 3, isResizable: false, minSize: 3, maxSize: 3 },
@@ -37,7 +38,7 @@ const ConsolidationSuggestions = () => {
   // Reset column layout when component mounts or dependencies change (though not strictly needed here as it's static)
   useEffect(() => {
     setColumnLayout(initialColumnLayout);
-  }, []);
+  }, [initialColumnLayout]); // Added initialColumnLayout to dependencies
 
   // Memoize fetch function to ensure stable reference for useEffect dependencies
   const fetchSuggestions = useCallback(async () => {
@@ -45,12 +46,16 @@ const ConsolidationSuggestions = () => {
     setError(null);
     try {
       const skip = (pagination.page - 1) * pagination.per_page;
-      const response = await getConsolidationSuggestions({
+      const filtersToSend = {
         skip: skip,
         limit: pagination.per_page,
         sort_by: sort.field,
         sort_order: sort.order,
-      });
+        status: filterStatus === 'all' ? undefined : filterStatus, // Add status filter
+      };
+      console.log('Fetching suggestions with filters:', filtersToSend); // Log the filters
+      const response = await getConsolidationSuggestions(filtersToSend);
+
       setSuggestions(response.items || []);
       setPagination((prevPagination) => ({
         ...prevPagination,
@@ -64,7 +69,7 @@ const ConsolidationSuggestions = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.per_page, sort]);
+  }, [pagination.page, pagination.per_page, sort, filterStatus]); // Added filterStatus to dependencies
 
   const location = useLocation();
 
@@ -73,7 +78,7 @@ const ConsolidationSuggestions = () => {
     setSuggestions([]);
     setLoading(true);
     fetchSuggestions();
-  }, [pagination.page, pagination.per_page, sort, location.pathname, fetchSuggestions]);
+  }, [pagination.page, pagination.per_page, sort, filterStatus, location.pathname, fetchSuggestions]);
 
   const handleSelectAll = (event) => {
     if (event.target.checked) {
@@ -185,8 +190,7 @@ const ConsolidationSuggestions = () => {
   };
 
   const areFiltersActive = () => {
-    // For now, no filters other than pagination/sort, so always return false for this check
-    return false;
+    return filterStatus !== 'all';
   };
 
   if (loading) return <p className="loading-message">Loading consolidation suggestions...</p>;
@@ -194,7 +198,35 @@ const ConsolidationSuggestions = () => {
 
   return (
     <div className="memory-block-list-container">
-      {/* Empty State Message */}
+      {/* Filter Controls - Always render these */}
+      <div className="bulk-actions-bar">
+        <button
+          onClick={handleDeleteSelected}
+          disabled={selectedSuggestionIds.length === 0}
+          className="delete-selected-button"
+        >
+          Delete Selected ({selectedSuggestionIds.length})
+        </button>
+        <button onClick={handleTriggerConsolidation} className="add-button">
+          Trigger Consolidation
+        </button>
+        <div className="filter-controls">
+          <label htmlFor="status-filter">Filter by Status:</label>
+          <select
+            id="status-filter"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="filter-select"
+          >
+            <option value="all">All</option>
+            <option value="pending">Pending</option>
+            <option value="validated">Validated</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Empty State Message when no filters are active and no results */}
       {!loading && !error && suggestions.length === 0 && !areFiltersActive() && (
         <div className="empty-state-message">
           <p>No Consolidation Suggestions Found</p>
@@ -220,21 +252,9 @@ const ConsolidationSuggestions = () => {
         </div>
       )}
 
-      {/* Render content only if there are suggestions */}
+      {/* Render table content only if there are suggestions */}
       {!loading && !error && suggestions.length > 0 && (
         <div className="memory-block-table-container">
-          <div className="bulk-actions-bar">
-            <button
-              onClick={handleDeleteSelected}
-              disabled={selectedSuggestionIds.length === 0}
-              className="delete-selected-button"
-            >
-              Delete Selected ({selectedSuggestionIds.length})
-            </button>
-            <button onClick={handleTriggerConsolidation} className="add-button">
-              Trigger Consolidation
-            </button>
-          </div>
           <div className="memory-block-table-header">
             <PanelGroup direction="horizontal" onLayout={setColumnLayout}>
               <Panel defaultSize={3} minSize={3} maxSize={3} style={{ padding: 0, margin: 0 }}>

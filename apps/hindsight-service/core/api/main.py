@@ -606,8 +606,8 @@ def get_consolidation_suggestions_endpoint(
     """
     logger.info(f"Fetching consolidation suggestions with filters: status={status}, group_id={group_id}")
     
-    # Get paginated suggestions
-    suggestions = crud.get_consolidation_suggestions(
+    # Get paginated suggestions and total count
+    suggestions, total_items = crud.get_consolidation_suggestions(
         db=db,
         status=status,
         group_id=group_id,
@@ -615,8 +615,6 @@ def get_consolidation_suggestions_endpoint(
         limit=limit
     )
     
-    # Calculate total items (assuming suggestions is a list)
-    total_items = len(suggestions) if suggestions else 0
     total_pages = math.ceil(total_items / limit) if limit > 0 else 0
 
     return {
