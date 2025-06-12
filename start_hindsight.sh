@@ -28,7 +28,7 @@ else
         echo "Refer to https://rye-up.com/guide/installation/ for installation instructions."
         exit 1
     fi
-    (cd "${BACKEND_DIR}" && nohup uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000 > /dev/null 2>&1 &)
+    (cd "${BACKEND_DIR}" && uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000 --reload > /dev/null 2>&1 &)
     sleep 1 # Give a moment for the process to start
     pgrep -f "uvicorn core.api.main:app" | tr '\n' ' ' > "${BACKEND_DIR}/.backend.pid"
 fi
@@ -37,7 +37,7 @@ echo "Starting dashboard..."
 if lsof -i:3000 -t >/dev/null ; then
     echo "Dashboard is already running on port 3000."
 else
-    (cd "${DASHBOARD_DIR}" && nohup npm install > /dev/null 2>&1 && nohup npm start > /dev/null 2>&1 &)
+    (cd "${DASHBOARD_DIR}" && npm install && npm start > /dev/null 2>&1 &)
     sleep 1 # Give a moment for the process to start
     pgrep -f "npm start" | tr '\n' ' ' > "${DASHBOARD_DIR}/.dashboard.pid"
 fi
