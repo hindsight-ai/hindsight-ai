@@ -1,48 +1,79 @@
 # Hindsight AI Monorepo
 
-This repository contains the complete Hindsight AI project, a system designed to enhance AI agent memory and operational intelligence. It is structured as a monorepo to manage related applications and infrastructure components efficiently.
-
-## Purpose
-
-Hindsight AI aims to provide a robust and scalable solution for:
+Hindsight AI is a system designed to enhance AI agent memory and operational intelligence. Its primary purpose is to provide a robust and scalable solution for:
 - **Memory Management:** Storing, retrieving, and managing an AI agent's conversational and operational memories.
 - **Knowledge Distillation:** Extracting actionable insights and lessons learned from raw interactions.
 - **Continuous Improvement:** Enabling AI agents to learn from past experiences and improve their performance over time.
 
+The system aims to address the general problem of AI agents lacking persistent learning and self-improvement capabilities, providing a foundation for more intelligent and adaptive AI behaviors. While designed for scalability, specific data volume expectations and detailed scaling strategies for production environments are not yet documented.
+
 ## Overall Architecture
 
-The monorepo is organized into two primary top-level directories:
+The monorepo includes the following main applications and infrastructure components:
 
--   **`apps/`**: Contains individual applications that form the Hindsight AI system.
+-   **Applications (`apps/`):**
     -   [`hindsight-dashboard`](apps/hindsight-dashboard/README.md): The frontend application for visualizing and interacting with the memory service.
-    -   [`hindsight-service`](apps/hindsight-service/README.md): The core backend service responsible for managing AI agent memories, keyword extraction, and database interactions.
--   **`infra/`**: Contains infrastructure-related components and configurations.
+    -   [`hindsight-service`](apps/hindsight-service/README.md): The core backend service for managing AI agent memories, keyword extraction, and database interactions.
+-   **Infrastructure (`infra/`):**
     -   `postgres`: Docker Compose setup for the PostgreSQL database.
     -   `migrations`: SQL scripts for initial database schema setup.
--   **`mcp-servers/`**: Contains Model Context Protocol (MCP) servers that extend AI agent capabilities.
-    -   [`hindsight-mcp`](mcp-servers/hindsight-mcp/README.md): An MCP server providing tools for interacting with the Hindsight AI Agent Memory Service.
+-   **MCP Servers (`mcp-servers/`):**
+    -   [`hindsight-mcp`](mcp-servers/hindsight-mcp/README.md): An MCP (Model Context Protocol) server that extends AI agent capabilities by providing tools and resources. The `hindsight-mcp` server specifically offers tools for interacting with the Hindsight AI Agent Memory Service, enabling agents to manage memory blocks, retrieve relevant memories, and report feedback within the Hindsight AI ecosystem.
 
-These components are designed to integrate seamlessly, with the `hindsight-service` interacting with the PostgreSQL database and exposing an API consumed by the `hindsight-dashboard`.
+These components are designed to integrate seamlessly. The `hindsight-service` (backend) interacts with the PostgreSQL database (part of `infra` components) and exposes an API, which is then consumed by the `hindsight-dashboard` (frontend) for visualization and interaction.
+
+### Knowledge Distillation Process
+
+Knowledge distillation within Hindsight AI is primarily performed by a background worker (`consolidation_worker.py`) that consolidates similar or duplicate memory blocks into single, refined suggestions. The process involves:
+1.  **Fetching Memory Blocks:** Retrieving memory blocks from the database in batches.
+2.  **Analyzing Duplicates:** This is done primarily using an LLM-based analysis (Google Gemini API). The LLM is prompted to act as an AI assistant, identify semantically similar or duplicate memory blocks, group them, and then generate a consolidated version of the `content`, `lessons_learned`, and `keywords` for each group. The goal is to increase quality and information density while reducing overall size. A fallback similarity analysis (TF-IDF vectorization and cosine similarity) is used if the LLM is unavailable, but it *only* identifies groups and does not generate consolidated suggestions.
+3.  **Storing Suggestions:** Only LLM-generated consolidation suggestions are stored in the `consolidation_suggestions` table with a "pending" status, awaiting user review.
+
+The underlying mechanisms involve:
+*   **LLM (Google Gemini API):** For semantic analysis, grouping, and generating consolidated content, lessons learned, and keywords. It's configured with a low temperature (0.3) for deterministic responses and strict JSON output.
+*   **TF-IDF Vectorization and Cosine Similarity:** As a fallback mechanism for identifying similar memory blocks when the LLM is not available.
+
+### Types of Operational Memories Stored
+
+Hindsight AI stores various types of operational memories within its `MemoryBlock` model:
+*   `content`: The main content of the memory block, which can include general conversational data or any textual information an AI agent deems important.
+*   `errors`: Textual details about errors encountered, potentially including system logs or error messages.
+*   `lessons_learned`: Textual information summarizing lessons learned from an interaction or experience.
+*   `metadata_col`: A flexible JSONB column for additional structured metadata. This can store data like performance metrics (e.g., `{"latency": 150, "cpu_usage": "20%"}`), decision-making traces (e.g., `{"decision_path": ["step1", "step2"], "outcome": "success"}`), or other relevant operational context.
+*   `keywords`: Associated keywords for the memory block.
+*   `feedback_score`: An integer representing feedback on the memory block.
+*   `retrieval_count`: An integer tracking how many times the memory block has been retrieved.
+*   `archived`: A boolean indicating if the memory block is archived.
+
+### Integration with AI Agents and External Systems
+
+Hindsight AI integrates with existing AI agents and external systems primarily through two mechanisms:
+1.  **FastAPI Backend API:** The `hindsight-service` exposes a RESTful API that allows for direct HTTP-based interaction with the memory service. This API provides endpoints for managing agents, memory blocks (creation, retrieval, update, archive, delete), feedback, keywords, and search.
+2.  **Model Context Protocol (MCP) Server:** The `hindsight-mcp` server provides a set of predefined tools for MCP-compatible AI agents to interact with the Hindsight AI memory service. These tools abstract the underlying API calls and handle environment variable injection for `agent_id`, `conversation_id`, and `MEMORY_SERVICE_BASE_URL`. Tools include `create_memory_block`, `retrieve_relevant_memories`, `retrieve_all_memory_blocks`, `retrieve_memory_blocks_by_conversation_id`, `report_memory_feedback`, and `get_memory_details`.
+
+### Feedback Mechanism
+
+AI agents can report explicit feedback on the utility or correctness of a previously retrieved `memory_block` using the `report_memory_feedback` tool provided by the `hindsight-mcp` server. This tool requires the `memory_block_id` (UUID), `feedback_type` (enum: 'positive', 'negative', 'neutral'), and an optional `comment` (TEXT). This feedback is recorded by updating the `feedback_score` on individual memory blocks and logging feedback details. This mechanism lays the groundwork for future enhancements, such as informing LLM-based consolidation processes or guiding human review of memory blocks to further refine the memory store and improve agent performance.
 
 ## Quick Start Guide
 
-For a quick setup and teardown of all Hindsight AI services, use the provided convenience scripts:
+For a quick setup and teardown of all Hindsight AI services, use the provided convenience scripts. By default, the backend service runs on `http://localhost:8000`, and the frontend dashboard runs on `http://localhost:3000`.
 
 *   **Start All Services**: `./start_hindsight.sh`
-    This script automates the setup and launch of all Hindsight AI components:
+    This script automates the entire setup and launch of all Hindsight AI components in a single command:
     1.  **PostgreSQL Database**: Starts the database using Docker Compose.
     2.  **Database Migrations**: Applies necessary database schema migrations for the backend service.
     3.  **Backend Service**: Launches the Python FastAPI backend on `http://localhost:8000`.
     4.  **Frontend Dashboard**: Starts the React development server for the dashboard on `http://localhost:3000`.
-    The script includes checks to prevent starting services that are already running.
+    The script includes checks to prevent starting services that are already running. This provides a quick way to get all services up and running compared to manually starting individual services, which offers more granular control.
+
 *   **Stop All Services**: `./stop_hindsight.sh`
-    This script will gracefully terminate processes listening on ports 3000 and 8000, and shut down the Dockerized PostgreSQL database.
+    This script will gracefully terminate processes listening on ports 3000 and 8000, and shut down the Dockerized PostgreSQL database. This provides a quick way to stop all Hindsight AI services.
 
 For detailed, step-by-step setup, continue with the instructions below:
 
-To set up and run the entire Hindsight AI project locally, follow these steps:
-
 1.  **Prerequisites**:
+    To set up and run the entire Hindsight AI project locally, the essential prerequisites (software and tools) are:
     *   Docker and Docker Compose
     *   Python 3.13+ and `uv` (or `pipenv`/`poetry`)
     *   Node.js and npm (or yarn)
@@ -54,50 +85,83 @@ To set up and run the entire Hindsight AI project locally, follow these steps:
     ```
 
 3.  **Set up Infrastructure (PostgreSQL)**:
-    Navigate to the `infra/postgres` directory and start the database:
+    To set up and initialize the PostgreSQL database for Hindsight AI, first navigate to the `infra/postgres` directory and start the database using Docker Compose:
     ```bash
     cd infra/postgres
     docker-compose up -d
     ```
     Wait a few moments for the database to initialize.
 
-4.  **Apply Initial Database Schema**:
-    The initial schema is applied via SQL scripts. Ensure the database container is running.
+    **Configuring PostgreSQL Connection Details**:
+    The PostgreSQL database connection details can be configured using the `DATABASE_URL` environment variable in an `.env` file. An example is provided in `apps/hindsight-service/.env.example`. You can set the `DATABASE_URL` in the format `postgresql://user:password@host:port/database_name` in your `.env` file, and the `hindsight-service` backend will load these values at startup.
+
+    **Apply Initial Database Schema**:
+    The initial database schema is applied via SQL scripts. Ensure the database container is running. You might need a tool like `psql` or a general database client to apply the `infra/migrations/V1__initial_schema.sql` script.
     ```bash
-    # You might need a tool like `psql` or a database client to apply this.
     # For example, if using psql from your host:
     # psql -h localhost -p 5432 -U user -d hindsight_db -f ../migrations/V1__initial_schema.sql
     # (Replace `user` with your configured user and `hindsight_db` with your database name if different)
     ```
-    *Note: The `hindsight-service` will handle its own migrations via Alembic, but this initial schema sets up the database itself.*
+    The `hindsight-service` handles its own database migrations using Alembic *after* this initial database schema has been applied. The initial schema sets up the base database, while Alembic manages subsequent schema changes over time.
 
-5.  **Set up and Run Hindsight Service (Backend)**:
-    Navigate to the `apps/hindsight-service` directory, install dependencies, and run the service:
+4.  **Set up and Run Hindsight Service (Backend)**:
+    Navigate to the `apps/hindsight-service` directory, install dependencies, and run the service. The `uv` tool is used for Python dependency management and for running the `hindsight-service` backend. It is recommended for managing Python environments and executing the backend application due to its speed and efficiency.
+    The recommended way to install Python dependencies for the `hindsight-service` is by using `uv`:
     ```bash
     cd ../../apps/hindsight-service
     uv sync # or poetry install / pipenv install
     uv run uvicorn core.api.main:app --reload
     ```
-    The backend service should now be running, typically on `http://localhost:8000`.
 
-6.  **Set up and Run Hindsight Dashboard (Frontend)**:
-    In a new terminal, navigate to the `apps/hindsight-dashboard` directory, install dependencies, and start the development server:
+    To manually start the Hindsight Service (backend) with hot-reloading for development, navigate to the `apps/hindsight-service` directory and run:
+    ```bash
+    uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000 --reload
+    ```
+    The `--reload` flag enables hot-reloading, meaning the server will automatically restart when code changes are detected. Logs will be visible directly in your terminal. The backend service should now be running, typically on `http://localhost:8000`.
+
+5.  **Set up and Run Hindsight Dashboard (Frontend)**:
+    In a new terminal, navigate to the `apps/hindsight-dashboard` directory, install dependencies if not already done (`npm install`), and then start the development server:
     ```bash
     cd ../../apps/hindsight-dashboard
     npm install # or yarn install
     npm start # or yarn start
     ```
-    The frontend dashboard should open in your browser, typically on `http://localhost:3000`.
+    The frontend dashboard should open in your browser, typically on `http://localhost:3000`. `npm start` typically includes hot-reloading by default for React applications, and logs will be displayed in your terminal.
 
 You now have the entire Hindsight AI system running locally.
 
+## Database Backup and Restore
+
+A full backup and restore of the Hindsight AI PostgreSQL database (`hindsight_db`) can be performed using the `backup_db.sh` and `restore_db.sh` shell scripts located in `infra/scripts/`.
+
+*   **Backup (`backup_db.sh`):**
+    Ensure the script is executable (`chmod +x infra/scripts/backup_db.sh`), then run `./infra/scripts/backup_db.sh` from the project root. Backups are timestamped, include the Alembic revision, and are stored in `~/hindsight_db_backups/data/`. The script manages old backups (keeping 100 by default). Hourly backups can be automated via cron jobs.
+
+*   **Restore (`restore_db.sh`):**
+    Ensure the script is executable (`chmod +x infra/scripts/restore_db.sh`) and the PostgreSQL Docker container is running. Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, restart the `db` container, and run Alembic to align the schema. **Caution: Restoring overwrites current data.**
+    Database data is persisted using Docker Volumes, but backups are crucial to protect against explicit volume removal.
+
+## Running Tests
+
+To run tests for the Hindsight AI components:
+
+*   **For the `hindsight-service` (Backend):**
+    1.  Navigate to the `apps/hindsight-service` directory.
+    2.  Ensure `pytest` is installed as a development dependency.
+    3.  Execute the command: `uv run pytest`
+
+*   **For the `hindsight-dashboard` (Frontend):**
+    1.  Navigate to the `apps/hindsight-dashboard` directory.
+    2.  Execute the command: `npm test`
+    This launches the test runner in interactive watch mode.
+
 ## Manual Control and Troubleshooting
 
-For development, debugging, or when you need to inspect logs directly, you might want to manually control individual services.
+For development, debugging, or when you need to inspect logs directly, you might want to manually control individual services. The typical port for the Hindsight AI backend service is `8000` (`http://localhost:8000`), and for the frontend dashboard, it is `3000` (`http://localhost:3000`).
 
 ### Stopping Individual Services
 
-While `./stop_hindsight.sh` stops all services, you can stop individual components manually:
+While `./stop_hindsight.sh` stops all services, you can stop individual components manually. If a service is already running on its designated port, the `./start_hindsight.sh` script includes checks to prevent starting it again. If you are starting services manually, you can use commands like `lsof -t -i:PORT | xargs kill -9` (replacing `PORT` with 3000 for the dashboard or 8000 for the backend) to find and terminate the process occupying the port. The purpose of the `lsof -t -i:<port> | xargs kill -9` command is to find the process ID (PID) of any process listening on the specified port and then forcefully terminate that process. This is particularly useful when you intend to restart the service manually from a terminal to gain output visibility for troubleshooting or running monitoring, or if convenience scripts fail.
 
 *   **Backend Service (Port 8000)**:
     To find and kill the process running on port 8000:
@@ -126,9 +190,15 @@ To start services with direct log output and hot-reloading capabilities (useful 
     The `--reload` flag enables hot-reloading, meaning the server will automatically restart when code changes are detected. Logs will be visible directly in your terminal.
 
 *   **Hindsight Dashboard (Frontend)**:
-    Navigate to the `apps/hindsight-dashboard` directory and run:
+    To start the Hindsight Dashboard (frontend) for local development, navigate to the `apps/hindsight-dashboard` directory, install dependencies if not already done (`npm install`), and then start the development server:
     ```bash
     cd apps/hindsight-dashboard
     npm start
     ```
     `npm start` typically includes hot-reloading by default for React applications, and logs will be displayed in your terminal.
+
+## More Detailed Documentation
+
+More detailed documentation for individual components can be found in their respective `README.md` files:
+- For `hindsight-dashboard`: `apps/hindsight-dashboard/README.md`
+- For `hindsight-service`: `apps/hindsight-service/README.md`
