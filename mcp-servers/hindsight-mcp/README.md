@@ -16,9 +16,10 @@ This is a TypeScript-based MCP server that provides tools for managing memory bl
   - Required parameters: `query_text` (TEXT), `keywords` (ARRAY of TEXT).
   - Optional parameters: `limit` (INT).
   - Note: `agent_id` and `conversation_id` are automatically filled by environment variables.
-- `retrieve_all_memory_blocks`: To retrieve all memory blocks, optionally filtered.
+- `retrieve_all_memory_blocks`: To retrieve all memory blocks, filtered by agent_id.
+  - Required parameters: `agent_id` (UUID).
   - Optional parameters: `limit` (INT).
-  - Note: `agent_id` can be automatically filled by environment variables if not present.
+  - Note: `agent_id` is automatically filled by the `DEFAULT_AGENT_ID` environment variable if not provided in arguments. If neither is provided, an error will be thrown.
 - `retrieve_memory_blocks_by_conversation_id`: To retrieve memory blocks associated with a specific conversation.
   - Required parameters: `conversation_id` (UUID).
   - Optional parameters: `limit` (INT).

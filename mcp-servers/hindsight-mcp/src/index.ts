@@ -205,7 +205,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               "description": "Optional maximum number of memories to retrieve (default: 50).",
             },
           },
-          required: []
+          required: ["agent_id"]
         },
       },
       {
@@ -352,10 +352,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (!agent_id) {
         throw new McpError(ErrorCode.InvalidParams, "Agent ID is required for retrieve_all_memory_blocks and not provided via arguments or DEFAULT_AGENT_ID environment variable.");
       }
-      
+
       const result = await memoryServiceClient.getAllMemoryBlocks(agent_id, limit);
       // Safely ensure result is an array before mapping
-      const memories = Array.isArray(result) ? result : []; 
+      const memories = Array.isArray(result) ? result : [];
       const filteredResult = memories.map(block => ({
         content: block.content,
         errors: block.errors,
