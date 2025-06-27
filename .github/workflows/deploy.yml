@@ -99,6 +99,11 @@ jobs:
             # Navigate to the cloned repository
             cd "$REPO_DIR"
             
+            # Install Traefik Resource Definitions and RBAC for Traefik
+            echo "Applying Traefik CRDs..."
+            sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.4/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+            sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.4/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
+            
             # Apply all Kubernetes manifests in the k8s directory
             echo "Applying Kubernetes manifests from $REPO_DIR/k8s/"
             sudo kubectl apply -f k8s/
