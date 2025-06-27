@@ -22,6 +22,6 @@ spec:
           ports:
             - containerPort: 80
           env:
-            - name: HINDSIGHT_SERVICE_API_URL
-              value: "http://hindsight-service/api" # Replace YOUR_SERVER_IP with your actual server IP
+            - name: REACT_APP_HINDSIGHT_SERVICE_API_URL
+              value: "http://hindsight-service/api"
           imagePullPolicy: Always # Ensure the latest image is pulled

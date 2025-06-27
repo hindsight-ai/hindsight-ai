@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.HINDSIGHT_SERVICE_API_URL;
+const API_BASE_URL = process.env.REACT_APP_HINDSIGHT_SERVICE_API_URL;
 
 if (!API_BASE_URL) {
   throw new Error("Environment variable HINDSIGHT_SERVICE_API_URL is not defined.");
