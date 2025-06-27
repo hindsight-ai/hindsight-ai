@@ -1,7 +1,7 @@
 import logging # Moved to top
 import os
 from dotenv import load_dotenv, dotenv_values # Import dotenv_values
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -55,38 +55,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/agents/", response_model=schemas.Agent, status_code=status.HTTP_201_CREATED)
+router = APIRouter(prefix="/api")
+
+@router.post("/agents/", response_model=schemas.Agent, status_code=status.HTTP_201_CREATED)
 def create_agent_endpoint(agent: schemas.AgentCreate, db: Session = Depends(get_db)):
     db_agent = crud.get_agent_by_name(db, agent_name=agent.agent_name)
     if db_agent:
         raise HTTPException(status_code=400, detail="Agent with this name already exists")
     return crud.create_agent(db=db, agent=agent)
 
-@app.get("/agents/", response_model=List[schemas.Agent])
+@router.get("/agents/", response_model=List[schemas.Agent])
 def get_all_agents_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     agents = crud.get_agents(db, skip=skip, limit=limit)
     return agents
 
-@app.get("/agents/{agent_id}", response_model=schemas.Agent)
+@router.get("/agents/{agent_id}", response_model=schemas.Agent)
 def get_agent_endpoint(agent_id: uuid.UUID, db: Session = Depends(get_db)):
     db_agent = crud.get_agent(db, agent_id=agent_id)
     if not db_agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     return db_agent
 
-@app.get("/agents/search/", response_model=List[schemas.Agent])
+@router.get("/agents/search/", response_model=List[schemas.Agent])
 def search_agents_endpoint(query: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     agents = crud.search_agents(db, query=query, skip=skip, limit=limit)
     return agents
 
-@app.delete("/agents/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/agents/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_agent_endpoint(agent_id: uuid.UUID, db: Session = Depends(get_db)):
     success = crud.delete_agent(db, agent_id=agent_id)
     if not success:
         raise HTTPException(status_code=404, detail="Agent not found")
     return {"message": "Agent deleted successfully"}
 
-@app.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks) # Changed response_model
+@router.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks) # Changed response_model
 def get_all_memory_blocks_endpoint(
     agent_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
@@ -251,7 +253,7 @@ def get_all_memory_blocks_endpoint(
         "total_pages": total_pages
     }
 
-@app.get("/memory-blocks/archived/", response_model=schemas.PaginatedMemoryBlocks)
+@router.get("/memory-blocks/archived/", response_model=schemas.PaginatedMemoryBlocks)
 def get_archived_memory_blocks_endpoint(
     agent_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
@@ -378,7 +380,7 @@ def get_archived_memory_blocks_endpoint(
         "total_pages": total_pages
     }
 
-@app.post("/memory-blocks/", response_model=schemas.MemoryBlock, status_code=status.HTTP_201_CREATED)
+@router.post("/memory-blocks/", response_model=schemas.MemoryBlock, status_code=status.HTTP_201_CREATED)
 def create_memory_block_endpoint(memory_block: schemas.MemoryBlockCreate, db: Session = Depends(get_db)):
     # Ensure agent exists
     agent = crud.get_agent(db, agent_id=memory_block.agent_id)
@@ -388,14 +390,14 @@ def create_memory_block_endpoint(memory_block: schemas.MemoryBlockCreate, db: Se
     print(f"Created memory block ID: {db_memory_block.id}") # Use .id as per schema change
     return db_memory_block
 
-@app.get("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
+@router.get("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
 def get_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
         raise HTTPException(status_code=404, detail="Memory block not found")
     return db_memory_block
 
-@app.put("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
+@router.put("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
 def update_memory_block_endpoint(
     memory_id: uuid.UUID,
     memory_block: schemas.MemoryBlockUpdate,
@@ -406,7 +408,7 @@ def update_memory_block_endpoint(
         raise HTTPException(status_code=404, detail="Memory block not found")
     return db_memory_block
 
-@app.post("/memory-blocks/{memory_id}/archive", response_model=schemas.MemoryBlock)
+@router.post("/memory-blocks/{memory_id}/archive", response_model=schemas.MemoryBlock)
 def archive_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Archives a memory block by setting its 'archived' flag to True.
@@ -416,7 +418,7 @@ def archive_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="Memory block not found")
     return db_memory_block
 
-@app.delete("/memory-blocks/{memory_id}/hard-delete", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/memory-blocks/{memory_id}/hard-delete", status_code=status.HTTP_204_NO_CONTENT)
 def hard_delete_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Performs a hard delete of a memory block from the database.
@@ -426,7 +428,7 @@ def hard_delete_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depend
         raise HTTPException(status_code=404, detail="Memory block not found")
     return {"message": "Memory block hard deleted successfully"}
 
-@app.post("/memory-blocks/{memory_id}/feedback/", response_model=schemas.MemoryBlock)
+@router.post("/memory-blocks/{memory_id}/feedback/", response_model=schemas.MemoryBlock)
 def report_memory_feedback_endpoint(
     memory_id: uuid.UUID,
     feedback: schemas.FeedbackLogCreate,
@@ -449,26 +451,26 @@ def report_memory_feedback_endpoint(
     return updated_memory
 
 # Keyword Endpoints
-@app.post("/keywords/", response_model=schemas.Keyword, status_code=status.HTTP_201_CREATED)
+@router.post("/keywords/", response_model=schemas.Keyword, status_code=status.HTTP_201_CREATED)
 def create_keyword_endpoint(keyword: schemas.KeywordCreate, db: Session = Depends(get_db)):
     db_keyword = crud.get_keyword_by_text(db, keyword_text=keyword.keyword_text)
     if db_keyword:
         raise HTTPException(status_code=400, detail="Keyword with this text already exists")
     return crud.create_keyword(db=db, keyword=keyword)
 
-@app.get("/keywords/", response_model=List[schemas.Keyword])
+@router.get("/keywords/", response_model=List[schemas.Keyword])
 def get_all_keywords_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     keywords = crud.get_keywords(db, skip=skip, limit=limit)
     return keywords
 
-@app.get("/keywords/{keyword_id}", response_model=schemas.Keyword)
+@router.get("/keywords/{keyword_id}", response_model=schemas.Keyword)
 def get_keyword_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
     db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
     return db_keyword
 
-@app.put("/keywords/{keyword_id}", response_model=schemas.Keyword)
+@router.put("/keywords/{keyword_id}", response_model=schemas.Keyword)
 def update_keyword_endpoint(
     keyword_id: uuid.UUID,
     keyword: schemas.KeywordUpdate,
@@ -479,7 +481,7 @@ def update_keyword_endpoint(
         raise HTTPException(status_code=404, detail="Keyword not found")
     return db_keyword
 
-@app.delete("/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_keyword_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
     success = crud.delete_keyword(db, keyword_id=keyword_id)
     if not success:
@@ -487,7 +489,7 @@ def delete_keyword_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)
     return {"message": "Keyword deleted successfully"}
 
 # MemoryBlockKeyword Association Endpoints
-@app.post("/memory-blocks/{memory_id}/keywords/{keyword_id}", response_model=schemas.MemoryBlockKeywordAssociation, status_code=status.HTTP_201_CREATED)
+@router.post("/memory-blocks/{memory_id}/keywords/{keyword_id}", response_model=schemas.MemoryBlockKeywordAssociation, status_code=status.HTTP_201_CREATED)
 def associate_keyword_with_memory_block_endpoint(
     memory_id: uuid.UUID,
     keyword_id: uuid.UUID,
@@ -512,7 +514,7 @@ def associate_keyword_with_memory_block_endpoint(
     association = crud.create_memory_block_keyword(db, memory_id=memory_id, keyword_id=keyword_id)
     return association
 
-@app.delete("/memory-blocks/{memory_id}/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/memory-blocks/{memory_id}/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
 def disassociate_keyword_from_memory_block_endpoint(
     memory_id: uuid.UUID,
     keyword_id: uuid.UUID,
@@ -531,7 +533,7 @@ def disassociate_keyword_from_memory_block_endpoint(
         raise HTTPException(status_code=404, detail="Association not found")
     return {"message": "Association deleted successfully"}
 
-@app.get("/memory-blocks/search/", response_model=List[schemas.MemoryBlock])
+@router.get("/memory-blocks/search/", response_model=List[schemas.MemoryBlock])
 def search_memory_blocks_endpoint(
     keywords: str,
     agent_id: Optional[uuid.UUID] = None,
@@ -555,7 +557,7 @@ def search_memory_blocks_endpoint(
     )
     return memories
 
-@app.get("/memory-blocks/{memory_id}/keywords/", response_model=List[schemas.Keyword])
+@router.get("/memory-blocks/{memory_id}/keywords/", response_model=List[schemas.Keyword])
 def get_memory_block_keywords_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
@@ -565,7 +567,7 @@ def get_memory_block_keywords_endpoint(memory_id: uuid.UUID, db: Session = Depen
     return keywords
 
 # Consolidation Trigger Endpoint
-@app.post("/consolidation/trigger/", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/consolidation/trigger/", status_code=status.HTTP_202_ACCEPTED)
 def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
     """
     Trigger the memory block consolidation process manually.
@@ -592,7 +594,7 @@ def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error triggering consolidation process: {str(e)}")
 
 # Consolidation Suggestions Endpoints
-@app.get("/consolidation-suggestions/", response_model=schemas.PaginatedConsolidationSuggestions)
+@router.get("/consolidation-suggestions/", response_model=schemas.PaginatedConsolidationSuggestions)
 def get_consolidation_suggestions_endpoint(
     status: Optional[str] = None,
     group_id: Optional[uuid.UUID] = None,
@@ -624,7 +626,7 @@ def get_consolidation_suggestions_endpoint(
         "total_pages": total_pages
     }
 
-@app.get("/consolidation-suggestions/{suggestion_id}", response_model=schemas.ConsolidationSuggestion)
+@router.get("/consolidation-suggestions/{suggestion_id}", response_model=schemas.ConsolidationSuggestion)
 def get_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Retrieve a specific consolidation suggestion by ID.
@@ -634,7 +636,7 @@ def get_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session 
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
     return suggestion
 
-@app.post("/consolidation-suggestions/{suggestion_id}/validate/", response_model=schemas.ConsolidationSuggestion)
+@router.post("/consolidation-suggestions/{suggestion_id}/validate/", response_model=schemas.ConsolidationSuggestion)
 def validate_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Validate a consolidation suggestion, replacing original memory blocks with the consolidated version.
@@ -661,7 +663,7 @@ def validate_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Ses
         logger.error(f"Error validating suggestion {suggestion_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error validating suggestion: {str(e)}")
 
-@app.post("/consolidation-suggestions/{suggestion_id}/reject/", response_model=schemas.ConsolidationSuggestion)
+@router.post("/consolidation-suggestions/{suggestion_id}/reject/", response_model=schemas.ConsolidationSuggestion)
 def reject_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Reject a consolidation suggestion, marking it as rejected.
@@ -678,7 +680,7 @@ def reject_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Sessi
     updated_suggestion = crud.update_consolidation_suggestion(db, suggestion_id=suggestion_id, suggestion=update_schema)
     return updated_suggestion
 
-@app.delete("/consolidation-suggestions/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/consolidation-suggestions/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Deletes a consolidation suggestion from the database.
@@ -689,6 +691,8 @@ def delete_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Sessi
     return {"message": "Consolidation suggestion deleted successfully"}
 
 # Health check endpoint
-@app.get("/health")
+@router.get("/health")
 def health_check():
     return {"status": "ok"}
+
+app.include_router(router)
