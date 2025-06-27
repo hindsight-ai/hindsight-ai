@@ -20,10 +20,16 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              echo "Waiting for PostgreSQL to be ready..."
+              echo "Waiting for PostgreSQL to be ready (timeout 300s)..."
+              TIMEOUT=30
               until pg_isready -h postgres-service -p 5432 -U user; do
                 echo "PostgreSQL is unavailable - sleeping"
                 sleep 2
+                TIMEOUT=$((TIMEOUT-2))
+                if [ $TIMEOUT -le 0 ]; then
+                  echo "PostgreSQL did not become ready within the timeout period. Exiting."
+                  exit 1
+                fi
               done
               echo "PostgreSQL is up."
 
