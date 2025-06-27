@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initial-schema
+data:
+  V1__initial_schema.sql: |
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+    CREATE TABLE agents (
+        agent_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        agent_name VARCHAR(255) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE agent_transcripts (
+        transcript_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        agent_id UUID NOT NULL REFERENCES agents(agent_id),
+        conversation_id UUID NOT NULL,
+        transcript_content TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE memory_blocks (
+        memory_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        agent_id UUID NOT NULL REFERENCES agents(agent_id),
+        conversation_id UUID NOT NULL,
+        timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        content TEXT NOT NULL,
+        errors TEXT,
+        lessons_learned TEXT,
+        metadata JSONB,
+        feedback_score INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE feedback_logs (
+        feedback_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        memory_id UUID NOT NULL REFERENCES memory_blocks(memory_id),
+        feedback_type VARCHAR(50) NOT NULL, -- e.g., 'positive', 'negative', 'neutral'
+        feedback_details TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE keywords (
+        keyword_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        keyword_text VARCHAR(255) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE memory_block_keywords (
+        memory_id UUID NOT NULL REFERENCES memory_blocks(memory_id),
+        keyword_id UUID NOT NULL REFERENCES keywords(keyword_id),
+        PRIMARY KEY (memory_id, keyword_id)
+    );
+
+    -- Add indexes for frequently queried columns
+    CREATE INDEX idx_agent_transcripts_agent_id ON agent_transcripts(agent_id);
+    CREATE INDEX idx_agent_transcripts_conversation_id ON agent_transcripts(conversation_id);
+    CREATE INDEX idx_memory_blocks_agent_id ON memory_blocks(agent_id);
+    CREATE INDEX idx_memory_blocks_conversation_id ON memory_blocks(conversation_id);
+    CREATE INDEX idx_memory_blocks_timestamp ON memory_blocks(timestamp);
+    CREATE INDEX idx_keywords_keyword_text ON keywords(keyword_text);
