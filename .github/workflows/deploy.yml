@@ -62,6 +62,8 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:latest
           file: apps/hindsight-dashboard/Dockerfile # Specify the Dockerfile path
+          build-args: |
+            REACT_APP_HINDSIGHT_SERVICE_API_URL=http://hindsight-service-service:8000/api
 
   # --- JOB 3: Deploy Images to K3s Server ---
   deploy:
