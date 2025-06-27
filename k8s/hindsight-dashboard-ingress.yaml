@@ -6,7 +6,7 @@ spec:
   entryPoints:
     - websecure # Assuming Traefik is configured for HTTPS
   routes:
-    - match: Host(`your-domain.com`) && PathPrefix(`/`) # Replace your-domain.com
+    - match: HostRegexp(`{host:.+}`) && PathPrefix(`/`)
       kind: Rule
       services:
         - name: hindsight-dashboard-service
