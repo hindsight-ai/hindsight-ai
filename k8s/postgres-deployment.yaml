@@ -21,7 +21,7 @@ spec:
           args:
             - |
               echo "Waiting for PostgreSQL to be ready..."
-              until pg_isready -h localhost -p 5432 -U user; do
+              until pg_isready -h postgres-service -p 5432 -U user; do
                 echo "PostgreSQL is unavailable - sleeping"
                 sleep 2
               done
@@ -29,9 +29,9 @@ spec:
 
               # Check if the 'alembic_version' table exists. If not, apply the initial schema.
               # This table is created by Alembic during its first run, indicating the schema is initialized.
-              if ! psql -h localhost -p 5432 -U user -d hindsight_db -c '\dt alembic_version' | grep -q 'alembic_version'; then
+              if ! psql -h postgres-service -p 5432 -U user -d hindsight_db -c '\dt alembic_version' | grep -q 'alembic_version'; then
                 echo "Applying initial database schema..."
-                psql -h localhost -p 5432 -U user -d hindsight_db -f /docker-entrypoint-initdb.d/V1__initial_schema.sql
+                psql -h postgres-service -p 5432 -U user -d hindsight_db -f /docker-entrypoint-initdb.d/V1__initial_schema.sql
                 echo "Initial database schema applied."
               else
                 echo "Database schema already exists, skipping initial application."
@@ -44,7 +44,7 @@ spec:
             - name: PGDATABASE
               value: "hindsight_db"
             - name: PGHOST
-              value: "localhost" # Connect to the postgres container itself
+              value: "postgres-service" # Connect to the postgres service
             - name: PGPORT
               value: "5432"
           volumeMounts:
