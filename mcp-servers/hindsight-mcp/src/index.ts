@@ -353,9 +353,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new McpError(ErrorCode.InvalidParams, "Agent ID is required for retrieve_all_memory_blocks and not provided via arguments or DEFAULT_AGENT_ID environment variable.");
       }
 
-      const result = await memoryServiceClient.getAllMemoryBlocks(agent_id, limit);
-      // Safely ensure result is an array before mapping
-      const memories = Array.isArray(result) ? result : [];
+      const response = await memoryServiceClient.getAllMemoryBlocks(agent_id, limit);
+      // The API returns an object with an 'items' array
+      const memories = Array.isArray(response.items) ? response.items : [];
       const filteredResult = memories.map(block => ({
         content: block.content,
         errors: block.errors,

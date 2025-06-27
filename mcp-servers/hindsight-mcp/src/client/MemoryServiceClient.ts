@@ -49,6 +49,12 @@ export interface ReportFeedbackPayload {
   comment?: string;
 }
 
+export interface GetAllMemoryBlocksResponse {
+  items: MemoryBlock[];
+  total_items: number;
+  total_pages: number;
+}
+
 export class MemoryServiceClient {
   private client: AxiosInstance;
 
@@ -120,9 +126,9 @@ export class MemoryServiceClient {
    * Retrieves all memory blocks, optionally filtered by agent_id.
    * @param agent_id Optional UUID of the agent to filter memories.
    * @param limit Optional maximum number of memories to retrieve.
-   * @returns An array of memory blocks.
+   * @returns An object containing an array of memory blocks and pagination info.
    */
-  async getAllMemoryBlocks(agent_id?: string, limit?: number): Promise<MemoryBlock[]> {
+  async getAllMemoryBlocks(agent_id?: string, limit?: number): Promise<GetAllMemoryBlocksResponse> {
     const params: any = {};
     if (agent_id) {
       params.agent_id = agent_id;
@@ -130,7 +136,7 @@ export class MemoryServiceClient {
     if (limit) {
       params.limit = limit;
     }
-    const response = await this.client.get<MemoryBlock[]>('/memory-blocks', { params });
+    const response = await this.client.get<GetAllMemoryBlocksResponse>('/memory-blocks', { params });
     return response.data;
   }
 
