@@ -1,6 +1,5 @@
 import logging # Moved to top
 import os
-from dotenv import load_dotenv, dotenv_values # Import dotenv_values
 from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -13,21 +12,8 @@ import math # Import math for ceil
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load environment variables from .env file
-# The .env file is in the parent directory (apps/hindsight-service)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-base_dir = os.path.dirname(parent_dir)
-dotenv_path = os.path.join(base_dir, '.env')
-logger.info(f"Attempting to load .env file from path: {dotenv_path}")
-logger.info(f"Does .env file exist at path: {os.path.exists(dotenv_path)}")
-# Use dotenv_values to load values and then manually set them in os.environ
-config_values = dotenv_values(dotenv_path)
-logger.info(f"Loaded config values from .env: {config_values.keys()}")
-for key, value in config_values.items():
-    os.environ[key] = value
-    logger.info(f"Set environment variable {key} from .env")
-logger.info(f"LLM_API_KEY after manual os.environ update: {os.getenv('LLM_API_KEY')}")
+# Environment variables are expected to be set by the deployment environment (e.g., Kubernetes)
+# For local development, ensure these are set in your shell or via a tool like docker-compose.
 
 from core.db import models, schemas, crud
 from core.db.database import engine, get_db
