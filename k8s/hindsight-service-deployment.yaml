@@ -16,6 +16,29 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-login-secret
+      initContainers:
+        - name: migrate-db
+          image: ghcr.io/YOUR_GITHUB_USERNAME/hindsight-service:latest # Use the same service image for migrations
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              echo "Waiting for PostgreSQL to be ready (timeout 300s)..."
+              TIMEOUT=300
+              until pg_isready -h postgres-service -p 5432 -U user; do
+                echo "PostgreSQL is unavailable - sleeping"
+                sleep 2
+                TIMEOUT=$((TIMEOUT-2))
+                if [ $TIMEOUT -le 0 ]; then
+                  echo "PostgreSQL did not become ready within the timeout period. Exiting."
+                  exit 1
+                fi
+              done
+              echo "PostgreSQL is up - running migrations"
+              alembic upgrade head
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://user:password@postgres-service:5432/hindsight_db"
       containers:
         - name: hindsight-service
           image: ghcr.io/YOUR_GITHUB_USERNAME/hindsight-service:latest # This will be updated by GitHub Actions
