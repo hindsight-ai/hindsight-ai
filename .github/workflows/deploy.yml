@@ -107,6 +107,18 @@ jobs:
             echo "Waiting for CRDs to be registered..."
             sleep 10 # Give Kubernetes time to register the CRDs
             
+            # Replace placeholder in k8s manifests with actual GitHub username
+            echo "Replacing YOUR_GITHUB_USERNAME placeholder in k8s manifests..."
+            sed -i "s/YOUR_GITHUB_USERNAME/${{ github.repository_owner }}/g" k8s/*.yaml
+            
+            # Create image pull secret for GitHub Container Registry
+            echo "Creating image pull secret for GitHub Container Registry..."
+            sudo kubectl create secret docker-registry ghcr-login-secret \
+              --docker-server=ghcr.io \
+              --docker-username=${{ github.actor }} \
+              --docker-password=${{ secrets.GITHUB_TOKEN }} \
+              --dry-run=client -o yaml | sudo kubectl apply -f -
+            
             # Apply all Kubernetes manifests in the k8s directory
             echo "Applying Kubernetes manifests from $REPO_DIR/k8s/"
             sudo kubectl apply -f k8s/
@@ -122,8 +134,8 @@ jobs:
             echo "Deployment commands executed."
             
             # Clean up the cloned repository
-            echo "Cleaning up cloned repository at $REPO_DIR"
-            cd - # Go back to the previous directory
-            rm -rf "$REPO_DIR"
+            # echo "Cleaning up cloned repository at $REPO_DIR"
+            # cd - # Go back to the previous directory
+            # rm -rf "$REPO_DIR"
             
-            echo "Deployment completed!"
+            echo "Deployment completed! (Cleanup temporarily disabled for debugging)"
