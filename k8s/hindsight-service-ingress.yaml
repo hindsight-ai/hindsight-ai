@@ -1,0 +1,13 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: hindsight-service-ingress
+spec:
+  entryPoints:
+    - websecure # Assuming Traefik is configured for HTTPS
+  routes:
+    - match: Host(`your-domain.com`) && PathPrefix(`/api`) # Replace your-domain.com
+      kind: Rule
+      services:
+        - name: hindsight-service-service
+          port: 8000

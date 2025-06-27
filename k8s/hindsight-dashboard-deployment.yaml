@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hindsight-dashboard-deployment
+  labels:
+    app: hindsight-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hindsight-dashboard
+  template:
+    metadata:
+      labels:
+        app: hindsight-dashboard
+    spec:
+      containers:
+        - name: hindsight-dashboard
+          image: ghcr.io/YOUR_GITHUB_USERNAME/hindsight-dashboard:latest # This will be updated by GitHub Actions
+          ports:
+            - containerPort: 80
+          imagePullPolicy: Always # Ensure the latest image is pulled

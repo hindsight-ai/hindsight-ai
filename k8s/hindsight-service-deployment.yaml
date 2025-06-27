@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hindsight-service-deployment
+  labels:
+    app: hindsight-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hindsight-service
+  template:
+    metadata:
+      labels:
+        app: hindsight-service
+    spec:
+      containers:
+        - name: hindsight-service
+          image: ghcr.io/YOUR_GITHUB_USERNAME/hindsight-service:latest # This will be updated by GitHub Actions
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://user:password@postgres-service:5432/hindsight_db"
+            # Add other necessary environment variables here, e.g., LLM_API_KEY
+            # For production, consider using Kubernetes Secrets for sensitive data
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hindsight-secrets
+                  key: LLM_API_KEY
+          imagePullPolicy: Always # Ensure the latest image is pulled
