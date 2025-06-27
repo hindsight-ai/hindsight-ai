@@ -82,18 +82,40 @@ jobs:
           script: |
             echo "Connection successful, deployment in progress..."
             
-            # Apply Kubernetes manifests
-            # Ensure the k8s directory is present on the server or clone the repo
-            # For simplicity, we assume the k8s directory is available or will be cloned.
-            # A better approach for production might be to use kustomize or helm.
+            # Define a temporary directory for cloning the repository
+            REPO_DIR="/tmp/${{ github.repository }}"
             
-            # Apply all manifests in the k8s directory
+            # Clean up previous clone if it exists
+            if [ -d "$REPO_DIR" ]; then
+              echo "Removing existing repository clone at $REPO_DIR"
+              rm -rf "$REPO_DIR"
+            fi
+            
+            # Clone the repository to access k8s manifests
+            echo "Cloning repository ${{ github.repository }} into $REPO_DIR"
+            # Use HTTPS with GITHUB_TOKEN for authentication
+            git clone https://github.com/${{ github.repository }}.git "$REPO_DIR"
+            
+            # Navigate to the cloned repository
+            cd "$REPO_DIR"
+            
+            # Apply all Kubernetes manifests in the k8s directory
+            echo "Applying Kubernetes manifests from $REPO_DIR/k8s/"
             sudo kubectl apply -f k8s/
             
             # Update the image of the hindsight-service deployment
+            echo "Updating hindsight-service deployment image"
             sudo kubectl set image deployment/hindsight-service-deployment hindsight-service=ghcr.io/${{ github.repository_owner }}/hindsight-service:latest
             
             # Update the image of the hindsight-dashboard deployment
+            echo "Updating hindsight-dashboard deployment image"
             sudo kubectl set image deployment/hindsight-dashboard-deployment hindsight-dashboard=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:latest
+            
+            echo "Deployment commands executed."
+            
+            # Clean up the cloned repository
+            echo "Cleaning up cloned repository at $REPO_DIR"
+            cd - # Go back to the previous directory
+            rm -rf "$REPO_DIR"
             
             echo "Deployment completed!"
