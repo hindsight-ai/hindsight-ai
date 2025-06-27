@@ -21,4 +21,7 @@ spec:
           image: ghcr.io/YOUR_GITHUB_USERNAME/hindsight-dashboard:latest # This will be updated by GitHub Actions
           ports:
             - containerPort: 80
+          env:
+            - name: HINDSIGHT_SERVICE_API_URL
+              value: "http://hindsight-service/api" # Replace YOUR_SERVER_IP with your actual server IP
           imagePullPolicy: Always # Ensure the latest image is pulled
