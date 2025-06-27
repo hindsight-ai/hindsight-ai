@@ -116,7 +116,7 @@ jobs:
             sudo kubectl create secret docker-registry ghcr-login-secret \
               --docker-server=ghcr.io \
               --docker-username=${{ github.actor }} \
-              --docker-password=${{ secrets.GITHUB_TOKEN }} \
+              --docker-password=${{ secrets.GHCR_PAT }} \
               --dry-run=client -o yaml | sudo kubectl apply -f -
             
             # Apply all Kubernetes manifests in the k8s directory
@@ -134,8 +134,8 @@ jobs:
             echo "Deployment commands executed."
             
             # Clean up the cloned repository
-            # echo "Cleaning up cloned repository at $REPO_DIR"
-            # cd - # Go back to the previous directory
-            # rm -rf "$REPO_DIR"
+            echo "Cleaning up cloned repository at $REPO_DIR"
+            cd - # Go back to the previous directory
+            rm -rf "$REPO_DIR"
             
-            echo "Deployment completed! (Cleanup temporarily disabled for debugging)"
+            echo "Deployment completed!"
