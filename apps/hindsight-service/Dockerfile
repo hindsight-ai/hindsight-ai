@@ -12,13 +12,13 @@ WORKDIR /app
 RUN pip install uv
 
 # Copy pyproject.toml and uv.lock first to leverage Docker cache
-COPY apps/hindsight-service/pyproject.toml apps/hindsight-service/uv.lock ./
+COPY pyproject.toml uv.lock ./
 
 # Install dependencies using uv
 RUN uv pip install --system .
 
 # Copy the rest of the application code
-COPY apps/hindsight-service/ ./
+COPY . ./
 
 # Expose the port the FastAPI application listens on
 EXPOSE 8000
