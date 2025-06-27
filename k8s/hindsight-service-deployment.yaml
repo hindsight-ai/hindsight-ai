@@ -31,4 +31,10 @@ spec:
                 secretKeyRef:
                   name: hindsight-secrets
                   key: LLM_API_KEY
+            - name: LLM_MODEL_NAME
+              value: "gemini-2.5-flash-preview-05-20"
+            - name: CONSOLIDATION_BATCH_SIZE
+              value: "100"
+            - name: FALLBACK_SIMILARITY_THRESHOLD
+              value: "0.4"
           imagePullPolicy: Always # Ensure the latest image is pulled
