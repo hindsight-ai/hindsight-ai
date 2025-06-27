@@ -88,12 +88,12 @@ jobs:
             # A better approach for production might be to use kustomize or helm.
             
             # Apply all manifests in the k8s directory
-            kubectl apply -f k8s/
+            sudo kubectl apply -f k8s/
             
             # Update the image of the hindsight-service deployment
-            kubectl set image deployment/hindsight-service-deployment hindsight-service=ghcr.io/${{ github.repository_owner }}/hindsight-service:latest
+            sudo kubectl set image deployment/hindsight-service-deployment hindsight-service=ghcr.io/${{ github.repository_owner }}/hindsight-service:latest
             
             # Update the image of the hindsight-dashboard deployment
-            kubectl set image deployment/hindsight-dashboard-deployment hindsight-dashboard=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:latest
+            sudo kubectl set image deployment/hindsight-dashboard-deployment hindsight-dashboard=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:latest
             
             echo "Deployment completed!"
