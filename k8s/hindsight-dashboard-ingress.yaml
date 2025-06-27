@@ -4,7 +4,7 @@ metadata:
   name: hindsight-dashboard-ingress
 spec:
   entryPoints:
-    - websecure # Assuming Traefik is configured for HTTPS
+    - web # Using the 'web' entry point for HTTP access
   routes:
     - match: HostRegexp(`{host:.+}`) && PathPrefix(`/`)
       kind: Rule
