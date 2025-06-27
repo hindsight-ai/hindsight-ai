@@ -101,8 +101,11 @@ jobs:
             
             # Install Traefik Resource Definitions and RBAC for Traefik
             echo "Applying Traefik CRDs..."
-            sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.4/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
-            sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.4/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
+            sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.3/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+            sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.3/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
+            
+            echo "Waiting for CRDs to be registered..."
+            sleep 10 # Give Kubernetes time to register the CRDs
             
             # Apply all Kubernetes manifests in the k8s directory
             echo "Applying Kubernetes manifests from $REPO_DIR/k8s/"
