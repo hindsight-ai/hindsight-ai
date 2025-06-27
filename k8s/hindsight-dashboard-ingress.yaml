@@ -6,7 +6,7 @@ spec:
   entryPoints:
     - web # Using the 'web' entry point for HTTP access
   routes:
-    - match: HostRegexp(`{host:.+}`) && PathPrefix(`/`)
+    - match: Host(`46.62.141.65`) && PathPrefix(`/`)
       kind: Rule
       services:
         - name: hindsight-dashboard-service
