@@ -21,7 +21,4 @@ spec:
           image: ghcr.io/YOUR_GITHUB_USERNAME/hindsight-dashboard:latest # This will be updated by GitHub Actions
           ports:
             - containerPort: 80
-          env:
-            - name: REACT_APP_HINDSIGHT_SERVICE_API_URL
-              value: "http://46.62.141.65/api"
           imagePullPolicy: Always # Ensure the latest image is pulled
