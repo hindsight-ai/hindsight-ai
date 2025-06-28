@@ -4,6 +4,10 @@ FROM python:3.13.5-slim
 # Set the working directory inside the container
 WORKDIR /app
 
+# Install PostgreSQL client tools and uv
+RUN apt-get update && apt-get install -y postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install uv (or pip if uv is not preferred for production builds)
 # For uv, ensure it's installed globally or in a way accessible by the build process
 # For simplicity, we'll assume uv is available or use pip directly.
