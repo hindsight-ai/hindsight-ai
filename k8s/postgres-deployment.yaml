@@ -44,9 +44,15 @@ spec:
               fi
           env:
             - name: PGPASSWORD
-              value: "password" # Use PGPASSWORD for psql command
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
             - name: PGUSER
-              value: "user"
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
             - name: PGDATABASE
               value: "hindsight_db"
             - name: PGHOST
@@ -65,9 +71,15 @@ spec:
             - name: POSTGRES_DB
               value: "hindsight_db"
             - name: POSTGRES_USER
-              value: "user"
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
-              value: "password"
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
           volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data

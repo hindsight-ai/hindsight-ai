@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-backup-restore-config
+data:
+  DB_NAME: "hindsight_db"
+  POSTGRES_SERVICE_HOST: "postgres-service"
+  POSTGRES_SERVICE_PORT: "5432"
+  BACKUP_DIR_LOCAL: "/home/jean/hindsight_db_backups/k8s_data" # Local path on the machine running the script
+  FILENAME_PREFIX: "hindsight_k8s_db_backup"
+  MAX_BACKUPS: "1000"

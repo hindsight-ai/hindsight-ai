@@ -124,6 +124,19 @@ jobs:
             # Apply all Kubernetes manifests in the k8s directory
             echo "Applying Kubernetes manifests from $REPO_DIR/k8s/"
             sudo kubectl apply -f k8s/
+
+            # Copy backup/restore scripts to a common location and make them executable
+            echo "Copying backup and restore scripts to /usr/local/bin/"
+            sudo cp "$REPO_DIR"/infra/scripts/backup-script-for-k8s.sh /usr/local/bin/hindsight-db-backup.sh
+            sudo cp "$REPO_DIR"/infra/scripts/restore-script-for-k8s.sh /usr/local/bin/hindsight-db-restore.sh
+            sudo chmod +x /usr/local/bin/hindsight-db-backup.sh
+            sudo chmod +x /usr/local/bin/hindsight-db-restore.sh
+            echo "Scripts copied and made executable."
+
+            # Add cronjob to run the backup script hourly
+            echo "Adding hourly backup cronjob..."
+            (crontab -l 2>/dev/null; echo "0 * * * * /usr/local/bin/hindsight-db-backup.sh >> /var/log/hindsight-db-backup.log 2>&1") | crontab -
+            echo "Hourly backup cronjob added."
             
             # Update the image of the hindsight-service deployment
             echo "Updating hindsight-service deployment image"
