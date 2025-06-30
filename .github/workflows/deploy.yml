@@ -132,9 +132,28 @@ jobs:
             rm /tmp/tls.crt /tmp/tls.key
             echo "TLS secret created."
 
-            # Apply all Kubernetes manifests in the k8s directory, excluding the TLS secret
-            echo "Applying Kubernetes manifests from $REPO_DIR/k8s/ (excluding TLS secret)..."
-            find k8s/ -name "*.yaml" ! -name "hindsight-tls-secret.yaml" -exec sudo kubectl apply -f {} \;
+            # Create oauth2-proxy secret from GitHub Secrets
+            echo "Creating oauth2-proxy secret from GitHub Secrets..."
+            sudo kubectl create secret generic oauth2-proxy-secret \
+              --from-literal=OAUTH2_PROXY_CLIENT_ID=$(echo -n "${{ secrets.OAUTH2_PROXY_CLIENT_ID }}" | base64) \
+              --from-literal=OAUTH2_PROXY_CLIENT_SECRET=$(echo -n "${{ secrets.OAUTH2_PROXY_CLIENT_SECRET }}" | base64) \
+              --from-literal=OAUTH2_PROXY_COOKIE_SECRET=${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }} \
+              --dry-run=client -o yaml | sudo kubectl apply -f -
+            echo "oauth2-proxy secret created."
+
+            # Apply oauth2-proxy deployment and middleware
+            echo "Applying oauth2-proxy deployment and middleware..."
+            sudo kubectl apply -f k8s/oauth2-proxy-deployment.yaml
+            sudo kubectl apply -f k8s/oauth2-proxy-middleware.yaml
+
+            # Apply all other Kubernetes manifests in the k8s directory, excluding secrets and oauth2-proxy files
+            echo "Applying other Kubernetes manifests from $REPO_DIR/k8s/..."
+            find k8s/ -name "*.yaml" \
+              ! -name "hindsight-tls-secret.yaml" \
+              ! -name "oauth2-proxy-secret.yaml" \
+              ! -name "oauth2-proxy-deployment.yaml" \
+              ! -name "oauth2-proxy-middleware.yaml" \
+              -exec sudo kubectl apply -f {} \;
 
             # Copy backup/restore scripts to a common location and make them executable
             echo "Copying backup and restore scripts to /usr/local/bin/"

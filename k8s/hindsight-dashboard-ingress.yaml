@@ -13,6 +13,7 @@ spec:
         - name: hindsight-dashboard-service
           port: 80
       middlewares:
+        - name: oauth2-proxy-auth@kubernetescrd # Apply oauth2-proxy authentication
         - name: redirect-to-https
   tls:
     secretName: hindsight-tls-secret # Name of the secret containing your TLS certificate and key
@@ -41,6 +42,7 @@ spec:
         - name: hindsight-dashboard-service
           port: 80
       middlewares:
+        - name: oauth2-proxy-auth@kubernetescrd # Apply oauth2-proxy authentication
         - name: redirect-to-https
   tls:
     secretName: hindsight-tls-secret # Name of the secret containing your TLS certificate and key
