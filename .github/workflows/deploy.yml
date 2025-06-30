@@ -123,8 +123,9 @@ jobs:
             
             # Create TLS secret from GitHub Secrets
             echo "Creating TLS secret from GitHub Secrets..."
-            echo "${{ secrets.TLS_CRT }}" | base64 -d > /tmp/tls.crt
-            echo "${{ secrets.TLS_KEY }}" | base64 -d > /tmp/tls.key
+            # Ensure base64 encoding is correct and no line wrapping
+            printf "%s" "${{ secrets.TLS_CRT }}" | base64 -d > /tmp/tls.crt
+            printf "%s" "${{ secrets.TLS_KEY }}" | base64 -d > /tmp/tls.key
             sudo kubectl create secret tls hindsight-tls-secret \
               --cert=/tmp/tls.crt \
               --key=/tmp/tls.key \
@@ -134,11 +135,12 @@ jobs:
 
             # Create oauth2-proxy secret from GitHub Secrets
             echo "Creating oauth2-proxy secret from GitHub Secrets..."
-            sudo kubectl create secret generic oauth2-proxy-secret \
-              --from-literal=OAUTH2_PROXY_CLIENT_ID=$(echo -n "${{ secrets.OAUTH2_PROXY_CLIENT_ID }}" | base64) \
-              --from-literal=OAUTH2_PROXY_CLIENT_SECRET=$(echo -n "${{ secrets.OAUTH2_PROXY_CLIENT_SECRET }}" | base64) \
-              --from-literal=OAUTH2_PROXY_COOKIE_SECRET=${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }} \
-              --dry-run=client -o yaml | sudo kubectl apply -f -
+            # Use printf and --from-env-file=/dev/stdin for robustness
+            printf "OAUTH2_PROXY_CLIENT_ID=%s\nOAUTH2_PROXY_CLIENT_SECRET=%s\nOAUTH2_PROXY_COOKIE_SECRET=%s" \
+              "$(echo -n "${{ secrets.OAUTH2_PROXY_CLIENT_ID }}" | base64 -w 0)" \
+              "$(echo -n "${{ secrets.OAUTH2_PROXY_CLIENT_SECRET }}" | base64 -w 0)" \
+              "${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }}" \
+              | sudo kubectl create secret generic oauth2-proxy-secret --from-env-file=/dev/stdin --dry-run=client -o yaml | sudo kubectl apply -f -
             echo "oauth2-proxy secret created."
 
             # Apply oauth2-proxy deployment and middleware
