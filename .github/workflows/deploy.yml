@@ -121,9 +121,20 @@ jobs:
               --docker-password=${{ secrets.GHCR_PAT }} \
               --dry-run=client -o yaml | sudo kubectl apply -f -
             
-            # Apply all Kubernetes manifests in the k8s directory
-            echo "Applying Kubernetes manifests from $REPO_DIR/k8s/"
-            sudo kubectl apply -f k8s/
+            # Create TLS secret from GitHub Secrets
+            echo "Creating TLS secret from GitHub Secrets..."
+            echo "${{ secrets.TLS_CRT }}" | base64 -d > /tmp/tls.crt
+            echo "${{ secrets.TLS_KEY }}" | base64 -d > /tmp/tls.key
+            sudo kubectl create secret tls hindsight-tls-secret \
+              --cert=/tmp/tls.crt \
+              --key=/tmp/tls.key \
+              --dry-run=client -o yaml | sudo kubectl apply -f -
+            rm /tmp/tls.crt /tmp/tls.key
+            echo "TLS secret created."
+
+            # Apply all Kubernetes manifests in the k8s directory, excluding the TLS secret
+            echo "Applying Kubernetes manifests from $REPO_DIR/k8s/ (excluding TLS secret)..."
+            find k8s/ -name "*.yaml" ! -name "hindsight-tls-secret.yaml" -exec sudo kubectl apply -f {} \;
 
             # Copy backup/restore scripts to a common location and make them executable
             echo "Copying backup and restore scripts to /usr/local/bin/"
