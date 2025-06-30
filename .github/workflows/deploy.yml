@@ -123,14 +123,11 @@ jobs:
             
             # Create TLS secret from GitHub Secrets
             echo "Creating TLS secret from GitHub Secrets..."
-            # Ensure base64 encoding is correct and no line wrapping
-            printf "%s" "${{ secrets.TLS_CRT }}" | base64 -d > /tmp/tls.crt
-            printf "%s" "${{ secrets.TLS_KEY }}" | base64 -d > /tmp/tls.key
-            sudo kubectl create secret tls hindsight-tls-secret \
-              --cert=/tmp/tls.crt \
-              --key=/tmp/tls.key \
+            sudo kubectl create secret generic hindsight-tls-secret \
+              --from-literal=tls.crt=$(echo -n "${{ secrets.TLS_CRT }}" | base64 -w 0) \
+              --from-literal=tls.key=$(echo -n "${{ secrets.TLS_KEY }}" | base64 -w 0) \
+              --type=kubernetes.io/tls \
               --dry-run=client -o yaml | sudo kubectl apply -f -
-            rm /tmp/tls.crt /tmp/tls.key
             echo "TLS secret created."
 
             # Create oauth2-proxy secret from GitHub Secrets
