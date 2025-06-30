@@ -4,10 +4,24 @@ metadata:
   name: hindsight-service-ingress
 spec:
   entryPoints:
-    - web # Using the 'web' entry point for HTTP access
+    - web # HTTP entry point for redirection
+    - websecure # HTTPS entry point
   routes:
     - match: Host(`46.62.141.65`) && PathPrefix(`/api`)
       kind: Rule
       services:
         - name: hindsight-service-service
           port: 8000
+      middlewares:
+        - name: redirect-to-https
+  tls:
+    secretName: hindsight-tls-secret # Name of the secret containing your TLS certificate and key
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-to-https
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
