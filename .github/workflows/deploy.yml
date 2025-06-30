@@ -103,11 +103,13 @@ jobs:
             
             # Install Traefik Resource Definitions and RBAC for Traefik
             echo "Applying Traefik CRDs..."
+            # Apply CRDs
             sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.3/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
             sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.3/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
-            
-            echo "Waiting for CRDs to be registered..."
-            sleep 10 # Give Kubernetes time to register the CRDs
+
+            # Wait for CRDs to be established
+            echo "Waiting for Middleware CRD..."
+            sudo kubectl wait --for=condition=established crd/middlewares.traefik.io --timeout=60s
             
             # Replace placeholder in k8s manifests with actual GitHub username
             echo "Replacing YOUR_GITHUB_USERNAME placeholder in k8s manifests..."
@@ -140,9 +142,13 @@ jobs:
               | sudo kubectl create secret generic oauth2-proxy-secret --from-env-file=/dev/stdin --dry-run=client -o yaml | sudo kubectl apply -f -
             echo "oauth2-proxy secret created."
 
-            # Apply oauth2-proxy deployment and middleware
-            echo "Applying oauth2-proxy deployment and middleware..."
+            # Apply oauth2-proxy deployment
+            echo "Applying oauth2-proxy deployment..."
             sudo kubectl apply -f k8s/oauth2-proxy-deployment.yaml
+            
+            # Apply oauth2-proxy middleware after CRD is established
+            echo "Applying oauth2-proxy middleware..."
+            test -f k8s/oauth2-proxy-middleware.yaml && echo "Middleware file found" || echo "Middleware file missing"
             sudo kubectl apply -f k8s/oauth2-proxy-middleware.yaml
 
             # Apply all other Kubernetes manifests in the k8s directory, excluding secrets and oauth2-proxy files
