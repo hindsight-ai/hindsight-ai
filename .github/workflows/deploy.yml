@@ -104,12 +104,19 @@ jobs:
             # Install Traefik Resource Definitions and RBAC for Traefik
             echo "Applying Traefik CRDs..."
             # Apply CRDs
-            sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.3/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
-            sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.3/docs/content/reference/dynamic-configuration/kubernetes-crd-rbac.yml
+            sudo kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v2.11/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
 
-            # Wait for CRDs to be established
-            echo "Waiting for Middleware CRD..."
-            sudo kubectl wait --for=condition=established crd/middlewares.traefik.io --timeout=60s
+            # Wait for all required CRDs to be established
+            echo "Waiting for Traefik CRDs to be established..."
+            for crd in \
+              middlewares.traefik.containo.us \
+              ingressroutes.traefik.containo.us \
+              middlewaretcps.traefik.containo.us \
+              traefikservices.traefik.containo.us \
+              tlsoptions.traefik.containo.us \
+              tlsstores.traefik.containo.us; do
+              sudo kubectl wait --for=condition=established crd/$crd --timeout=60s
+            done
             
             # Replace placeholder in k8s manifests with actual GitHub username
             echo "Replacing YOUR_GITHUB_USERNAME placeholder in k8s manifests..."
