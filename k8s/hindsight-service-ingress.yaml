@@ -7,7 +7,7 @@ spec:
     - web # HTTP entry point for redirection
     - websecure # HTTPS entry point
   routes:
-    - match: PathPrefix(`/api`)
+    - match: Host(`hindsight-ai.com`, `www.hindsight-ai.com`) && PathPrefix(`/api`)
       kind: Rule
       services:
         - name: hindsight-service-service
@@ -37,7 +37,7 @@ spec:
     - web # HTTP entry point for redirection
     - websecure # HTTPS entry point
   routes:
-    - match: PathPrefix(`/api`)
+    - match: Host(`hindsight-ai.com`, `www.hindsight-ai.com`) && PathPrefix(`/api`)
       kind: Rule
       services:
         - name: hindsight-service-service
