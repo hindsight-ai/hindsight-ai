@@ -157,6 +157,7 @@ jobs:
             echo "Applying oauth2-proxy middleware..."
             test -f k8s/oauth2-proxy-middleware.yaml && echo "Middleware file found" || echo "Middleware file missing"
             sudo kubectl apply -f k8s/oauth2-proxy-middleware.yaml
+            sudo kubectl apply -f k8s/redirect-to-https-middleware.yaml
 
             # Apply all other Kubernetes manifests in the k8s directory, excluding secrets and oauth2-proxy files
             echo "Applying other Kubernetes manifests from $REPO_DIR/k8s/..."

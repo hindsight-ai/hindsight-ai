@@ -27,12 +27,3 @@ spec:
         - name: redirect-to-https
   tls:
     secretName: hindsight-tls-secret # Name of the secret containing your TLS certificate and key
----
-apiVersion: traefik.containo.us/v1alpha1
-kind: Middleware
-metadata:
-  name: redirect-to-https
-spec:
-  redirectScheme:
-    scheme: https
-    permanent: true

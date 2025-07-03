@@ -20,7 +20,6 @@ spec:
         args:
           - --provider=google
           - --email-domain=* # Allow any email domain initially, will restrict later
-          - --upstream=static:200 # Dummy upstream, Traefik will handle actual routing
           - --http-address=0.0.0.0:4180
           - --redirect-url=https://hindsight-ai.com/oauth2/callback
           - --redirect-url=https://www.hindsight-ai.com/oauth2/callback
