@@ -1,0 +1,25 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: hindsight-api-ingress
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`api.hindsight-ai.com`)
+      kind: Rule
+      services:
+        - name: hindsight-service-service
+          port: 8000
+      middlewares:
+        - name: redirect-to-https
+    - match: Host(`api.www.hindsight-ai.com`)
+      kind: Rule
+      services:
+        - name: hindsight-service-service
+          port: 8000
+      middlewares:
+        - name: redirect-to-https
+  tls:
+    secretName: hindsight-tls-secret

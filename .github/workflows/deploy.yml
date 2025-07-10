@@ -149,6 +149,13 @@ jobs:
               | sudo kubectl create secret generic oauth2-proxy-secret --from-env-file=/dev/stdin --dry-run=client -o yaml | sudo kubectl apply -f -
             echo "oauth2-proxy secret created."
 
+            # Create hindsight-secrets secret from GitHub Secrets
+            echo "Creating hindsight-secrets secret from GitHub Secrets..."
+            printf "LLM_API_KEY=%s" \
+              "${{ secrets.LLM_API_KEY }}" \
+              | sudo kubectl create secret generic hindsight-secrets --from-env-file=/dev/stdin --dry-run=client -o yaml | sudo kubectl apply -f -
+            echo "hindsight-secrets secret created."
+
             # Apply oauth2-proxy deployment
             echo "Applying oauth2-proxy deployment..."
             sudo kubectl apply -f k8s/oauth2-proxy-deployment.yaml

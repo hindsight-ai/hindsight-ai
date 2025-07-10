@@ -11,6 +11,7 @@ sequenceDiagram
     participant OAuth2Proxy as OAuth2 Proxy
     participant Google
     participant HindsightDashboard as Hindsight Dashboard
+    participant HindsightService as Hindsight Service
 
     User->>Cloudflare: 1. Request https://www.hindsight-ai.com
     Cloudflare->>ServerIP: 2. Proxy request (Host: www.hindsight-ai.com)
@@ -38,10 +39,17 @@ sequenceDiagram
         Traefik->>OAuth2Proxy: 4. Forward request to OAuth2 Proxy (with existing cookie)
         OAuth2Proxy->>OAuth2Proxy: 5. Validate authentication cookie
         OAuth2Proxy->>Traefik: 6. Allow request to proceed
-        Traefik->>HindsightDashboard: 7. Route request to Hindsight Dashboard Service
-        HindsightDashboard-->>Traefik: 8. Serve Dashboard content
-        Traefik-->>Cloudflare: 9. Return Dashboard content
-        Cloudflare-->>User: 10. Display Dashboard
+        alt Request to Dashboard
+            Traefik->>HindsightDashboard: 7. Route request to Hindsight Dashboard Service
+            HindsightDashboard-->>Traefik: 8. Serve Dashboard content
+            Traefik-->>Cloudflare: 9. Return Dashboard content
+            Cloudflare-->>User: 10. Display Dashboard
+        else Request to API
+            Traefik->>HindsightService: 7. Route request to Hindsight Service
+            HindsightService-->>Traefik: 8. Serve API response
+            Traefik-->>Cloudflare: 9. Return API response
+            Cloudflare-->>User: 10. Return API response
+        end
     end
 ```
 

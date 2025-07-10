@@ -7,32 +7,13 @@ spec:
     - web # HTTP entry point for redirection
     - websecure # HTTPS entry point
   routes:
-    - match: Host(`hindsight-ai.com`) && PathPrefix(`/api`)
+    - match: Host(`hindsight-ai.com`) || Host(`www.hindsight-ai.com`)
       kind: Rule
       services:
         - name: hindsight-service-service
           port: 8000
       middlewares:
-        - name: oauth2-proxy-auth
-          namespace: default # Apply oauth2-proxy authentication
         - name: redirect-to-https
-    - match: Host(`www.hindsight-ai.com`) && PathPrefix(`/api`)
-      kind: Rule
-      services:
-        - name: hindsight-service-service
-          port: 8000
-      middlewares:
-        - name: oauth2-proxy-auth
-          namespace: default # Apply oauth2-proxy authentication
-        - name: redirect-to-https
+        - name: oauth2-proxy-auth@kubernetescrd # Apply OAuth2 Proxy authentication
   tls:
     secretName: hindsight-tls-secret # Name of the secret containing your TLS certificate and key
----
-apiVersion: traefik.containo.us/v1alpha1
-kind: Middleware
-metadata:
-  name: redirect-to-https
-spec:
-  redirectScheme:
-    scheme: https
-    permanent: true
