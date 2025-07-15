@@ -75,9 +75,12 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          sync: true
-          target: ~/hindsight-ai-project
           script: |
+            mkdir -p ~/hindsight-ai-project
+            # Copy docker-compose.yml and apps directory
+            scp -P ${{ secrets.SSH_PORT }} -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null docker-compose.yml ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/hindsight-ai-project/docker-compose.yml
+            scp -r -P ${{ secrets.SSH_PORT }} -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null apps ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/hindsight-ai-project/apps
+
             cd ~/hindsight-ai-project
 
             # Create .env file on the server from GitHub Secrets
