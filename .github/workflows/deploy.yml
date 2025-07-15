@@ -75,8 +75,10 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          sync: true
+          target: ~/hindsight-ai-project
           script: |
-            cd ~/hindsight-ai-project # IMPORTANT: Replace with your actual project path on the server
+            cd ~/hindsight-ai-project
 
             # Create .env file on the server from GitHub Secrets
             echo "Creating .env file on server..."
