@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13
+    restart: always
+    environment:
+      POSTGRES_DB: hindsight_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d hindsight_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hindsight-ai
+
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    command:
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.myresolver.acme.tlschallenge=true
+      - --certificatesresolvers.myresolver.acme.email=ibarz.jean@gmail.com
+      - --certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080" # Traefik Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./acme.json:/etc/traefik/acme.json # Persistent storage for Let's Encrypt certificates
+    networks:
+      - hindsight-ai
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.4.0
+    container_name: oauth2-proxy
+    environment:
+      OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET}
+      OAUTH2_PROXY_REDIRECT_URL: https://www.hindsight-ai.com/oauth2/callback
+      OAUTH2_PROXY_PROVIDER: google
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*" # Allow any Google account, then filter by authorized_emails.txt
+      OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE: /etc/oauth2-proxy/authorized_emails.txt
+      OAUTH2_PROXY_UPSTREAMS: http://hindsight-dashboard:80,http://hindsight-service:8000
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_PASS_ACCESS_TOKEN: "true"
+      OAUTH2_PROXY_PASS_BASIC_AUTH: "false"
+      OAUTH2_PROXY_PASS_USER_HEADERS: "true"
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+      OAUTH2_PROXY_COOKIE_SECURE: "true"
+      OAUTH2_PROXY_COOKIE_DOMAIN: ".hindsight-ai.com"
+    networks:
+      - hindsight-ai
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.oauth2-proxy.rule=Host(`www.hindsight-ai.com`)"
+      - "traefik.http.routers.oauth2-proxy.entrypoints=websecure"
+      - "traefik.http.routers.oauth2-proxy.tls.certresolver=myresolver"
+      - "traefik.http.services.oauth2-proxy.loadbalancer.server.port=4180"
+      - "traefik.http.middlewares.oauth2-proxy-auth.forwardauth.address=http://oauth2-proxy:4180/_oauth2/auth"
+      - "traefik.http.middlewares.oauth2-proxy-auth.forwardauth.authresponseheaders=X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Access-Token"
+      - "traefik.http.middlewares.oauth2-proxy-auth.forwardauth.authurl=http://oauth2-proxy:4180/oauth2/auth"
+
+  hindsight-service:
+    build:
+      context: ./apps/hindsight-service
+      dockerfile: Dockerfile
+    container_name: hindsight-service
+    networks:
+      - hindsight-ai
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/hindsight_db
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME}
+      CONSOLIDATION_BATCH_SIZE: ${CONSOLIDATION_BATCH_SIZE}
+      FALLBACK_SIMILARITY_THRESHOLD: ${FALLBACK_SIMILARITY_THRESHOLD}
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hindsight-service.rule=Host(`www.hindsight-ai.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.hindsight-service.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-service.tls.certresolver=myresolver"
+      - "traefik.http.services.hindsight-service.loadbalancer.server.port=8000"
+      - "traefik.http.routers.hindsight-service.middlewares=oauth2-proxy-auth@docker"
+
+  hindsight-dashboard:
+    build:
+      context: ./apps/hindsight-dashboard
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_HINDSIGHT_SERVICE_API_URL: /api # Point to the proxy path
+    container_name: hindsight-dashboard
+    environment:
+      REACT_APP_HINDSIGHT_SERVICE_API_URL: /api # Point to the proxy path
+    depends_on:
+      - hindsight-service
+    networks:
+      - hindsight-ai
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hindsight-dashboard.rule=Host(`www.hindsight-ai.com`) && PathPrefix(`/`)"
+      - "traefik.http.routers.hindsight-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-dashboard.tls.certresolver=myresolver"
+      - "traefik.http.services.hindsight-dashboard.loadbalancer.server.port=80"
+      - "traefik.http.routers.hindsight-dashboard.middlewares=oauth2-proxy-auth@docker"
+
+networks:
+  hindsight-ai:
+    driver: bridge
+
+volumes:
+  db_data:
+  acme.json:

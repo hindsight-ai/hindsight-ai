@@ -9,6 +9,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Define paths relative to the script's location
 DOCKER_COMPOSE_DIR="$SCRIPT_DIR/../postgres"
+DOCKER_COMPOSE_DIR="$SCRIPT_DIR/../../"
 DB_SERVICE_NAME="db"
 HINDSIGHT_SERVICE_DIR="$SCRIPT_DIR/../../apps/hindsight-service"
 

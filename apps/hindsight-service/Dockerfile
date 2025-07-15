@@ -27,6 +27,10 @@ COPY . ./
 # Expose the port the FastAPI application listens on
 EXPOSE 8000
 
-# Define the command to run the FastAPI application with Uvicorn
-# The app is located in core/api/main.py and the FastAPI instance is named 'app'
+# Make the entrypoint script executable
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Define the entrypoint to run migrations and then start the FastAPI application
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["uvicorn", "core.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
