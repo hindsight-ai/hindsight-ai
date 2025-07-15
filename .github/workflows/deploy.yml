@@ -2,7 +2,7 @@ name: Deploy Hindsight AI with Docker Compose
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feat/docker-compose-deployment ]
 
 jobs:
   build-and-push-hindsight-service:
