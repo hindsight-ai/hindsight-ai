@@ -19,8 +19,8 @@ services:
     image: traefik:v3.4.4
     container_name: traefik
     environment:
-      - CLOUDFLARE_EMAIL=${CLOUDFLARE_API_EMAIL}
-      - CLOUDFLARE_DNS_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - CLOUDFLARE_EMAIL=${CLOUDFLARE_DNS_EMAIL}
+      - CLOUDFLARE_DNS_API_TOKEN=${CLOUDFLARE_DNS_API_TOKEN}
     command:
       - "--configFile=/config/traefik.yml"
     ports:

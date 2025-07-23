@@ -163,8 +163,8 @@ Remote deployment is automated via a GitHub Actions workflow. The workflow build
         *   `SSH_USERNAME`: The username for SSH access to your remote server.
         *   `SSH_KEY`: The private SSH key for your remote server.
         *   `SSH_PORT`: The SSH port for your remote server (usually 22).
-        *   `CLOUDFLARE_API_EMAIL`: Your Cloudflare email address.
-        *   `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token.
+        *   `CLOUDFLARE_DNS_EMAIL`: Your Cloudflare email address.
+        *   `CLOUDFLARE_DNS_API_TOKEN`: Your Cloudflare API token.
         *   `OAUTH2_PROXY_CLIENT_ID`: Your Google OAuth2 client ID.
         *   `OAUTH2_PROXY_CLIENT_SECRET`: Your Google OAuth2 client secret.
         *   `OAUTH2_PROXY_COOKIE_SECRET`: A long, random string for the OAuth2 Proxy cookie secret.

@@ -92,8 +92,8 @@ jobs:
             cat <<EOF > .env
             HINDSIGHT_SERVICE_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-service:${{ github.sha }}
             HINDSIGHT_DASHBOARD_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:${{ github.sha }}
-            CLOUDFLARE_API_EMAIL=${{ secrets.CLOUDFLARE_API_EMAIL }}
-            CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }}
+            CLOUDFLARE_DNS_EMAIL=${{ secrets.CLOUDFLARE_DNS_EMAIL }}
+            CLOUDFLARE_DNS_API_TOKEN=${{ secrets.CLOUDFLARE_DNS_API_TOKEN }}
             OAUTH2_PROXY_CLIENT_ID=${{ secrets.OAUTH2_PROXY_CLIENT_ID }}
             OAUTH2_PROXY_CLIENT_SECRET=${{ secrets.OAUTH2_PROXY_CLIENT_SECRET }}
             OAUTH2_PROXY_COOKIE_SECRET=${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }}
@@ -116,7 +116,7 @@ jobs:
 
             # Replace email placeholder
             echo "Replacing email placeholder..."
-            ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} "sed -i 's/<email_placeholder>/${{ secrets.CLOUDFLARE_API_EMAIL }}/g' ~/hindsight-ai-project/config/traefik.yml"
+            ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} "sed -i 's/<email_placeholder>/${{ secrets.CLOUDFLARE_DNS_EMAIL }}/g' ~/hindsight-ai-project/config/traefik.yml"
 
             # Pull images and deploy
             echo "Pulling new images and deploying..."
