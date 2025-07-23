@@ -93,7 +93,18 @@ For detailed, step-by-step setup, continue with the instructions below:
     Wait a few moments for the database to initialize.
 
     **Configuring PostgreSQL Connection Details**:
-    The PostgreSQL database connection details can be configured using the `DATABASE_URL` environment variable in an `.env` file. An example is provided in `apps/hindsight-service/.env.example`. You can set the `DATABASE_URL` in the format `postgresql://user:password@host:port/database_name` in your `.env` file, and the `hindsight-service` backend will load these values at startup.
+    The PostgreSQL database connection details can be configured using environment variables in an `.env` file. An example is provided in `apps/hindsight-service/.env.example`.
+
+    For the PostgreSQL container itself (defined in `infra/postgres/docker-compose.yml`), you need to set:
+    ```
+    POSTGRES_USER=your_postgres_user
+    POSTGRES_PASSWORD=your_postgres_password
+    ```
+    For the `hindsight-service` backend to connect to the database, you need to set the `DATABASE_URL` in the format `postgresql://user:password@host:port/database_name`. This variable will load these values at startup.
+    Example:
+    ```
+    DATABASE_URL="postgresql://your_postgres_user:your_postgres_password@localhost:5432/hindsight_db"
+    ```
 
     **Apply Initial Database Schema**:
     The initial database schema is applied via SQL scripts. Ensure the database container is running. You might need a tool like `psql` or a general database client to apply the `infra/migrations/V1__initial_schema.sql` script.
@@ -172,6 +183,10 @@ Remote deployment is automated via a GitHub Actions workflow. The workflow build
         *   `LLM_MODEL_NAME`: The name of the LLM model you want to use.
         *   `CONSOLIDATION_BATCH_SIZE`: The batch size for the consolidation worker.
         *   `FALLBACK_SIMILARITY_THRESHOLD`: The similarity threshold for the fallback mechanism.
+        *   `POSTGRES_USER`: The username for the PostgreSQL database.
+        *   `POSTGRES_PASSWORD`: The password for the PostgreSQL database.
+        *   `POSTGRES_USER`: The username for the PostgreSQL database.
+        *   `POSTGRES_PASSWORD`: The password for the PostgreSQL database.
         *   `AUTHORIZED_EMAILS_CONTENT`: A comma-separated list of email addresses that are authorized to access the application.
 
 3.  **Deployment:**

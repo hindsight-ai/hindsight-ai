@@ -101,6 +101,7 @@ services:
       - "traefik.http.routers.hindsight-service-router.rule=Host(`api.hindsight-ai.com`)"
       - "traefik.http.routers.hindsight-service-router.entrypoints=websecure"
       - "traefik.http.routers.hindsight-service-router.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-service-router.middlewares=cors-headers@file"
       - "traefik.http.routers.hindsight-service-router.service=hindsight-service-svc@docker"
       - "traefik.http.services.hindsight-service-svc.loadbalancer.server.port=8000"
 

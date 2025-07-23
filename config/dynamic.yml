@@ -10,3 +10,20 @@ http:
           - "X-Auth-Request-User"
           - "X-Auth-Request-Email"
           - "X-Auth-Request-Access-Token"
+    cors-headers:
+      headers:
+        accessControlAllowOrigin:
+          - "https://dashboard.hindsight-ai.com"
+          - "http://localhost:3000"
+          - "http://localhost:3001"
+          - "http://localhost:8000"
+        accessControlAllowMethods:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "DELETE"
+          - "OPTIONS"
+        accessControlAllowHeaders:
+          - "*"
+        accessControlAllowCredentials: true
+        addVaryHeader: true
