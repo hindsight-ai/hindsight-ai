@@ -68,7 +68,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:latest
           file: apps/hindsight-dashboard/Dockerfile
           build-args: |
-            REACT_APP_HINDSIGHT_SERVICE_API_URL=https://api.hindsight-ai.com/api
+            REACT_APP_HINDSIGHT_SERVICE_API_URL=https://api.hindsight-ai.com
 
   deploy:
     needs: [build-and-push-hindsight-service, build-and-push-hindsight-dashboard]
@@ -114,7 +114,7 @@ jobs:
             FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            REACT_APP_HINDSIGHT_SERVICE_API_URL=https://api.hindsight-ai.com/api
+            REACT_APP_HINDSIGHT_SERVICE_API_URL=https://api.hindsight-ai.com
             EOF
 
             # Create authorized_emails.txt

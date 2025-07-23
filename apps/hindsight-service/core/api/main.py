@@ -43,7 +43,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-router = APIRouter(prefix="/api")
+router = APIRouter()
 
 @router.post("/agents/", response_model=schemas.Agent, status_code=status.HTTP_201_CREATED)
 def create_agent_endpoint(agent: schemas.AgentCreate, db: Session = Depends(get_db)):

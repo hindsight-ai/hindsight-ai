@@ -12,18 +12,10 @@ http:
           - "X-Auth-Request-Access-Token"
     cors-headers:
       headers:
-        accessControlAllowOrigin:
-          - "https://dashboard.hindsight-ai.com"
-          - "http://localhost:3000"
-          - "http://localhost:3001"
-          - "http://localhost:8000"
-        accessControlAllowMethods:
-          - "GET"
-          - "POST"
-          - "PUT"
-          - "DELETE"
-          - "OPTIONS"
-        accessControlAllowHeaders:
-          - "*"
-        accessControlAllowCredentials: true
-        addVaryHeader: true
+        customResponseHeaders:
+          Access-Control-Allow-Origin: "https://dashboard.hindsight-ai.com"
+          Access-Control-Allow-Methods: "GET, POST, PUT, DELETE, OPTIONS"
+          Access-Control-Allow-Headers: "Content-Type, Authorization"
+          Access-Control-Allow-Credentials: "true"
+        addVaryHeader: true # Re-add addVaryHeader for good measure
+
