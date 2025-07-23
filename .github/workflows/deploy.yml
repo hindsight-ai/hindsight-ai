@@ -116,7 +116,11 @@ jobs:
 
             # Replace email placeholder
             echo "Replacing email placeholder..."
-            ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} "sed -i 's/<email_placeholder>/${{ secrets.CLOUDFLARE_DNS_EMAIL }}/g' ~/hindsight-ai-project/config/traefik.yml"
+            ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} "sed -i 's/<email_placeholder>/${{ secrets.CLOUDFLARE_API_EMAIL }}/g' ~/hindsight-ai-project/config/traefik.yml"
+
+            # Recreate acme.json for Let's Encrypt
+            echo "Recreating acme.json..."
+            ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} "mkdir -p ~/hindsight-ai-project/letsencrypt && rm -f ~/hindsight-ai-project/letsencrypt/acme.json && touch ~/hindsight-ai-project/letsencrypt/acma.json && chmod 600 ~/hindsight-ai-project/letsencrypt/acme.json"
 
             # Pull images and deploy
             echo "Pulling new images and deploying..."
