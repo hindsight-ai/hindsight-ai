@@ -4,8 +4,8 @@ services:
     restart: always
     environment:
       POSTGRES_DB: hindsight_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -88,7 +88,7 @@ services:
     networks:
       - hindsight-ai
     environment:
-      DATABASE_URL: postgresql://user:password@db:5432/hindsight_db
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/hindsight_db
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME}
       CONSOLIDATION_BATCH_SIZE: ${CONSOLIDATION_BATCH_SIZE}

@@ -105,8 +105,8 @@ jobs:
             LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
             CONSOLIDATION_BATCH_SIZE=${{ secrets.CONSOLIDATION_BATCH_SIZE }}
             FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}
-            POSTGRES_USER=user
-            POSTGRES_PASSWORD=password
+            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             EOF
 
             # Create authorized_emails.txt
