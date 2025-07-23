@@ -114,6 +114,7 @@ jobs:
             FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            REACT_APP_HINDSIGHT_SERVICE_API_URL=https://api.hindsight-ai.com/api
             EOF
 
             # Create authorized_emails.txt
