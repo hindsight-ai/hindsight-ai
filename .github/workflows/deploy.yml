@@ -61,7 +61,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:latest
           file: apps/hindsight-dashboard/Dockerfile
           build-args: |
-            REACT_APP_HINDSIGHT_SERVICE_API_URL=/api
+            REACT_APP_HINDSIGHT_SERVICE_API_URL=https://api.hindsight-ai.com/api
 
   deploy:
     needs: [build-and-push-hindsight-service, build-and-push-hindsight-dashboard]

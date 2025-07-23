@@ -110,10 +110,10 @@ services:
       context: ./apps/hindsight-dashboard
       dockerfile: Dockerfile
       args:
-        REACT_APP_HINDSIGHT_SERVICE_API_URL: https://api.hindsight-ai.com # Point to the new API subdomain
+        REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL}
     container_name: hindsight-dashboard
     environment:
-      REACT_APP_HINDSIGHT_SERVICE_API_URL: https://api.hindsight-ai.com # Point to the new API subdomain
+      REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL}
     depends_on:
       - hindsight-service
     networks:
