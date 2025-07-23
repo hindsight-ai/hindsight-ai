@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Access Denied</title>
+    <link rel="stylesheet" href="/oauth2/static/css/bulma.min.css">
+    <link rel="stylesheet" href="/oauth2/static/css/all.min.css">
+    <style>
+        body { background-color: #f9f9f9; font-family: Arial, sans-serif; }
+        .container { max-width: 600px; margin: 100px auto; padding: 20px; text-align: center; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #d32f2f; font-size: 5em; margin-bottom: 0; }
+        h2 { color: #333; }
+        p { color: #666; line-height: 1.6; }
+        .buttons { justify-content: center; }
+        .button.is-danger { background-color: #f14668; }
+        .button.is-success { background-color: #48c774; }
+        .footer { margin-top: 20px; font-size: 0.8em; color: #999; }
+    </style>
+</head>
+<body>
+    <section class="section">
+        <div class="container">
+            <h1>403</h1>
+            <h2>Forbidden</h2>
+            <p>Sorry, your email address is not authorized to access this application. Please use an approved account or contact the administrator for assistance.</p>
+            <p><strong>Admin Contact:</strong> <a href="mailto:ibarz.jean@gmail.com">ibarz.jean@gmail.com</a></p>
+            <div class="field is-grouped buttons">
+                <a class="button is-danger" href="javascript:history.back()">Go back</a>
+                <a class="button is-success" href="/oauth2/sign_out">Sign Out</a>
+            </div>
+            <div class="dropdown is-hoverable">
+                <div class="dropdown-trigger">
+                    <button class="button is-link is-light" aria-haspopup="true" aria-controls="dropdown-menu">
+                        <span>More Info</span>
+                        <span class="icon is-small">
+                            <i class="fas fa-angle-down" aria-hidden="true"></i>
+                        </span>
+                    </button>
+                </div>
+                <div class="dropdown-menu" id="dropdown-menu" role="menu">
+                    <div class="dropdown-content">
+                        <div class="dropdown-item">
+                            <p>If you believe this is an error, please contact support.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="footer">Secured with OAuth2 Proxy version 7.6.0</p>
+        </div>
+    </section>
+</body>
+</html>
