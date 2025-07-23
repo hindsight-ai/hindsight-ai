@@ -71,6 +71,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set permissions for all files
+        run: |
+          chmod -R 755 config
+          chmod -R 755 templates
+          chmod 755 docker-compose.yml
+
       - name: Copy files to remote server via scp
         uses: appleboy/scp-action@master
         with:
