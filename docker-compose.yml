@@ -61,10 +61,13 @@ services:
       OAUTH2_PROXY_COOKIE_SECURE: "true"
       OAUTH2_PROXY_COOKIE_DOMAIN: ".hindsight-ai.com"
       OAUTH2_PROXY_COOKIE_SAMESITE: lax
+    command:
+      - "--custom-templates-dir=/templates"
     networks:
       - hindsight-ai
     volumes:
       - ./authorized_emails.txt:/etc/oauth2-proxy/authorized_emails.txt:ro
+      - ./templates:/templates:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.oauth2-proxy.rule=(Host(`dashboard.hindsight-ai.com`) || Host(`api.hindsight-ai.com`) || Host(`traefik.hindsight-ai.com`)) && PathPrefix(`/oauth2`)"

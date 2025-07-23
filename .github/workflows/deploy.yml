@@ -78,7 +78,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: "docker-compose.yml,config/"
+          source: "docker-compose.yml,config/,templates/"
           target: "~/hindsight-ai-project"
 
       - name: Execute deployment commands on remote server
