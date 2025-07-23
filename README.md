@@ -130,6 +130,73 @@ For detailed, step-by-step setup, continue with the instructions below:
 
 You now have the entire Hindsight AI system running locally.
 
+## Deployment
+
+This section provides instructions for deploying the Hindsight AI application using Docker Compose, both locally and to a remote server.
+
+### Local Deployment
+
+For local development, you can use Docker Compose to build and run the services directly from the source code.
+
+1.  **Create a `.env` file:**
+    *   Copy the `.env.example` file to a new file named `.env`.
+    *   Fill in the required values for your local environment. You can leave `HINDSIGHT_SERVICE_IMAGE` and `HINDSIGHT_DASHBOARD_IMAGE` as they are, since Docker Compose will build the images from the source code.
+
+2.  **Run Docker Compose:**
+    *   From the root of the project, run the following command:
+        ```bash
+        docker-compose up --build
+        ```
+    *   This will build the Docker images for the `hindsight-service` and `hindsight-dashboard` and start all the services defined in the `docker-compose.yml` file.
+
+### Remote Deployment
+
+Remote deployment is automated via a GitHub Actions workflow. The workflow builds the Docker images, pushes them to the GitHub Container Registry, and then deploys them to a remote server using Docker Compose.
+
+1.  **Prerequisites:**
+    *   A remote server with Docker and Docker Compose installed.
+    *   SSH access to the remote server.
+
+2.  **Configure GitHub Secrets:**
+    *   In your GitHub repository, go to `Settings > Secrets and variables > Actions` and add the following secrets:
+        *   `SSH_HOST`: The IP address or hostname of your remote server.
+        *   `SSH_USERNAME`: The username for SSH access to your remote server.
+        *   `SSH_KEY`: The private SSH key for your remote server.
+        *   `SSH_PORT`: The SSH port for your remote server (usually 22).
+        *   `CLOUDFLARE_API_EMAIL`: Your Cloudflare email address.
+        *   `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token.
+        *   `OAUTH2_PROXY_CLIENT_ID`: Your Google OAuth2 client ID.
+        *   `OAUTH2_PROXY_CLIENT_SECRET`: Your Google OAuth2 client secret.
+        *   `OAUTH2_PROXY_COOKIE_SECRET`: A long, random string for the OAuth2 Proxy cookie secret.
+        *   `LLM_API_KEY`: Your API key for the LLM service.
+        *   `LLM_MODEL_NAME`: The name of the LLM model you want to use.
+        *   `CONSOLIDATION_BATCH_SIZE`: The batch size for the consolidation worker.
+        *   `FALLBACK_SIMILARITY_THRESHOLD`: The similarity threshold for the fallback mechanism.
+        *   `AUTHORIZED_EMAILS_CONTENT`: A comma-separated list of email addresses that are authorized to access the application.
+
+3.  **Deployment:**
+    *   Pushing to the `main` or `feat/docker-compose-deployment` branch will trigger the GitHub Actions workflow.
+    *   The workflow will automatically build and push the Docker images, and then deploy the application to your remote server.
+
+### Google OAuth2 Provider Configuration
+
+To use Google as an OAuth2 provider, you need to create a project in the [Google Cloud Console](https://console.cloud.google.com/) and configure the OAuth2 consent screen and credentials.
+
+1.  **Create a new project.**
+2.  **Configure the OAuth consent screen:**
+    *   Select "External" for the user type.
+    *   Fill in the required information (app name, user support email, etc.).
+    *   Add the following authorized domains:
+        *   `hindsight-ai.com`
+        *   `google.com`
+3.  **Create OAuth 2.0 client IDs:**
+    *   Select "Web application" for the application type.
+    *   Add the following authorized redirect URIs:
+        *   `https://dashboard.hindsight-ai.com/oauth2/callback`
+        *   `https://api.hindsight-ai.com/oauth2/callback`
+        *   `https://traefik.hindsight-ai.com/oauth2/callback`
+    *   Copy the "Client ID" and "Client secret" and add them to your GitHub secrets as `OAUTH2_PROXY_CLIENT_ID` and `OAUTH2_PROXY_CLIENT_SECRET`.
+
 ## Database Backup and Restore
 
 A full backup and restore of the Hindsight AI PostgreSQL database (`hindsight_db`) can be performed using the `backup_db.sh` and `restore_db.sh` shell scripts located in `infra/scripts/`.

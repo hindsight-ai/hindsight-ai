@@ -76,12 +76,7 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
-      - name: Copy files to remote server
-        run: |
-          scp -P ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null docker-compose.yml ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/hindsight-ai-project/docker-compose.yml
-          scp -r -P ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null apps ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/hindsight-ai-project/apps
-
-      - name: Deploy with Docker Compose
+      - name: Deploy to remote server
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -90,29 +85,41 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             mkdir -p ~/hindsight-ai-project
-
             cd ~/hindsight-ai-project
 
-            # Create .env file on the server from GitHub Secrets
-            echo "Creating .env file on server..."
-            echo "OAUTH2_PROXY_CLIENT_ID=${{ secrets.OAUTH2_PROXY_CLIENT_ID }}" > .env
-            echo "OAUTH2_PROXY_CLIENT_SECRET=${{ secrets.OAUTH2_PROXY_CLIENT_SECRET }}" >> .env
-            echo "OAUTH2_PROXY_COOKIE_SECRET=${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }}" >> .env
-            echo "POSTGRES_USER=user" >> .env
-            echo "POSTGRES_PASSWORD=password" >> .env
-            echo "LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> .env
-            echo "LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}" >> .env
-            echo "CONSOLIDATION_BATCH_SIZE=${{ secrets.CONSOLIDATION_BATCH_SIZE }}" >> .env
-            echo "FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}" >> .env
-            echo ".env file created."
+            # Create .env file
+            echo "Creating .env file..."
+            cat <<EOF > .env
+            HINDSIGHT_SERVICE_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-service:${{ github.sha }}
+            HINDSIGHT_DASHBOARD_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:${{ github.sha }}
+            CLOUDFLARE_API_EMAIL=${{ secrets.CLOUDFLARE_API_EMAIL }}
+            CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }}
+            OAUTH2_PROXY_CLIENT_ID=${{ secrets.OAUTH2_PROXY_CLIENT_ID }}
+            OAUTH2_PROXY_CLIENT_SECRET=${{ secrets.OAUTH2_PROXY_CLIENT_SECRET }}
+            OAUTH2_PROXY_COOKIE_SECRET=${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }}
+            LLM_API_KEY=${{ secrets.LLM_API_KEY }}
+            LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
+            CONSOLIDATION_BATCH_SIZE=${{ secrets.CONSOLIDATION_BATCH_SIZE }}
+            FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}
+            POSTGRES_USER=user
+            POSTGRES_PASSWORD=password
+            EOF
 
-            # Create authorized_emails.txt on the server from GitHub Secret
-            echo "Creating authorized_emails.txt on server..."
+            # Create authorized_emails.txt
+            echo "Creating authorized_emails.txt..."
             echo "${{ secrets.AUTHORIZED_EMAILS_CONTENT }}" > authorized_emails.txt
-            echo "authorized_emails.txt created."
 
-            # Pull latest images and deploy
-            echo "Pulling latest Docker images and deploying..."
-            docker compose pull
-            docker compose up -d --build --force-recreate
-            echo "Deployment completed!"
+            # Copy configuration files
+            echo "Copying configuration files..."
+            scp -P ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ${{ github.workspace }}/config ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/hindsight-ai-project/
+            scp -P ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ github.workspace }}/docker-compose.yml ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:~/hindsight-ai-project/docker-compose.yml
+
+            # Replace email placeholder
+            echo "Replacing email placeholder..."
+            ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }} "sed -i 's/<email_placeholder>/${{ secrets.CLOUDFLARE_API_EMAIL }}/g' ~/hindsight-ai-project/config/traefik.yml"
+
+            # Pull images and deploy
+            echo "Pulling new images and deploying..."
+            docker compose -f docker-compose.yml pull
+            docker compose -f docker-compose.yml up -d --force-recreate
+            echo "Deployment successful!"
