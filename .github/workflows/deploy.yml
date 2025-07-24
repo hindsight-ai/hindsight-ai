@@ -139,5 +139,5 @@ jobs:
             # Pull new images and deploy
             echo "Pulling new images and deploying..."
             docker compose pull
-            docker compose up -d --force-recreate
+            docker compose --profile prod up -d --force-recreate
             echo "Deployment successful!"
