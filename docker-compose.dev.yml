@@ -1,0 +1,24 @@
+services:
+  # Override the db service to expose port 5432 for local access if needed
+  db:
+    ports:
+      - "5432:5432"
+
+  # Override the hindsight-service to expose port 8000 directly
+  hindsight-service:
+    ports:
+      - "8000:8000"
+    # Ensure the API URL for the dashboard points to localhost:8000
+    environment:
+      REACT_APP_HINDSIGHT_SERVICE_API_URL: http://localhost:8000
+
+  # Override the hindsight-dashboard to expose port 3000 directly
+  hindsight-dashboard:
+    ports:
+      - "3000:80"
+    # Set the API URL to localhost:8000 for the frontend
+    build:
+      args:
+        REACT_APP_HINDSIGHT_SERVICE_API_URL: http://localhost:8000
+    environment:
+      REACT_APP_HINDSIGHT_SERVICE_API_URL: http://localhost:8000

@@ -2,39 +2,43 @@
 
 set -e
 
-# Define paths
-POSTGRES_DIR="infra/postgres"
-BACKEND_DIR="apps/hindsight-service"
-DASHBOARD_DIR="apps/hindsight-dashboard"
+echo "Stopping Hindsight AI services..."
 
-echo "Stopping dashboard..."
+# Check if Docker Compose services are running
+if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps | grep -q "Up"; then
+    echo "Stopping Docker Compose services..."
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+    echo "✅ Docker Compose services stopped."
+else
+    echo "No Docker Compose services found running."
+fi
+
+# Also stop any legacy processes that might be running on ports
+echo "Checking for legacy processes on ports 3000 and 8000..."
+
+# Stop dashboard on port 3000
 PIDS_3000=$(lsof -t -i:3000 || true)
 if [ -n "$PIDS_3000" ]; then
-    echo "Killing processes on port 3000 (PIDs: $PIDS_3000)"
+    echo "Killing legacy processes on port 3000 (PIDs: $PIDS_3000)"
     for PID in $PIDS_3000; do
         kill "$PID" || true
     done
-    sleep 1 # Give it a moment to terminate
-else
-    echo "No process found listening on port 3000."
+    sleep 1
 fi
-rm -f "${DASHBOARD_DIR}/.dashboard.pid" || true
 
-echo "Stopping backend service..."
+# Stop backend on port 8000
 PIDS_8000=$(lsof -t -i:8000 || true)
 if [ -n "$PIDS_8000" ]; then
-    echo "Killing processes on port 8000 (PIDs: $PIDS_8000)"
+    echo "Killing legacy processes on port 8000 (PIDs: $PIDS_8000)"
     for PID in $PIDS_8000; do
         kill "$PID" || true
     done
-    sleep 1 # Give it a moment to terminate
-else
-    echo "No process found listening on port 8000."
+    sleep 1
 fi
-rm -f "${BACKEND_DIR}/.backend.pid" || true
 
-echo "Stopping PostgreSQL database..."
-(cd "${POSTGRES_DIR}" && docker compose down)
+# Clean up legacy PID files
+rm -f "apps/hindsight-dashboard/.dashboard.pid" || true
+rm -f "apps/hindsight-service/.backend.pid" || true
 
 echo "All Hindsight services stopped."
 

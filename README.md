@@ -57,108 +57,135 @@ AI agents can report explicit feedback on the utility or correctness of a previo
 
 ## Quick Start Guide
 
-For a quick setup and teardown of all Hindsight AI services, use the provided convenience scripts. By default, the backend service runs on `http://localhost:8000`, and the frontend dashboard runs on `http://localhost:3000`.
+Get Hindsight AI running in minutes with Docker Compose.
 
-*   **Start All Services**: `./start_hindsight.sh`
-    This script automates the entire setup and launch of all Hindsight AI components in a single command:
-    1.  **PostgreSQL Database**: Starts the database using Docker Compose.
-    2.  **Database Migrations**: Applies necessary database schema migrations for the backend service.
-    3.  **Backend Service**: Launches the Python FastAPI backend on `http://localhost:8000`.
-    4.  **Frontend Dashboard**: Starts the React development server for the dashboard on `http://localhost:3000`.
-    The script includes checks to prevent starting services that are already running. This provides a quick way to get all services up and running compared to manually starting individual services, which offers more granular control.
+### Prerequisites
+- Docker and Docker Compose
+- Git
 
-*   **Stop All Services**: `./stop_hindsight.sh`
-    This script will gracefully terminate processes listening on ports 3000 and 8000, and shut down the Dockerized PostgreSQL database. This provides a quick way to stop all Hindsight AI services.
+### 1. Clone and Setup
+```bash
+git clone https://github.com/your-repo/hindsight-ai.git
+cd hindsight-ai
+cp .env.example .env
+```
 
-For detailed, step-by-step setup, continue with the instructions below:
+### 2. Configure Environment
+Edit `.env` and add your LLM API key:
+```bash
+# Required for local development
+LLM_API_KEY=your_api_key_here
+LLM_MODEL_NAME=gemini-1.5-flash
+```
 
-1.  **Prerequisites**:
-    To set up and run the entire Hindsight AI project locally, the essential prerequisites (software and tools) are:
-    *   Docker and Docker Compose
-    *   Python 3.13+ and `uv` (or `pipenv`/`poetry`)
-    *   Node.js and npm (or yarn)
+### 3. Start Services
+```bash
+./start_hindsight.sh
+```
 
-2.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/your-repo/hindsight-ai.git
-    cd hindsight-ai
-    ```
+This will:
+- Start PostgreSQL database
+- Apply database migrations
+- Launch backend service on http://localhost:8000
+- Launch frontend dashboard on http://localhost:3000
 
-3.  **Set up Infrastructure (PostgreSQL)**:
-    To set up and initialize the PostgreSQL database for Hindsight AI, first navigate to the `infra/postgres` directory and start the database using Docker Compose:
-    ```bash
-    cd infra/postgres
-    docker-compose up -d
-    ```
-    Wait a few moments for the database to initialize.
+### 4. Stop Services
+```bash
+./stop_hindsight.sh
+```
 
-    **Configuring PostgreSQL Connection Details**:
-    The PostgreSQL database connection details can be configured using environment variables in an `.env` file. An example is provided in `apps/hindsight-service/.env.example`.
+## Local Development with Docker Compose
 
-    For the PostgreSQL container itself (defined in `infra/postgres/docker-compose.yml`), you need to set:
-    ```
-    POSTGRES_USER=your_postgres_user
-    POSTGRES_PASSWORD=your_postgres_password
-    ```
-    For the `hindsight-service` backend to connect to the database, you need to set the `DATABASE_URL` in the format `postgresql://user:password@host:port/database_name`. This variable will load these values at startup.
-    Example:
-    ```
-    DATABASE_URL="postgresql://your_postgres_user:your_postgres_password@localhost:5432/hindsight_db"
-    ```
+For development with hot-reload and debugging capabilities:
 
-    **Apply Initial Database Schema**:
-    The initial database schema is applied via SQL scripts. Ensure the database container is running. You might need a tool like `psql` or a general database client to apply the `infra/migrations/V1__initial_schema.sql` script.
-    ```bash
-    # For example, if using psql from your host:
-    # psql -h localhost -p 5432 -U user -d hindsight_db -f ../migrations/V1__initial_schema.sql
-    # (Replace `user` with your configured user and `hindsight_db` with your database name if different)
-    ```
-    The `hindsight-service` handles its own database migrations using Alembic *after* this initial database schema has been applied. The initial schema sets up the base database, while Alembic manages subsequent schema changes over time.
+### Start Development Environment
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
 
-4.  **Set up and Run Hindsight Service (Backend)**:
-    Navigate to the `apps/hindsight-service` directory, install dependencies, and run the service. The `uv` tool is used for Python dependency management and for running the `hindsight-service` backend. It is recommended for managing Python environments and executing the backend application due to its speed and efficiency.
-    The recommended way to install Python dependencies for the `hindsight-service` is by using `uv`:
-    ```bash
-    cd ../../apps/hindsight-service
-    uv sync # or poetry install / pipenv install
-    uv run uvicorn core.api.main:app --reload
-    ```
+Services available at:
+- **Frontend Dashboard**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **Database**: localhost:5432
 
-    To manually start the Hindsight Service (backend) with hot-reloading for development, navigate to the `apps/hindsight-service` directory and run:
-    ```bash
-    uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000 --reload
-    ```
-    The `--reload` flag enables hot-reloading, meaning the server will automatically restart when code changes are detected. Logs will be visible directly in your terminal. The backend service should now be running, typically on `http://localhost:8000`.
+### Stop Development Environment
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+```
 
-5.  **Set up and Run Hindsight Dashboard (Frontend)**:
-    In a new terminal, navigate to the `apps/hindsight-dashboard` directory, install dependencies if not already done (`npm install`), and then start the development server:
-    ```bash
-    cd ../../apps/hindsight-dashboard
-    npm install # or yarn install
-    npm start # or yarn start
-    ```
-    The frontend dashboard should open in your browser, typically on `http://localhost:3000`. `npm start` typically includes hot-reloading by default for React applications, and logs will be displayed in your terminal.
+## Advanced Setup (Manual)
 
-You now have the entire Hindsight AI system running locally.
+For developers who need granular control or want to run services outside Docker:
+
+### Prerequisites
+- Python 3.13+ with `uv` (or pipenv/poetry)
+- Node.js and npm
+- PostgreSQL (or use Docker for database)
+
+### 1. Database Setup
+```bash
+cd infra/postgres
+docker-compose up -d
+```
+
+### 2. Backend Service
+```bash
+cd apps/hindsight-service
+uv sync  # Install dependencies
+uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 3. Frontend Dashboard
+```bash
+cd apps/hindsight-dashboard
+npm install
+npm start
+```
 
 ## Deployment
 
 This section provides instructions for deploying the Hindsight AI application using Docker Compose, both locally and to a remote server.
 
-### Local Deployment
+### Local Development with Docker Compose
 
-For local development, you can use Docker Compose to build and run the services directly from the source code.
+For local development, you can use Docker Compose to build and run the services directly from the source code. This setup uses Docker Compose profiles to exclude production services like Traefik and OAuth2 proxy, making local development simpler.
 
 1.  **Create a `.env` file:**
     *   Copy the `.env.example` file to a new file named `.env`.
     *   Fill in the required values for your local environment. You can leave `HINDSIGHT_SERVICE_IMAGE` and `HINDSIGHT_DASHBOARD_IMAGE` as they are, since Docker Compose will build the images from the source code.
 
-2.  **Run Docker Compose:**
+2.  **Start Services for Local Development:**
     *   From the root of the project, run the following command:
         ```bash
-        docker-compose up --build
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
         ```
-    *   This will build the Docker images for the `hindsight-service` and `hindsight-dashboard` and start all the services defined in the `docker-compose.yml` file.
+    *   This will build the Docker images for the `hindsight-service` and `hindsight-dashboard` and start the database, backend, and frontend services.
+    *   The services will be accessible at:
+        *   **Frontend Dashboard**: http://localhost:3000
+        *   **Backend API**: http://localhost:8000
+        *   **Database**: localhost:5432 (if you need direct access)
+
+3.  **Stop Services:**
+    *   Press `Ctrl+C` to stop the services, or run:
+        ```bash
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+        ```
+
+### Production Deployment with Docker Compose
+
+For production deployment, you can use the same Docker Compose setup but include the production profile to enable Traefik and OAuth2 proxy.
+
+1.  **Create a `.env` file:**
+    *   Copy the `.env.example` file to a new file named `.env`.
+    *   Fill in all required values including production-specific ones like OAuth2 credentials and Cloudflare settings.
+
+2.  **Start Services for Production:**
+    *   From the root of the project, run the following command:
+        ```bash
+        docker compose --profile prod -f docker-compose.yml up -d --build
+        ```
+    *   This will build the Docker images and start all services including Traefik for reverse proxy and OAuth2 proxy for authentication.
+    *   Services will be accessible via your configured domain names (e.g., https://dashboard.hindsight-ai.com, https://api.hindsight-ai.com).
 
 ### Remote Deployment
 
