@@ -100,7 +100,7 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.hindsight-service-router-public.rule=Host(`api.hindsight-ai.com`) && PathPrefix(`/user-info`)"
+      - "traefik.http.routers.hindsight-service-router-public.rule=Host(`api.hindsight-ai.com`) && (PathPrefix(`/user-info`) || PathPrefix(`/build-info`))"
       - "traefik.http.routers.hindsight-service-router-public.entrypoints=websecure"
       - "traefik.http.routers.hindsight-service-router-public.tls.certresolver=letsencrypt"
       - "traefik.http.routers.hindsight-service-router-public.middlewares=cors-headers@file"
