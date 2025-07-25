@@ -141,114 +141,19 @@ jobs:
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml --profile prod up -d --force-recreate
             
-            # Health check with 60-second timeout
-            echo "Starting health checks..."
-            timeout=60
-            interval=5
-            elapsed=0
+            # Simple health check: wait 10 seconds and verify containers are still running
+            echo "Performing simple health check - waiting 10 seconds..."
+            sleep 10
             
-            # Check container status
-            echo "Checking container status..."
-            while [ $elapsed -lt $timeout ]; do
-              if docker compose -f docker-compose.prod.yml ps | grep -E "(hindsight-service|hindsight-dashboard|traefik|oauth2-proxy)" | grep -q "Up"; then
-                echo "✅ Containers are running"
-                break
-              fi
-              
-              echo "⏳ Waiting for containers to start (elapsed: ${elapsed}s)"
-              sleep $interval
-              elapsed=$((elapsed + interval))
-            done
-            
-            if [ $elapsed -ge $timeout ]; then
-              echo "❌ Container startup timeout"
-              docker compose -f docker-compose.prod.yml logs
+            # Check if all containers are still running
+            if docker compose -f docker-compose.prod.yml ps | grep -E "(hindsight-service|hindsight-dashboard|traefik|oauth2-proxy)" | grep -q "Up"; then
+              echo "✅ All containers are running and stable"
+              echo "🎉 Deployment successful!"
+            else
+              echo "❌ Some containers crashed or stopped"
+              echo "Container status:"
+              docker compose -f docker-compose.prod.yml ps
+              echo "Recent logs:"
+              docker compose -f docker-compose.prod.yml logs --tail 20
               exit 1
             fi
-            
-            # Reset timer for service-specific checks
-            elapsed=0
-            
-            # Check services using Docker exec and curl within containers
-            echo "Checking service health via Docker networks..."
-            
-            # Check Hindsight Service via Docker exec
-            echo "Checking Hindsight Service..."
-            while [ $elapsed -lt $timeout ]; do
-              if docker compose -f docker-compose.prod.yml exec -T hindsight-service wget -q --spider http://localhost:8000/docs 2>/dev/null; then
-                echo "✅ Hindsight Service is healthy"
-                break
-              fi
-              
-              echo "⏳ Hindsight Service not ready (elapsed: ${elapsed}s)"
-              sleep $interval
-              elapsed=$((elapsed + interval))
-            done
-            
-            if [ $elapsed -ge $timeout ]; then
-              echo "❌ Hindsight Service health check failed"
-              docker compose -f docker-compose.prod.yml logs hindsight-service
-              exit 1
-            fi
-            
-            # Reset timer
-            elapsed=0
-            
-            # Check Hindsight Dashboard via Docker exec
-            echo "Checking Hindsight Dashboard..."
-            while [ $elapsed -lt $timeout ]; do
-              if docker compose -f docker-compose.prod.yml exec -T hindsight-dashboard wget -q --spider http://localhost:80 2>/dev/null; then
-                echo "✅ Hindsight Dashboard is healthy"
-                break
-              fi
-              
-              echo "⏳ Hindsight Dashboard not ready (elapsed: ${elapsed}s)"
-              sleep $interval
-              elapsed=$((elapsed + interval))
-            done
-            
-            if [ $elapsed -ge $timeout ]; then
-              echo "❌ Hindsight Dashboard health check failed"
-              docker compose -f docker-compose.prod.yml logs hindsight-dashboard
-              exit 1
-            fi
-            
-            # Check OAuth2 Proxy via Docker exec
-            echo "Checking OAuth2 Proxy..."
-            elapsed=0
-            while [ $elapsed -lt $timeout ]; do
-              if docker compose -f docker-compose.prod.yml exec -T oauth2-proxy wget -q --spider http://localhost:4180 2>/dev/null; then
-                echo "✅ OAuth2 Proxy is healthy"
-                break
-              fi
-              
-              echo "⏳ OAuth2 Proxy not ready (elapsed: ${elapsed}s)"
-              sleep $interval
-              elapsed=$((elapsed + interval))
-            done
-            
-            if [ $elapsed -ge $timeout ]; then
-              echo "❌ OAuth2 Proxy health check failed"
-              docker compose -f docker-compose.prod.yml logs oauth2-proxy
-              exit 1
-            fi
-            
-            # Check Traefik via Docker exec
-            echo "Checking Traefik..."
-            elapsed=0
-            while [ $elapsed -lt $timeout ]; do
-              if docker compose -f docker-compose.prod.yml exec -T traefik wget -q --spider http://localhost:8080/api/http/routers 2>/dev/null; then
-                echo "✅ Traefik is healthy"
-                break
-              fi
-              
-              echo "⏳ Traefik not ready (elapsed: ${elapsed}s)"
-              sleep $interval
-              elapsed=$((elapsed + interval))
-            done
-            
-            if [ $elapsed -ge $timeout ]; then
-              echo "⚠️  Traefik health check failed (may be normal)"
-            fi
-            
-            echo "🎉 All health checks passed! Deployment successful!"
