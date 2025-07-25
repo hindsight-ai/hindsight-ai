@@ -42,27 +42,27 @@ function AppContent() {
     );
   }
 
-  if (!user || !user.authenticated) {
-    return (
-      <div className="App">
-        <header className="App-header">
-          <h1 className="app-title">AI Agent Memory Dashboard</h1>
-        </header>
-        <main>
-          <div className="auth-container">
-            <h2>Authentication Required</h2>
-            <p>Please sign in to access the AI Agent Memory Dashboard.</p>
-            <button 
-              className="auth-button" 
-              onClick={() => window.location.reload()}
-            >
-              Sign In
-            </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  // if (!user || !user.authenticated) {
+  //   return (
+  //     <div className="App">
+  //       <header className="App-header">
+  //         <h1 className="app-title">AI Agent Memory Dashboard</h1>
+  //       </header>
+  //       <main>
+  //         <div className="auth-container">
+  //           <h2>Authentication Required</h2>
+  //           <p>Please sign in to access the AI Agent Memory Dashboard.</p>
+  //           <button 
+  //             className="auth-button" 
+  //             onClick={() => window.location.reload()}
+  //           >
+  //             Sign In
+  //           </button>
+  //         </div>
+  //       </main>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="App">

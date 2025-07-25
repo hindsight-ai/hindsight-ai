@@ -97,11 +97,16 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.hindsight-service-router.rule=Host(`api.hindsight-ai.com`)"
-      - "traefik.http.routers.hindsight-service-router.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-service-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-service-router.middlewares=cors-headers@file"
-      - "traefik.http.routers.hindsight-service-router.service=hindsight-service-svc@docker"
+      - "traefik.http.routers.hindsight-service-router-public.rule=Host(`api.hindsight-ai.com`) && PathPrefix(`/user-info`)"
+      - "traefik.http.routers.hindsight-service-router-public.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-service-router-public.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-service-router-public.middlewares=cors-headers@file"
+      - "traefik.http.routers.hindsight-service-router-public.service=hindsight-service-svc@docker"
+      - "traefik.http.routers.hindsight-service-router-protected.rule=Host(`api.hindsight-ai.com`)"
+      - "traefik.http.routers.hindsight-service-router-protected.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-service-router-protected.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-service-router-protected.middlewares=cors-headers@file,oauth-middleware@file"
+      - "traefik.http.routers.hindsight-service-router-protected.service=hindsight-service-svc@docker"
       - "traefik.http.services.hindsight-service-svc.loadbalancer.server.port=8000"
 
   hindsight-dashboard:
