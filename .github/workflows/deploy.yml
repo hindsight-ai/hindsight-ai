@@ -85,7 +85,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: "docker-compose.yml,config/,templates/"
+          source: "docker-compose.prod.yml,config/,templates/,letsencrypt/"
           target: "~/hindsight-ai-project"
 
       - name: Execute deployment commands on remote server
@@ -138,6 +138,83 @@ jobs:
 
             # Pull new images and deploy
             echo "Pulling new images and deploying..."
-            docker compose pull
-            docker compose --profile prod up -d --force-recreate
-            echo "Deployment successful!"
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml --profile prod up -d --force-recreate
+            
+            # Health check with 60-second timeout
+            echo "Starting health checks..."
+            timeout=60
+            interval=5
+            elapsed=0
+            
+            # Function to check service health
+            check_service() {
+              local service_name=$1
+              local port=$2
+              local endpoint=$3
+              
+              echo "Checking $service_name health..."
+              while [ $elapsed -lt $timeout ]; do
+                if curl -f -s http://localhost:$port$endpoint > /dev/null 2>&1; then
+                  echo "✅ $service_name is healthy"
+                  return 0
+                fi
+                
+                echo "⏳ $service_name not ready yet (elapsed: ${elapsed}s)"
+                sleep $interval
+                elapsed=$((elapsed + interval))
+              done
+              
+              echo "❌ $service_name health check failed after ${timeout}s"
+              return 1
+            }
+            
+            # Check container status
+            echo "Checking container status..."
+            while [ $elapsed -lt $timeout ]; do
+              if docker compose -f docker-compose.prod.yml ps | grep -E "(hindsight-service|hindsight-dashboard|traefik|oauth2-proxy)" | grep -q "Up"; then
+                echo "✅ Containers are running"
+                break
+              fi
+              
+              echo "⏳ Waiting for containers to start (elapsed: ${elapsed}s)"
+              sleep $interval
+              elapsed=$((elapsed + interval))
+            done
+            
+            if [ $elapsed -ge $timeout ]; then
+              echo "❌ Container startup timeout"
+              docker compose -f docker-compose.prod.yml logs
+              exit 1
+            fi
+            
+            # Reset timer for individual service checks
+            elapsed=0
+            
+            # Check individual services
+            check_service "Hindsight Service" 8000 "/health" || {
+              echo "Hindsight Service logs:"
+              docker compose -f docker-compose.prod.yml logs hindsight-service
+              exit 1
+            }
+            
+            check_service "Hindsight Dashboard" 80 "/" || {
+              echo "Hindsight Dashboard logs:"
+              docker compose -f docker-compose.prod.yml logs hindsight-dashboard
+              exit 1
+            }
+            
+            check_service "OAuth2 Proxy" 4180 "/ping" || {
+              echo "OAuth2 Proxy logs:"
+              docker compose -f docker-compose.prod.yml logs oauth2-proxy
+              exit 1
+            }
+            
+            # Check Traefik dashboard (internal)
+            if docker compose -f docker-compose.prod.yml exec traefik wget -q --spider http://localhost:8080/dashboard/ 2>/dev/null; then
+              echo "✅ Traefik dashboard is accessible"
+            else
+              echo "⚠️  Traefik dashboard check failed (may be normal)"
+            fi
+            
+            echo "🎉 All health checks passed! Deployment successful!"
