@@ -35,6 +35,12 @@ jobs:
           VERSION=$(cat apps/hindsight-service/pyproject.toml | grep -E "^version\s*=" | sed -E 's/version\s*=\s*"([^"]+)"$/\1/')
           echo "BACKEND_VERSION=$VERSION" >> $GITHUB_ENV
 
+      - name: Set build timestamp
+        id: build-timestamp
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "BUILD_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+
       - name: Build and push Hindsight Service Docker image
         id: build-push-service
         uses: docker/build-push-action@v5
