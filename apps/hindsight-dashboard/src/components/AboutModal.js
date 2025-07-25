@@ -22,22 +22,29 @@ const AboutModal = ({ isOpen, onClose }) => {
       // Fetch backend build information
       const backendData = await getBuildInfo();
       setBackendInfo(backendData);
-      
-      // Get frontend build information from environment variables
-      const frontendData = {
-        service_name: "AI Agent Memory Dashboard",
-        version: process.env.REACT_APP_VERSION,
-        build_sha: process.env.REACT_APP_BUILD_SHA,
-        build_timestamp: process.env.REACT_APP_BUILD_TIMESTAMP,
-        image_tag: process.env.REACT_APP_DASHBOARD_IMAGE_TAG
-      };
-      setFrontendInfo(frontendData);
     } catch (err) {
-      console.error('Error fetching build info:', err);
-      setError('Failed to load build information');
-    } finally {
-      setLoading(false);
+      console.error('Error fetching backend build info:', err);
+      setBackendInfo({
+        service_name: "Hindsight Service",
+        version: "unknown",
+        build_sha: "unknown",
+        build_timestamp: "unknown",
+        image_tag: "unknown",
+        error: "Failed to fetch backend build information"
+      });
     }
+    
+    // Get frontend build information from environment variables
+    const frontendData = {
+      service_name: "AI Agent Memory Dashboard",
+      version: process.env.REACT_APP_VERSION || "unknown",
+      build_sha: process.env.REACT_APP_BUILD_SHA || "unknown",
+      build_timestamp: process.env.REACT_APP_BUILD_TIMESTAMP || "unknown",
+      image_tag: process.env.REACT_APP_DASHBOARD_IMAGE_TAG || "unknown"
+    };
+    setFrontendInfo(frontendData);
+    
+    setLoading(false);
   };
 
   if (!isOpen) return null;
@@ -56,6 +63,11 @@ const AboutModal = ({ isOpen, onClose }) => {
           {backendInfo && (
             <div className="build-info-section">
               <h3>Backend Service</h3>
+              {backendInfo.error && (
+                <div className="error" style={{ marginBottom: '15px' }}>
+                  ⚠️ {backendInfo.error}
+                </div>
+              )}
               <div className="build-info">
                 <div className="info-item">
                   <label>Service:</label>
