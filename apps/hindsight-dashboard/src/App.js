@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useLocation } from 'react-router-dom';
 import MemoryBlockList from './components/MemoryBlockList';
 import MemoryBlockDetail from './components/MemoryBlockDetail';
@@ -6,22 +6,77 @@ import KeywordManager from './components/KeywordManager';
 import AgentManagementPage from './components/AgentManagementPage';
 import ConsolidationSuggestions from './components/ConsolidationSuggestions';
 import ConsolidationSuggestionDetail from './components/ConsolidationSuggestionDetail';
-import ArchivedMemoryBlockList from './components/ArchivedMemoryBlockList'; // Import ArchivedMemoryBlockList
+import ArchivedMemoryBlockList from './components/ArchivedMemoryBlockList';
+import authService from './api/authService';
 import './App.css';
 
 function AppContent() {
   const location = useLocation();
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUserInfo();
+  }, []);
+
+  const fetchUserInfo = async () => {
+    try {
+      const userInfo = await authService.getCurrentUser();
+      setUser(userInfo);
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="App">
+        <div className="loading-container">
+          <div className="loading-spinner">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || !user.authenticated) {
+    return (
+      <div className="App">
+        <header className="App-header">
+          <h1 className="app-title">AI Agent Memory Dashboard</h1>
+        </header>
+        <main>
+          <div className="auth-container">
+            <h2>Authentication Required</h2>
+            <p>Please sign in to access the AI Agent Memory Dashboard.</p>
+            <button 
+              className="auth-button" 
+              onClick={() => window.location.reload()}
+            >
+              Sign In
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="App">
       <header className="App-header">
         <div className="header-content">
           <h1 className="app-title">AI Agent Memory Dashboard</h1>
-          {(location.pathname === '/' || location.pathname === '/memory-blocks') && (
-            <Link to="/new-memory-block" className="add-button">
-              + Add New Memory Block
-            </Link>
-          )}
+          <div className="header-right">
+            <div className="user-info">
+              <span className="user-email">{user.email || user.user}</span>
+            </div>
+            {(location.pathname === '/' || location.pathname === '/memory-blocks') && (
+              <Link to="/new-memory-block" className="add-button">
+                + Add New Memory Block
+              </Link>
+            )}
+          </div>
         </div>
         <div className="header-bottom">
           <nav className="main-nav">
@@ -58,13 +113,13 @@ function AppContent() {
       <main>
         <Routes>
           <Route path="/" element={<MemoryBlockList key={location.pathname} />} />
-          <Route path="/memory-blocks" element={<MemoryBlockList key={location.pathname} />} /> {/* Added explicit route for /memory-blocks */}
+          <Route path="/memory-blocks" element={<MemoryBlockList key={location.pathname} />} />
           <Route path="/memory-blocks/:id" element={<MemoryBlockDetail />} />
           <Route path="/keywords" element={<KeywordManager />} />
           <Route path="/agents" element={<AgentManagementPage key={location.pathname} />} />
           <Route path="/consolidation-suggestions" element={<ConsolidationSuggestions key={location.pathname} />} />
           <Route path="/consolidation-suggestions/:id" element={<ConsolidationSuggestionDetail />} />
-          <Route path="/archived-memory-blocks" element={<ArchivedMemoryBlockList key={location.pathname} />} /> {/* New route for archived blocks */}
+          <Route path="/archived-memory-blocks" element={<ArchivedMemoryBlockList key={location.pathname} />} />
         </Routes>
       </main>
     </div>

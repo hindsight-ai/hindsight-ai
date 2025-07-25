@@ -11,6 +11,7 @@ services:
     # Ensure the API URL for the dashboard points to localhost:8000
     environment:
       REACT_APP_HINDSIGHT_SERVICE_API_URL: http://localhost:8000
+      DEV_MODE: "true"
 
   # Override the hindsight-dashboard to expose port 3000 directly
   hindsight-dashboard:

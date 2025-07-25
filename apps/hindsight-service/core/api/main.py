@@ -683,4 +683,34 @@ def delete_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Sessi
 def health_check():
     return {"status": "ok"}
 
+# User info endpoint for OAuth2 authentication
+@router.get("/user-info")
+def get_user_info(x_auth_request_user: Optional[str] = None, x_auth_request_email: Optional[str] = None):
+    """
+    Returns the authenticated user information from OAuth2 proxy headers.
+    These headers are set by the OAuth2 proxy when authentication is successful.
+    
+    For local development, bypasses authentication and returns mock user info.
+    """
+    # Check if we're in development mode
+    is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+    
+    if is_dev_mode:
+        # Development mode: bypass authentication
+        return {
+            "authenticated": True,
+            "user": "dev_user",
+            "email": "dev@localhost"
+        }
+    
+    # Production mode: check OAuth2 proxy headers
+    if not x_auth_request_user and not x_auth_request_email:
+        return {"authenticated": False, "message": "No authentication headers found"}
+    
+    return {
+        "authenticated": True,
+        "user": x_auth_request_user,
+        "email": x_auth_request_email
+    }
+
 app.include_router(router)
