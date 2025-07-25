@@ -151,6 +151,10 @@ jobs:
               echo "Skipping acme.json recreation."
             fi
 
+            # Authenticate with GitHub Container Registry
+            echo "Authenticating with GitHub Container Registry..."
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
             # Pull new images and deploy
             echo "Pulling new images and deploying..."
             docker compose -f docker-compose.prod.yml pull
