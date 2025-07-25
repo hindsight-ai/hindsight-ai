@@ -103,7 +103,7 @@ services:
       - "traefik.http.routers.hindsight-service-router.rule=Host(`api.hindsight-ai.com`)"
       - "traefik.http.routers.hindsight-service-router.entrypoints=websecure"
       - "traefik.http.routers.hindsight-service-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-service-router.middlewares=cors-headers@file"
+      - "traefik.http.routers.hindsight-service-router.middlewares=cors-headers@file,oauth-middleware@file"
       - "traefik.http.routers.hindsight-service-router.service=hindsight-service-svc@docker"
       - "traefik.http.services.hindsight-service-svc.loadbalancer.server.port=8000"
 
@@ -126,6 +126,7 @@ services:
       - "traefik.http.routers.hindsight-dashboard-router.rule=Host(`dashboard.hindsight-ai.com`) && PathPrefix(`/`)"
       - "traefik.http.routers.hindsight-dashboard-router.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-router.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-dashboard-router.middlewares=oauth-middleware@file"
       - "traefik.http.routers.hindsight-dashboard-router.service=hindsight-dashboard-svc@docker"
       - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
 
