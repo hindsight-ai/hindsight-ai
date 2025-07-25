@@ -683,6 +683,24 @@ def delete_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Sessi
 def health_check():
     return {"status": "ok"}
 
+@router.get("/build-info")
+def get_build_info():
+    """
+    Returns build and deployment information for the current running service.
+    """
+    build_sha = os.getenv("BUILD_SHA")
+    build_timestamp = os.getenv("BUILD_TIMESTAMP")
+    image_tag = os.getenv("IMAGE_TAG")
+    
+    # Return None for missing values instead of default strings
+    return {
+        "build_sha": build_sha if build_sha else None,
+        "build_timestamp": build_timestamp if build_timestamp else None,
+        "image_tag": image_tag if image_tag else None,
+        "service_name": "hindsight-service",
+        "version": "1.0.0"
+    }
+
 # User info endpoint for OAuth2 authentication
 @router.get("/user-info")
 def get_user_info(x_auth_request_user: Optional[str] = None, x_auth_request_email: Optional[str] = None):

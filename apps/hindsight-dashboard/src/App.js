@@ -7,6 +7,7 @@ import AgentManagementPage from './components/AgentManagementPage';
 import ConsolidationSuggestions from './components/ConsolidationSuggestions';
 import ConsolidationSuggestionDetail from './components/ConsolidationSuggestionDetail';
 import ArchivedMemoryBlockList from './components/ArchivedMemoryBlockList';
+import AboutModal from './components/AboutModal';
 import authService from './api/authService';
 import './App.css';
 
@@ -14,6 +15,7 @@ function AppContent() {
   const location = useLocation();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showAboutModal, setShowAboutModal] = useState(false);
 
   useEffect(() => {
     fetchUserInfo();
@@ -71,6 +73,9 @@ function AppContent() {
             <div className="user-info">
               <span className="user-email">{user.email || user.user}</span>
             </div>
+            <button className="about-button" onClick={() => setShowAboutModal(true)}>
+              About
+            </button>
             {(location.pathname === '/' || location.pathname === '/memory-blocks') && (
               <Link to="/new-memory-block" className="add-button">
                 + Add New Memory Block
@@ -122,6 +127,7 @@ function AppContent() {
           <Route path="/archived-memory-blocks" element={<ArchivedMemoryBlockList key={location.pathname} />} />
         </Routes>
       </main>
+      <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} />
     </div>
   );
 }

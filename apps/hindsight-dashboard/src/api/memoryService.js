@@ -217,6 +217,15 @@ const memoryService = {
     }
     return response.json();
   },
+
+  // Build Info
+  getBuildInfo: async () => {
+    const response = await fetch(`${API_BASE_URL}/build-info`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
 };
 
 export default memoryService;
@@ -239,5 +248,6 @@ export const {
   validateConsolidationSuggestion,
   rejectConsolidationSuggestion,
   triggerConsolidation,
-  deleteConsolidationSuggestion // Export the new function
+  deleteConsolidationSuggestion, // Export the new function
+  getBuildInfo
 } = memoryService;

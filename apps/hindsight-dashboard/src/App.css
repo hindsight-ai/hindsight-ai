@@ -189,6 +189,26 @@ h2 {
   font-weight: 500;
 }
 
+.about-button {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.about-button:hover {
+  background-color: #5a6268;
+}
+
+.about-button:active {
+  transform: translateY(1px);
+}
+
 .loading-container {
   display: flex;
   justify-content: center;

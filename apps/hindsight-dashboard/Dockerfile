@@ -3,10 +3,19 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Declare build argument for the API URL
+# Declare build arguments for frontend build information
 ARG REACT_APP_HINDSIGHT_SERVICE_API_URL
-# Set it as an environment variable for the build process
+ARG REACT_APP_VERSION
+ARG REACT_APP_BUILD_SHA
+ARG REACT_APP_BUILD_TIMESTAMP
+ARG REACT_APP_DASHBOARD_IMAGE_TAG
+
+# Set them as environment variables for the build process
 ENV REACT_APP_HINDSIGHT_SERVICE_API_URL=$REACT_APP_HINDSIGHT_SERVICE_API_URL
+ENV REACT_APP_VERSION=$REACT_APP_VERSION
+ENV REACT_APP_BUILD_SHA=$REACT_APP_BUILD_SHA
+ENV REACT_APP_BUILD_TIMESTAMP=$REACT_APP_BUILD_TIMESTAMP
+ENV REACT_APP_DASHBOARD_IMAGE_TAG=$REACT_APP_DASHBOARD_IMAGE_TAG
 
 # Copy package.json and package-lock.json to install dependencies
 COPY package*.json ./
