@@ -82,7 +82,7 @@ services:
       - "traefik.http.services.oauth2-svc.loadbalancer.server.port=4180"
 
   hindsight-service:
-    image: ${HINDSIGHT_SERVICE_IMAGE:-ghcr.io/hindsight-ai/hindsight-service:latest}
+    image: ${HINDSIGHT_SERVICE_IMAGE}
     container_name: hindsight-service
     networks:
       - hindsight-ai
@@ -105,10 +105,10 @@ services:
       - "traefik.http.services.hindsight-service-svc.loadbalancer.server.port=8000"
 
   hindsight-dashboard:
-    image: ${HINDSIGHT_DASHBOARD_IMAGE:-ghcr.io/hindsight-ai/hindsight-dashboard:latest}
+    image: ${HINDSIGHT_DASHBOARD_IMAGE}
     container_name: hindsight-dashboard
     environment:
-      REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL:-https://api.hindsight-ai.com}
+      REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL}
     depends_on:
       - hindsight-service
     networks:
