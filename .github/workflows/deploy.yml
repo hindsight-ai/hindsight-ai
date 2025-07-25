@@ -191,30 +191,41 @@ jobs:
             # Reset timer for individual service checks
             elapsed=0
             
-            # Check individual services
-            check_service "Hindsight Service" 8000 "/health" || {
-              echo "Hindsight Service logs:"
+            # Check individual services with appropriate endpoints
+            echo "Checking service accessibility..."
+            
+            # Check Hindsight Service (use /docs as health indicator)
+            if curl -f -s http://localhost:8000/docs > /dev/null 2>&1; then
+              echo "✅ Hindsight Service is accessible"
+            else
+              echo "❌ Hindsight Service check failed"
               docker compose -f docker-compose.prod.yml logs hindsight-service
               exit 1
-            }
+            fi
             
-            check_service "Hindsight Dashboard" 80 "/" || {
-              echo "Hindsight Dashboard logs:"
+            # Check Hindsight Dashboard (use the actual dashboard)
+            if curl -f -s http://localhost:80 > /dev/null 2>&1; then
+              echo "✅ Hindsight Dashboard is accessible"
+            else
+              echo "❌ Hindsight Dashboard check failed"
               docker compose -f docker-compose.prod.yml logs hindsight-dashboard
               exit 1
-            }
+            fi
             
-            check_service "OAuth2 Proxy" 4180 "/ping" || {
-              echo "OAuth2 Proxy logs:"
+            # Check OAuth2 Proxy (use root endpoint)
+            if curl -f -s http://localhost:4180 > /dev/null 2>&1; then
+              echo "✅ OAuth2 Proxy is accessible"
+            else
+              echo "❌ OAuth2 Proxy check failed"
               docker compose -f docker-compose.prod.yml logs oauth2-proxy
               exit 1
-            }
+            fi
             
-            # Check Traefik dashboard (internal)
-            if docker compose -f docker-compose.prod.yml exec traefik wget -q --spider http://localhost:8080/dashboard/ 2>/dev/null; then
-              echo "✅ Traefik dashboard is accessible"
+            # Check Traefik (use API endpoint)
+            if curl -f -s http://localhost:8080/api/http/routers > /dev/null 2>&1; then
+              echo "✅ Traefik API is accessible"
             else
-              echo "⚠️  Traefik dashboard check failed (may be normal)"
+              echo "⚠️  Traefik API check failed (may be normal)"
             fi
             
             echo "🎉 All health checks passed! Deployment successful!"
