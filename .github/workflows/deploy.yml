@@ -29,6 +29,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get backend version
+        id: backend-version
+        run: |
+          VERSION=$(cat apps/hindsight-service/pyproject.toml | grep -E "^version\s*=" | sed -E 's/version\s*=\s*"([^"]+)"$/\1/')
+          echo "BACKEND_VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Build and push Hindsight Service Docker image
         id: build-push-service
         uses: docker/build-push-action@v5
@@ -39,6 +45,11 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/hindsight-service:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/hindsight-service:latest
           file: apps/hindsight-service/Dockerfile
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
+            BUILD_TIMESTAMP=${{ env.BUILD_TIMESTAMP }}
+            IMAGE_TAG=ghcr.io/${{ github.repository_owner }}/hindsight-service:${{ github.sha }}
+            VERSION=${{ env.BACKEND_VERSION }}
 
   build-and-push-hindsight-dashboard:
     runs-on: ubuntu-latest

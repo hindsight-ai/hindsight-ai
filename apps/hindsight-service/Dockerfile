@@ -1,6 +1,18 @@
 # Use a lightweight Python base image
 FROM python:3.13.5-slim
 
+# Define build arguments
+ARG BUILD_SHA
+ARG BUILD_TIMESTAMP
+ARG IMAGE_TAG
+ARG VERSION
+
+# Set environment variables from build arguments
+ENV BUILD_SHA=${BUILD_SHA}
+ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+ENV IMAGE_TAG=${IMAGE_TAG}
+ENV VERSION=${VERSION}
+
 # Set the working directory inside the container
 WORKDIR /app
 

@@ -15,6 +15,7 @@ services:
       BUILD_SHA: ${BACKEND_BUILD_SHA}
       BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}
       IMAGE_TAG: ${BACKEND_IMAGE_TAG}
+      VERSION: ${BACKEND_VERSION}
 
   # Override the hindsight-dashboard to expose port 3000 directly
   hindsight-dashboard:

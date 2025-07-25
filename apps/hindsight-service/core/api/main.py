@@ -691,6 +691,7 @@ def get_build_info():
     build_sha = os.getenv("BUILD_SHA")
     build_timestamp = os.getenv("BUILD_TIMESTAMP")
     image_tag = os.getenv("IMAGE_TAG")
+    version = os.getenv("VERSION", "unknown")
     
     # Return None for missing values instead of default strings
     return {
@@ -698,7 +699,7 @@ def get_build_info():
         "build_timestamp": build_timestamp if build_timestamp else None,
         "image_tag": image_tag if image_tag else None,
         "service_name": "hindsight-service",
-        "version": "1.0.0"
+        "version": version
     }
 
 # User info endpoint for OAuth2 authentication
