@@ -1,6 +1,6 @@
 import logging # Moved to top
 import os
-from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
+from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -704,7 +704,10 @@ def get_build_info():
 
 # User info endpoint for OAuth2 authentication
 @router.get("/user-info")
-def get_user_info(x_auth_request_user: Optional[str] = None, x_auth_request_email: Optional[str] = None):
+def get_user_info(
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None)
+):
     """
     Returns the authenticated user information from OAuth2 proxy headers.
     These headers are set by the OAuth2 proxy when authentication is successful.
