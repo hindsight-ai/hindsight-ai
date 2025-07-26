@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import memoryService from '../api/memoryService';
 
@@ -13,12 +13,7 @@ const MemoryBlockDetail = () => {
   const [availableKeywords, setAvailableKeywords] = useState([]);
   const [selectedKeywords, setSelectedKeywords] = useState([]);
 
-  useEffect(() => {
-    fetchMemoryBlockDetails();
-    fetchKeywords();
-  }, [id, fetchMemoryBlockDetails]);
-
-  const fetchMemoryBlockDetails = async () => {
+  const fetchMemoryBlockDetails = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -37,7 +32,12 @@ const MemoryBlockDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchMemoryBlockDetails();
+    fetchKeywords();
+  }, [id, fetchMemoryBlockDetails]);
 
   const fetchKeywords = async () => {
     try {

@@ -2,15 +2,36 @@ class NotificationService {
   constructor() {
     this.notifications = [];
     this.listeners = [];
+    this.lastNotificationTime = 0;
+    this.debounceDelay = 5000; // 5 seconds default debounce delay
   }
 
-  // Add a notification
+  // Add a notification with debouncing
   addNotification(notification) {
-    const id = Date.now() + Math.random();
+    const now = Date.now();
+    
+    // Check if we should debounce this notification
+    if (this.shouldDebounceNotification(notification, now)) {
+      return null; // Skip this notification
+    }
+    
+    const id = now + Math.random();
     const notificationWithId = { ...notification, id };
     this.notifications.push(notificationWithId);
+    this.lastNotificationTime = now;
     this.notifyListeners();
     return id;
+  }
+
+  // Determine if we should debounce a notification
+  shouldDebounceNotification(notification, currentTime) {
+    // Always show error notifications (like 401 errors)
+    if (notification.type === 'error') {
+      return false;
+    }
+    
+    // Debounce if too much time hasn't passed since last notification
+    return (currentTime - this.lastNotificationTime) < this.debounceDelay;
   }
 
   // Remove a notification by ID
