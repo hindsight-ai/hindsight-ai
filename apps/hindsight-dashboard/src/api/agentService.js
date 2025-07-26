@@ -9,7 +9,9 @@ const agentService = {
   getAgents: async (filters = {}) => {
     const { per_page, ...rest } = filters;
     const params = new URLSearchParams({ ...rest, limit: per_page });
-    const response = await fetch(`${API_BASE_URL}/agents/?${params.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/agents/?${params.toString()}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -23,6 +25,7 @@ const agentService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -33,6 +36,7 @@ const agentService = {
   deleteAgent: async (agentId) => {
     const response = await fetch(`${API_BASE_URL}/agents/${agentId}`, {
       method: 'DELETE',
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -45,7 +49,9 @@ const agentService = {
 
   searchAgents: async (query) => {
     const params = new URLSearchParams({ query });
-    const response = await fetch(`${API_BASE_URL}/agents/search/?${params.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/agents/search/?${params.toString()}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

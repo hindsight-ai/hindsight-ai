@@ -9,7 +9,9 @@ const memoryService = {
   getMemoryBlocks: async (filters = {}) => {
     const { per_page, include_archived = false, ...rest } = filters; // Destructure include_archived with default false
     const params = new URLSearchParams({ ...rest, limit: per_page, include_archived }); // Pass it to params
-    const response = await fetch(`${API_BASE_URL}/memory-blocks/?${params.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/?${params.toString()}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -17,7 +19,9 @@ const memoryService = {
   },
 
   getMemoryBlockById: async (id) => {
-    const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}`);
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -31,6 +35,7 @@ const memoryService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -41,6 +46,7 @@ const memoryService = {
   archiveMemoryBlock: async (id) => {
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}/archive`, {
       method: 'POST',
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -51,6 +57,7 @@ const memoryService = {
   deleteMemoryBlock: async (id) => {
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}/hard-delete`, { // Assuming a new hard-delete endpoint
       method: 'DELETE',
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -64,7 +71,9 @@ const memoryService = {
   getArchivedMemoryBlocks: async (filters = {}) => {
     const { per_page, ...rest } = filters;
     const params = new URLSearchParams({ ...rest, limit: per_page });
-    const response = await fetch(`${API_BASE_URL}/memory-blocks/archived/?${params.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/archived/?${params.toString()}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -73,7 +82,9 @@ const memoryService = {
 
   // Keywords
   getKeywords: async () => {
-    const response = await fetch(`${API_BASE_URL}/keywords`);
+    const response = await fetch(`${API_BASE_URL}/keywords`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -87,6 +98,7 @@ const memoryService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -101,6 +113,7 @@ const memoryService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -111,6 +124,7 @@ const memoryService = {
   deleteKeyword: async (id) => {
     const response = await fetch(`${API_BASE_URL}/keywords/${id}`, {
       method: 'DELETE',
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -122,6 +136,7 @@ const memoryService = {
   addKeywordToMemoryBlock: async (memoryBlockId, keywordId) => {
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/keywords/${keywordId}`, {
       method: 'POST',
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -132,6 +147,7 @@ const memoryService = {
   removeKeywordFromMemoryBlock: async (memoryBlockId, keywordId) => {
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/keywords/${keywordId}`, {
       method: 'DELETE',
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -152,7 +168,10 @@ const memoryService = {
       ...(sort_by && { sort_by }),
       ...(sort_order && { sort_order })
     });
-    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/?${params.toString()}`, { signal });
+    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/?${params.toString()}`, { 
+      signal,
+      credentials: 'include'
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -160,7 +179,9 @@ const memoryService = {
   },
 
   getConsolidationSuggestionById: async (id) => {
-    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`);
+    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -172,7 +193,8 @@ const memoryService = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -185,7 +207,8 @@ const memoryService = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -197,7 +220,8 @@ const memoryService = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -208,6 +232,7 @@ const memoryService = {
   deleteConsolidationSuggestion: async (id) => {
     const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`, {
       method: 'DELETE',
+      credentials: 'include'
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
