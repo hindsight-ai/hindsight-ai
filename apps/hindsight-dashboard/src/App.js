@@ -8,6 +8,7 @@ import ConsolidationSuggestions from './components/ConsolidationSuggestions';
 import ConsolidationSuggestionDetail from './components/ConsolidationSuggestionDetail';
 import ArchivedMemoryBlockList from './components/ArchivedMemoryBlockList';
 import AboutModal from './components/AboutModal';
+import NotificationContainer from './components/NotificationContainer';
 import authService from './api/authService';
 import './App.css';
 
@@ -66,6 +67,7 @@ function AppContent() {
 
   return (
     <div className="App">
+      <NotificationContainer />
       <header className="App-header">
         <div className="header-content">
           <h1 className="app-title">AI Agent Memory Dashboard</h1>

@@ -4,6 +4,8 @@ if (!API_BASE_URL) {
   throw new Error("Environment variable REACT_APP_HINDSIGHT_SERVICE_API_URL is not defined.");
 }
 
+import notificationService from '../services/notificationService';
+
 const agentService = {
   // Agents
   getAgents: async (filters = {}) => {
@@ -13,6 +15,10 @@ const agentService = {
       credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -28,6 +34,10 @@ const agentService = {
       credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -39,6 +49,10 @@ const agentService = {
       credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     if (response.status === 204) {
@@ -53,6 +67,10 @@ const agentService = {
       credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();

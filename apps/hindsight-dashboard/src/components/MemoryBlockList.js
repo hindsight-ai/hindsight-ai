@@ -70,6 +70,7 @@ const MemoryBlockList = () => {
         total_pages: response.total_pages,
       }));
     } catch (err) {
+      // The memoryService will already show the 401 notification, so we just need to set the error for display
       setError('Failed to fetch memory blocks: ' + err.message);
     } finally {
       setLoading(false);
@@ -82,6 +83,7 @@ const MemoryBlockList = () => {
       setAvailableKeywords(response);
     } catch (err) {
       console.error('Failed to fetch keywords:', err);
+      // The memoryService will already show the 401 notification, so we don't need to do anything here
     }
   }, []);
 
@@ -91,6 +93,7 @@ const MemoryBlockList = () => {
       setAvailableAgentIds(response.items.map(agent => agent.id));
     } catch (err) {
       console.error('Failed to fetch agent IDs:', err);
+      // The agentService will already show the 401 notification, so we don't need to do anything here
     }
   }, []);
 
