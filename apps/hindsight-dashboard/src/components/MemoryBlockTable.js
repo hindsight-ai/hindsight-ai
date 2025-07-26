@@ -16,7 +16,7 @@ const MemoryBlockTable = ({
   navigate,
 }) => {
   const defaultHiddenColumns = ['id', 'agent_id', 'conversation_id', 'keywords', 'errors'];
-  const [hiddenColumns, setHiddenColumns] = useState(defaultHiddenColumns);
+  const [hiddenColumns] = useState(defaultHiddenColumns);
 
   const truncate = (text, length = 150) => {
     if (!text) return '';

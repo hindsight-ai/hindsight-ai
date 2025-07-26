@@ -16,7 +16,7 @@ const MemoryBlockDetail = () => {
   useEffect(() => {
     fetchMemoryBlockDetails();
     fetchKeywords();
-  }, [id]);
+  }, [id, fetchMemoryBlockDetails]);
 
   const fetchMemoryBlockDetails = async () => {
     setLoading(true);
