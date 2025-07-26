@@ -2,7 +2,7 @@ class NotificationService {
   constructor() {
     this.notifications = [];
     this.listeners = [];
-    this.lastNotificationTime = 0;
+    this.lastNotificationTimes = new Map(); // Track last time per notification type/message
     this.debounceDelay = 5000; // 5 seconds default debounce delay
   }
 
@@ -18,20 +18,43 @@ class NotificationService {
     const id = now + Math.random();
     const notificationWithId = { ...notification, id };
     this.notifications.push(notificationWithId);
-    this.lastNotificationTime = now;
+    
+    // Update last notification time for this specific notification type/message
+    const key = this.getNotificationKey(notification);
+    this.lastNotificationTimes.set(key, now);
+    
+    // Cleanup old entries to prevent memory leaks
+    this.cleanupOldEntries(now);
+    
     this.notifyListeners();
     return id;
   }
 
+  // Cleanup old notification time entries to prevent memory leaks
+  cleanupOldEntries(currentTime) {
+    const cutoffTime = currentTime - (this.debounceDelay * 2); // Keep entries for 2x debounce time
+    for (const [key, time] of this.lastNotificationTimes.entries()) {
+      if (time < cutoffTime) {
+        this.lastNotificationTimes.delete(key);
+      }
+    }
+  }
+
+  // Generate a key for identifying similar notifications
+  getNotificationKey(notification) {
+    // Group by type and message content (truncated for comparison)
+    const messageKey = notification.message ? notification.message.substring(0, 50) : '';
+    return `${notification.type || 'info'}_${messageKey}`;
+  }
+
   // Determine if we should debounce a notification
   shouldDebounceNotification(notification, currentTime) {
-    // Always show error notifications (like 401 errors)
-    if (notification.type === 'error') {
-      return false;
-    }
+    // Check if similar notification was shown recently
+    const key = this.getNotificationKey(notification);
+    const lastTime = this.lastNotificationTimes.get(key) || 0;
     
-    // Debounce if too much time hasn't passed since last notification
-    return (currentTime - this.lastNotificationTime) < this.debounceDelay;
+    // Debounce if too much time hasn't passed since last similar notification
+    return (currentTime - lastTime) < this.debounceDelay;
   }
 
   // Remove a notification by ID
