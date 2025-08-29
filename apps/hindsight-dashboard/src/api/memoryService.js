@@ -10,7 +10,13 @@ const memoryService = {
   // Memory Blocks
   getMemoryBlocks: async (filters = {}) => {
     const { per_page, include_archived = false, ...rest } = filters; // Destructure include_archived with default false
-    const params = new URLSearchParams({ ...rest, limit: per_page, include_archived }); // Pass it to params
+    const params = new URLSearchParams({ ...rest, include_archived }); // Start with rest and include_archived
+
+    // Only add limit if per_page is defined and not null/undefined
+    if (per_page !== undefined && per_page !== null) {
+      params.append('limit', per_page.toString());
+    }
+
     const response = await fetch(`${API_BASE_URL}/memory-blocks/?${params.toString()}`, {
       credentials: 'include'
     });
@@ -92,7 +98,13 @@ const memoryService = {
 
   getArchivedMemoryBlocks: async (filters = {}) => {
     const { per_page, ...rest } = filters;
-    const params = new URLSearchParams({ ...rest, limit: per_page });
+    const params = new URLSearchParams(rest); // Start with rest parameters
+
+    // Only add limit if per_page is defined and not null/undefined
+    if (per_page !== undefined && per_page !== null) {
+      params.append('limit', per_page.toString());
+    }
+
     const response = await fetch(`${API_BASE_URL}/memory-blocks/archived/?${params.toString()}`, {
       credentials: 'include'
     });
