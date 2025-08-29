@@ -95,6 +95,16 @@ This will:
 ./stop_hindsight.sh
 ```
 
+## ⚠️ Important Database Setup Notice
+
+⚠️ **IMPORTANT: Alembic migrations are currently broken.** ⚠️
+
+To initialize the database, please use the provided backup file and restore script:
+
+1. **Restore from Backup:** Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, and restart the `db` container.
+
+**Note:** This is a temporary workaround while the alembic migration issues are being resolved. The provided backup contains sample data including memory blocks and consolidation suggestions to help you understand the system's capabilities.
+
 ## Local Development with Docker Compose
 
 For development with hot-reload and debugging capabilities:
@@ -242,14 +252,25 @@ To use Google as an OAuth2 provider, you need to create a project in the [Google
 
 ## Database Backup and Restore
 
+⚠️ **IMPORTANT: Alembic migrations are currently broken.** ⚠️
+
 A full backup and restore of the Hindsight AI PostgreSQL database (`hindsight_db`) can be performed using the `backup_db.sh` and `restore_db.sh` shell scripts located in `infra/scripts/`.
 
 *   **Backup (`backup_db.sh`):**
     Ensure the script is executable (`chmod +x infra/scripts/backup_db.sh`), then run `./infra/scripts/backup_db.sh` from the project root. Backups are timestamped, include the Alembic revision, and are stored in `./hindsight_db_backups/data/`. The script manages old backups (keeping 100 by default). Hourly backups can be automated via cron jobs.
 
 *   **Restore (`restore_db.sh`):**
-    Ensure the script is executable (`chmod +x infra/scripts/restore_db.sh`) and the PostgreSQL Docker container is running. Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, restart the `db` container, and run Alembic to align the schema. **Caution: Restoring overwrites current data.**
+    Ensure the script is executable (`chmod +x infra/scripts/restore_db.sh`) and the PostgreSQL Docker container is running. Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, and restart the `db` container. **Caution: Restoring overwrites current data.**
     Database data is persisted using Docker Volumes, but backups are crucial to protect against explicit volume removal.
+
+**Note:** The restore process no longer attempts to run Alembic migrations due to current issues with the migration system. The backup file contains a complete database schema and data snapshot.
+
+The provided database backup includes sample memory blocks and consolidation suggestions that demonstrate the system's capabilities:
+* **Memory Blocks:** Example operational memories showing how the system stores AI agent interactions, errors, lessons learned, and metadata
+* **Consolidation Suggestions:** Examples of how the knowledge distillation process identifies similar memories and generates consolidated insights
+* **Keywords:** Sample keyword extractions that show how the system categorizes and indexes memories for retrieval
+
+This sample data helps users understand how Hindsight AI captures, organizes, and distills AI agent operational intelligence.
 
 ## Running Tests
 
