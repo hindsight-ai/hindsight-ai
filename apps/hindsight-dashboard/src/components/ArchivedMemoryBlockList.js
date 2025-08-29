@@ -44,13 +44,15 @@ const ArchivedMemoryBlockList = () => {
     setLoading(true);
     setError(null);
     try {
+      // Convert page-based pagination to offset-based pagination for backend API
+      const skip = (pagination.page - 1) * pagination.per_page;
       const response = await memoryService.getArchivedMemoryBlocks({
         ...filters,
         min_feedback_score: filters.feedback_score_range[0],
         max_feedback_score: filters.feedback_score_range[1],
         min_retrieval_count: filters.retrieval_count_range[0],
         max_retrieval_count: filters.retrieval_count_range[1],
-        page: pagination.page,
+        skip: skip,
         per_page: pagination.per_page,
         sort_by: sort.field,
         sort_order: sort.order,
@@ -92,6 +94,20 @@ const ArchivedMemoryBlockList = () => {
   }, [memoryBlocks]);
 
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Initialize pagination state from URL parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const pageFromUrl = parseInt(urlParams.get('page')) || 1;
+    const perPageFromUrl = parseInt(urlParams.get('per_page')) || 10;
+
+    setPagination((prevPagination) => ({
+      ...prevPagination,
+      page: pageFromUrl,
+      per_page: perPageFromUrl,
+    }));
+  }, [location.search]);
 
   useEffect(() => {
     setMemoryBlocks([]);
@@ -100,6 +116,24 @@ const ArchivedMemoryBlockList = () => {
     fetchKeywords();
     fetchAgentIds();
   }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchArchivedMemoryBlocks, fetchKeywords, fetchAgentIds]);
+
+  // Update URL parameters when pagination state changes
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+
+    // Only update URL if pagination values are different from URL
+    const currentPage = parseInt(urlParams.get('page')) || 1;
+    const currentPerPage = parseInt(urlParams.get('per_page')) || 10;
+
+    if (pagination.page !== currentPage || pagination.per_page !== currentPerPage) {
+      urlParams.set('page', pagination.page.toString());
+      urlParams.set('per_page', pagination.per_page.toString());
+
+      // Preserve other existing parameters
+      const newSearch = urlParams.toString();
+      navigate(`${location.pathname}?${newSearch}`, { replace: true });
+    }
+  }, [pagination.page, pagination.per_page, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (debounceTimeoutRef.current) {
@@ -189,7 +223,7 @@ const ArchivedMemoryBlockList = () => {
       per_page: parseInt(e.target.value),
       page: 1,
     }));
-    fetchArchivedMemoryBlocks();
+    // The useEffect will handle triggering fetchArchivedMemoryBlocks when pagination state changes
   };
 
   const handlePageChange = (newPage) => {
@@ -225,8 +259,6 @@ const ArchivedMemoryBlockList = () => {
       setSelectedMemoryBlocks([]);
     }
   };
-
-  const navigate = useNavigate();
 
   const handleActionChange = async (e, id) => {
     const selectedAction = e.target.value;

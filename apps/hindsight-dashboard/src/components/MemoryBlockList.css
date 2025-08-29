@@ -23,6 +23,7 @@
 .memory-block-table-body {
   display: flex;
   flex-direction: column;
+  pointer-events: none; /* Prevent table body from intercepting clicks */
 }
 
 .memory-block-table-row {
@@ -34,6 +35,7 @@
   margin-bottom: 5px;
   overflow: hidden;
   min-height: 50px; /* Ensure rows have a minimum height */
+  pointer-events: auto; /* Re-enable pointer events for interactive elements */
 }
 
 .memory-block-table-row:hover {
@@ -50,6 +52,7 @@
   align-items: stretch;
   box-sizing: border-box;
   border-right: 1px solid #ccc; /* Use border-right for column separation */
+  pointer-events: none; /* Prevent data cells from intercepting clicks */
 }
 
 .header-cell,
@@ -169,6 +172,7 @@
   display: inline-flex;
   justify-content: center;
   align-items: center;
+  pointer-events: auto; /* Re-enable pointer events for action buttons */
 }
 
 .action-icon-button:hover {
@@ -201,6 +205,9 @@
   margin-top: 25px; /* Reduced space above pagination */
   gap: 10px; /* Reduced gap */
   flex-wrap: wrap;
+  position: relative; /* Establish stacking context */
+  z-index: 10; /* Ensure pagination is above table */
+  pointer-events: auto; /* Ensure pagination can receive clicks */
 }
 
 .pagination-per-page {

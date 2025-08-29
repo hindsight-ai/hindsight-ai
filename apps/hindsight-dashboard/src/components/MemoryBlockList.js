@@ -50,13 +50,15 @@ const MemoryBlockList = () => {
     setError(null); // Clear previous errors
     console.log('fetchMemoryBlocks called with filters.agent_id:', filters.agent_id); // Debugging line
     try {
+      // Convert page-based pagination to offset-based pagination for backend API
+      const skip = (pagination.page - 1) * pagination.per_page;
       const response = await memoryService.getMemoryBlocks({
         ...filters,
         min_feedback_score: filters.feedback_score_range[0],
         max_feedback_score: filters.feedback_score_range[1],
         min_retrieval_count: filters.retrieval_count_range[0],
         max_retrieval_count: filters.retrieval_count_range[1],
-        page: pagination.page,
+        skip: skip,
         per_page: pagination.per_page,
         sort_by: sort.field,
         sort_order: sort.order,
@@ -114,6 +116,20 @@ const MemoryBlockList = () => {
 
   // Effect to trigger fetch when filters (excluding search), pagination, or sort change
   const location = useLocation(); // Get location object
+  const navigate = useNavigate();
+
+  // Initialize pagination state from URL parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const pageFromUrl = parseInt(urlParams.get('page')) || 1;
+    const perPageFromUrl = parseInt(urlParams.get('per_page')) || 10;
+
+    setPagination((prevPagination) => ({
+      ...prevPagination,
+      page: pageFromUrl,
+      per_page: perPageFromUrl,
+    }));
+  }, [location.search]);
 
   useEffect(() => {
     // Reset memory blocks and set loading state immediately on navigation/dependency change
@@ -123,6 +139,24 @@ const MemoryBlockList = () => {
     fetchKeywords();
     fetchAgentIds(); // Fetch agent IDs
   }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchMemoryBlocks, fetchKeywords, fetchAgentIds]); // Add location.pathname and memoized functions as dependencies
+
+  // Update URL parameters when pagination state changes
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+
+    // Only update URL if pagination values are different from URL
+    const currentPage = parseInt(urlParams.get('page')) || 1;
+    const currentPerPage = parseInt(urlParams.get('per_page')) || 10;
+
+    if (pagination.page !== currentPage || pagination.per_page !== currentPerPage) {
+      urlParams.set('page', pagination.page.toString());
+      urlParams.set('per_page', pagination.per_page.toString());
+
+      // Preserve other existing parameters
+      const newSearch = urlParams.toString();
+      navigate(`${location.pathname}?${newSearch}`, { replace: true });
+    }
+  }, [pagination.page, pagination.per_page, location.pathname, location.search, navigate]);
 
   // Effect to debounce search term and update filters.search
   useEffect(() => {
@@ -219,8 +253,7 @@ const MemoryBlockList = () => {
       per_page: parseInt(e.target.value),
       page: 1, // Reset to first page when per_page changes
     }));
-    // For dropdowns, still apply immediately for better UX
-    fetchMemoryBlocks();
+    // The useEffect will handle triggering fetchMemoryBlocks when pagination state changes
   };
 
   const handlePageChange = (newPage) => {
@@ -256,8 +289,6 @@ const MemoryBlockList = () => {
       setSelectedMemoryBlocks([]);
     }
   };
-
-  const navigate = useNavigate();
 
   const handleActionChange = async (e, id) => {
     const selectedAction = e.target.value;
