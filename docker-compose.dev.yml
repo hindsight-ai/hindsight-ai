@@ -1,0 +1,36 @@
+services:
+  # Override the db service to expose port 5432 for local access if needed
+  db:
+    ports:
+      - "5432:5432"
+
+  # Override the hindsight-service to expose port 8000 directly
+  hindsight-service:
+    ports:
+      - "8000:8000"
+    # Ensure the API URL for the dashboard points to localhost:8000
+    environment:
+      REACT_APP_HINDSIGHT_SERVICE_API_URL: http://hindsight-service:8000
+      DATABASE_URL: postgresql://user:password@db:5432/hindsight_db
+      DEV_MODE: "true"
+      BUILD_SHA: ${BACKEND_BUILD_SHA}
+      BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}
+      IMAGE_TAG: ${BACKEND_IMAGE_TAG}
+      VERSION: ${BACKEND_VERSION}
+
+  # Override the hindsight-dashboard to expose port 3000 directly
+  hindsight-dashboard:
+    ports:
+      - "3000:80"
+
+  # Add hindsight-copilot-assistant service
+  hindsight-copilot-assistant:
+    build:
+      context: ./apps/hindsight-copilot-assistant
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      GOOGLE_API_KEY: ${LLM_API_KEY}
+    networks:
+      - hindsight-ai

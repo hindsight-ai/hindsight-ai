@@ -14,9 +14,12 @@ const MemoryBlockTable = ({
   onActionChange,
   onKeywordClick,
   navigate,
+  isArchivedView = false, // New prop to indicate if this is the archived view
 }) => {
-  const defaultHiddenColumns = ['id', 'agent_id', 'conversation_id', 'keywords', 'errors'];
-  const [hiddenColumns, setHiddenColumns] = useState(defaultHiddenColumns);
+  const defaultHiddenColumns = isArchivedView 
+    ? ['id', 'agent_id', 'conversation_id', 'keywords', 'errors'] 
+    : ['id', 'agent_id', 'conversation_id', 'keywords', 'errors'];
+  const [hiddenColumns] = useState(defaultHiddenColumns);
 
   const truncate = (text, length = 150) => {
     if (!text) return '';
@@ -27,6 +30,7 @@ const MemoryBlockTable = ({
     { id: 'select', label: 'Select', size: 3, isResizable: false, minSize: 3, maxSize: 3 },
     { id: 'id', label: 'ID', size: 10, isSortable: true },
     { id: 'created_at', label: 'Creation Date', size: 7, isSortable: true },
+    ...(isArchivedView ? [{ id: 'archived_at', label: 'Archived Date', size: 7, isSortable: true }] : []),
     { id: 'lessons_learned', label: 'Lessons Learned', size: 75 },
     { id: 'keywords', label: 'Keywords', size: 15 },
     { id: 'errors', label: 'Errors', size: 15 },
@@ -34,7 +38,7 @@ const MemoryBlockTable = ({
     { id: 'conversation_id', label: 'Conversation ID', size: 10, isSortable: true },
     { id: 'feedback_score', label: 'Feedback', size: 10, isSortable: true },
     { id: 'actions', label: 'Actions', size: 5 },
-  ], []);
+  ], [isArchivedView]);
 
   const columnDefinitions = useMemo(() => {
     return allColumnDefinitions.filter(col => !hiddenColumns.includes(col.id));
@@ -125,6 +129,8 @@ const MemoryBlockTable = ({
         return <CopyToClipboardButton textToCopy={block.id} displayId={truncate(block.id, 8)} />;
       case 'created_at':
         return new Date(block.created_at).toLocaleString();
+      case 'archived_at':
+        return block.archived_at ? new Date(block.archived_at).toLocaleString() : 'N/A';
       case 'lessons_learned':
         return (
           <>
@@ -193,7 +199,7 @@ const MemoryBlockTable = ({
               🗑️
             </button>
           </div>
-        );
+ );
       default:
         return null;
     }

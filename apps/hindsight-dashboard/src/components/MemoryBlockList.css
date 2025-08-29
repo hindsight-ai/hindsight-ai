@@ -888,3 +888,348 @@
   margin-left: auto;
   padding-left: 10px;
 }
+
+/* Pruning Suggestions Styles */
+.pruning-setup {
+  display: flex;
+  justify-content: center;
+  margin-top: 40px;
+}
+
+.pruning-setup .card {
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  padding: 30px;
+  width: 100%;
+  max-width: 600px;
+}
+
+.pruning-setup .card h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  margin-bottom: 15px;
+}
+
+.pruning-setup .card p {
+  color: #666;
+  margin-bottom: 25px;
+  line-height: 1.6;
+}
+
+.pruning-setup .form-group {
+  margin-bottom: 20px;
+}
+
+.pruning-setup .form-group label {
+  display: block;
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 8px;
+}
+
+.pruning-setup .form-control {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 5px;
+  font-size: 1em;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pruning-setup .form-control:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+  outline: none;
+}
+
+.pruning-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  padding: 20px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.pruning-summary {
+  display: flex;
+  gap: 20px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.pruning-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.pruning-actions .btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.pruning-actions .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.suggestion-item {
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.suggestion-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: #007bff;
+}
+
+.suggestion-item.selected {
+  background-color: #e6f7ff;
+  border-color: #a7d9ff;
+}
+
+.suggestion-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.suggestion-selection {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.suggestion-info {
+  flex-grow: 1;
+}
+
+.suggestion-id {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  font-size: 0.9em;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.suggestion-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.score-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.score-badge.feedback-score {
+  background-color: #6c757d;
+}
+
+.score-badge.retrieval-score {
+  background-color: #17a2b8;
+}
+
+.suggestion-details {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.suggestion-rationale {
+  color: #555;
+  line-height: 1.5;
+}
+
+.suggestion-preview {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.suggestion-preview strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #2c3e50;
+}
+
+.content-preview {
+  color: #666;
+  font-size: 0.95em;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.suggestion-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.metric strong {
+  color: #2c3e50;
+  font-size: 0.9em;
+}
+
+.metric span {
+  color: #666;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.no-suggestions {
+  text-align: center;
+  padding: 60px 30px;
+  background-color: #f9f9f9;
+  border: 1px dashed #ccc;
+  border-radius: 10px;
+  margin-top: 40px;
+  color: #666;
+}
+
+.no-suggestions p {
+  font-size: 1.2em;
+  margin: 0;
+}
+
+/* Pruning Suggestions Component Styles */
+.pruning-params-section {
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  padding: 20px;
+  margin-bottom: 25px;
+}
+
+.pruning-params-section h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  margin-bottom: 15px;
+}
+
+.pruning-params-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: end;
+}
+
+.pruning-params-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 150px;
+}
+
+.pruning-params-form .form-group label {
+  font-weight: 600;
+  color: #444;
+  font-size: 0.9em;
+}
+
+.pruning-params-form .form-group input {
+  padding: 8px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 5px;
+  font-size: 0.95em;
+  width: 100px;
+}
+
+.pruning-params-form .form-group .param-hint {
+  font-size: 0.8em;
+  color: #666;
+  margin-top: 3px;
+  display: block;
+}
+
+.pruning-params-form .form-group input:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+  outline: none;
+}
+
+.pruning-params-form button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.95em;
+  font-weight: 600;
+  transition: background-color 0.3s ease;
+  height: 38px;
+}
+
+.pruning-params-form button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.pruning-params-form button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.pruning-suggestions-container {
+  margin-top: 25px;
+}
+
+.confirm-pruning-button {
+  background-color: #e74c3c !important;
+  color: white !important;
+}
+
+.confirm-pruning-button:hover:not(:disabled) {
+  background-color: #c0392b !important;
+}
+
+.page-header {
+  margin-bottom: 25px;
+}
+
+.page-header h1 {
+  color: #2c3e50;
+  margin: 0 0 10px 0;
+}
+
+.page-header p {
+  color: #666;
+  margin: 0;
+  font-size: 1.1em;
+}

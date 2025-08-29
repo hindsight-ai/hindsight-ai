@@ -1,6 +1,6 @@
 import logging # Moved to top
 import os
-from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
+from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 from core.db import models, schemas, crud
 from core.db.database import engine, get_db
+from core.pruning.pruning_service import get_pruning_service
 
 # models.Base.metadata.create_all(bind=engine) # Removed: Database schema is now managed by Alembic migrations.
 
@@ -31,6 +32,8 @@ origins = [
     "http://localhost:3000", # React frontend
     "http://localhost:3001", # Allow your frontend to access the API
     "http://localhost:8000", # FastAPI backend
+    "https://dashboard.hindsight-ai.com",
+    "https://api.hindsight-ai.com",
 ]
 
 app.add_middleware(
@@ -41,7 +44,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-router = APIRouter(prefix="/api")
+router = APIRouter()
 
 @router.post("/agents/", response_model=schemas.Agent, status_code=status.HTTP_201_CREATED)
 def create_agent_endpoint(agent: schemas.AgentCreate, db: Session = Depends(get_db)):
@@ -231,6 +234,10 @@ def get_all_memory_blocks_endpoint(
         include_archived=include_archived # Pass the include_archived parameter
     )
 
+    # Debugging: Log archived_at for each memory block
+    for i, memory in enumerate(memories):
+        logger.info(f"Memory block {i} (ID: {memory.id}): archived_at = {memory.archived_at} (type: {type(memory.archived_at)})")
+
     total_pages = math.ceil(total_items / processed_limit) if processed_limit > 0 else 0
 
     return {
@@ -400,7 +407,7 @@ def archive_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(ge
     Archives a memory block by setting its 'archived' flag to True.
     """
     db_memory_block = crud.archive_memory_block(db, memory_id=memory_id)
-    if not db_memory_block:
+    if db_memory_block is None: # Check for None explicitly
         raise HTTPException(status_code=404, detail="Memory block not found")
     return db_memory_block
 
@@ -680,5 +687,147 @@ def delete_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Sessi
 @router.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@router.get("/build-info")
+def get_build_info():
+    """
+    Returns build and deployment information for the current running service.
+    """
+    build_sha = os.getenv("BUILD_SHA")
+    build_timestamp = os.getenv("BUILD_TIMESTAMP")
+    image_tag = os.getenv("IMAGE_TAG")
+    version = os.getenv("VERSION", "unknown")
+    
+    # Return None for missing values instead of default strings
+    return {
+        "build_sha": build_sha if build_sha else None,
+        "build_timestamp": build_timestamp if build_timestamp else None,
+        "image_tag": image_tag if image_tag else None,
+        "service_name": "hindsight-service",
+        "version": version
+    }
+
+# User info endpoint for OAuth2 authentication
+@router.get("/user-info")
+def get_user_info(
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None)
+):
+    """
+    Returns the authenticated user information from OAuth2 proxy headers.
+    These headers are set by the OAuth2 proxy when authentication is successful.
+    
+    For local development, bypasses authentication and returns mock user info.
+    """
+    # Check if we're in development mode
+    is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+    
+    if is_dev_mode:
+        # Development mode: bypass authentication
+        return {
+            "authenticated": True,
+            "user": "dev_user",
+            "email": "dev@localhost"
+        }
+    
+    # Production mode: check OAuth2 proxy headers
+    if not x_auth_request_user and not x_auth_request_email:
+        return {"authenticated": False, "message": "No authentication headers found"}
+    
+    return {
+        "authenticated": True,
+        "user": x_auth_request_user,
+        "email": x_auth_request_email
+    }
+
+# Pruning Endpoints
+@router.post("/memory/prune/suggest", response_model=dict)
+def generate_pruning_suggestions_endpoint(
+    request: dict = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate memory block pruning suggestions using LLM evaluation.
+    Returns a batch of memory blocks with pruning scores for human review.
+    """
+    if request is None:
+        request = {}
+    
+    batch_size = request.get("batch_size", 50)
+    target_count = request.get("target_count")
+    max_iterations = request.get("max_iterations", 10)
+    
+    # Retrieve LLM_API_KEY from environment variables
+    llm_api_key = os.getenv("LLM_API_KEY")
+    if not llm_api_key:
+        logger.warning("LLM_API_KEY is not set. Fallback scoring will be used.")
+    
+    try:
+        # Get pruning service instance
+        pruning_service = get_pruning_service(llm_api_key)
+        
+        # Generate pruning suggestions
+        suggestions = pruning_service.generate_pruning_suggestions(
+            db=db,
+            batch_size=batch_size,
+            target_count=target_count,
+            max_iterations=max_iterations
+        )
+        
+        return suggestions
+    except Exception as e:
+        logger.error(f"Error generating pruning suggestions: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating pruning suggestions: {str(e)}")
+
+@router.post("/memory/prune/confirm", response_model=dict)
+def confirm_pruning_endpoint(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Confirm and archive selected memory blocks for pruning.
+    This endpoint archives the memory blocks that were approved for pruning.
+    """
+    memory_block_ids = request.get("memory_block_ids", [])
+    
+    if not memory_block_ids:
+        raise HTTPException(status_code=400, detail="No memory block IDs provided for pruning")
+    
+    archived_count = 0
+    failed_count = 0
+    failed_blocks = []
+    
+    try:
+        for memory_id_str in memory_block_ids:
+            try:
+                memory_id = uuid.UUID(memory_id_str)
+                success = crud.archive_memory_block(db, memory_id=memory_id)
+                if success:
+                    archived_count += 1
+                    logger.info(f"Successfully archived memory block {memory_id_str} for pruning")
+                else:
+                    failed_count += 1
+                    failed_blocks.append(memory_id_str)
+                    logger.warning(f"Failed to archive memory block {memory_id_str}")
+            except ValueError:
+                failed_count += 1
+                failed_blocks.append(memory_id_str)
+                logger.error(f"Invalid UUID format for memory block ID: {memory_id_str}")
+            except Exception as e:
+                failed_count += 1
+                failed_blocks.append(memory_id_str)
+                logger.error(f"Error archiving memory block {memory_id_str}: {str(e)}")
+        
+        db.commit()
+        
+        return {
+            "message": f"Pruning confirmation processed successfully",
+            "archived_count": archived_count,
+            "failed_count": failed_count,
+            "failed_blocks": failed_blocks if failed_blocks else None
+        }
+    except Exception as e:
+        logger.error(f"Error confirming pruning: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error confirming pruning: {str(e)}")
 
 app.include_router(router)

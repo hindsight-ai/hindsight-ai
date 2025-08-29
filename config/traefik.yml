@@ -1,0 +1,45 @@
+# ./config/traefik.yml
+
+# Global Configuration
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: false
+
+# Log level
+log:
+  level: DEBUG
+
+# API and dashboard configuration
+api:
+  dashboard: true
+
+# Define entrypoints for web (HTTP) and websecure (HTTPS)
+entryPoints:
+  web:
+    address: ":80"
+    # Global redirect from HTTP to HTTPS
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+# Configure providers
+providers:
+  docker:
+    exposedByDefault: false
+    network: hindsight-ai
+  file:
+    directory: /config
+    watch: true
+
+# Configure Let's Encrypt certificate resolver using Cloudflare DNS challenge
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: <email_placeholder>
+      storage: /letsencrypt/acme.json
+      dnsChallenge:
+        provider: cloudflare

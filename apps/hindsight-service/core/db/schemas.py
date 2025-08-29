@@ -20,6 +20,8 @@ class MemoryBlockBase(BaseModel):
     lessons_learned: Optional[str] = None
     metadata_col: Optional[Dict[str, Any]] = None
     feedback_score: Optional[int] = 0
+    archived: Optional[bool] = False
+    archived_at: Optional[datetime] = None
 
 class FeedbackLogBase(BaseModel):
     id: uuid.UUID # Changed from memory_id to id

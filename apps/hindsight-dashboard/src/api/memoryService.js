@@ -1,3 +1,5 @@
+import notificationService from '../services/notificationService';
+
 const API_BASE_URL = process.env.REACT_APP_HINDSIGHT_SERVICE_API_URL;
 
 if (!API_BASE_URL) {
@@ -9,16 +11,28 @@ const memoryService = {
   getMemoryBlocks: async (filters = {}) => {
     const { per_page, include_archived = false, ...rest } = filters; // Destructure include_archived with default false
     const params = new URLSearchParams({ ...rest, limit: per_page, include_archived }); // Pass it to params
-    const response = await fetch(`${API_BASE_URL}/memory-blocks/?${params.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/?${params.toString()}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
   },
 
   getMemoryBlockById: async (id) => {
-    const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}`);
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -31,8 +45,13 @@ const memoryService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -41,8 +60,13 @@ const memoryService = {
   archiveMemoryBlock: async (id) => {
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}/archive`, {
       method: 'POST',
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -51,8 +75,13 @@ const memoryService = {
   deleteMemoryBlock: async (id) => {
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}/hard-delete`, { // Assuming a new hard-delete endpoint
       method: 'DELETE',
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     if (response.status === 204) {
@@ -64,8 +93,14 @@ const memoryService = {
   getArchivedMemoryBlocks: async (filters = {}) => {
     const { per_page, ...rest } = filters;
     const params = new URLSearchParams({ ...rest, limit: per_page });
-    const response = await fetch(`${API_BASE_URL}/memory-blocks/archived/?${params.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/archived/?${params.toString()}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -73,8 +108,14 @@ const memoryService = {
 
   // Keywords
   getKeywords: async () => {
-    const response = await fetch(`${API_BASE_URL}/keywords`);
+    const response = await fetch(`${API_BASE_URL}/keywords`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -87,8 +128,13 @@ const memoryService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -101,8 +147,13 @@ const memoryService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -111,8 +162,13 @@ const memoryService = {
   deleteKeyword: async (id) => {
     const response = await fetch(`${API_BASE_URL}/keywords/${id}`, {
       method: 'DELETE',
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -122,8 +178,13 @@ const memoryService = {
   addKeywordToMemoryBlock: async (memoryBlockId, keywordId) => {
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/keywords/${keywordId}`, {
       method: 'POST',
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -132,8 +193,13 @@ const memoryService = {
   removeKeywordFromMemoryBlock: async (memoryBlockId, keywordId) => {
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/keywords/${keywordId}`, {
       method: 'DELETE',
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -152,16 +218,29 @@ const memoryService = {
       ...(sort_by && { sort_by }),
       ...(sort_order && { sort_order })
     });
-    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/?${params.toString()}`, { signal });
+    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/?${params.toString()}`, { 
+      signal,
+      credentials: 'include'
+    });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
   },
 
   getConsolidationSuggestionById: async (id) => {
-    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`);
+    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -172,9 +251,14 @@ const memoryService = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -185,9 +269,14 @@ const memoryService = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -197,9 +286,14 @@ const memoryService = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
@@ -208,12 +302,71 @@ const memoryService = {
   deleteConsolidationSuggestion: async (id) => {
     const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`, {
       method: 'DELETE',
+      credentials: 'include'
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     if (response.status === 204) {
       return;
+    }
+    return response.json();
+  },
+
+  // Pruning Endpoints
+  generatePruningSuggestions: async (params = {}) => {
+    const response = await fetch(`${API_BASE_URL}/memory/prune/suggest`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  confirmPruning: async (memoryBlockIds) => {
+    const response = await fetch(`${API_BASE_URL}/memory/prune/confirm`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ memory_block_ids: memoryBlockIds }),
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  // Build Info
+  getBuildInfo: async () => {
+    const response = await fetch(`${API_BASE_URL}/build-info`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
   },
@@ -239,5 +392,8 @@ export const {
   validateConsolidationSuggestion,
   rejectConsolidationSuggestion,
   triggerConsolidation,
-  deleteConsolidationSuggestion // Export the new function
+  deleteConsolidationSuggestion, // Export the new function
+  generatePruningSuggestions,
+  confirmPruning,
+  getBuildInfo
 } = memoryService;

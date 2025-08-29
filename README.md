@@ -14,6 +14,7 @@ The monorepo includes the following main applications and infrastructure compone
 -   **Applications (`apps/`):**
     -   [`hindsight-dashboard`](apps/hindsight-dashboard/README.md): The frontend application for visualizing and interacting with the memory service.
     -   [`hindsight-service`](apps/hindsight-service/README.md): The core backend service for managing AI agent memories, keyword extraction, and database interactions.
+    -   [`hindsight-copilot-assistant`](apps/hindsight-copilot-assistant/README.md): A Next.js application that serves as a Copilot Assistant for the Hindsight AI memory service, providing a generative UI for interacting with the AI Agent Memory Service.
 -   **Infrastructure (`infra/`):**
     -   `postgres`: Docker Compose setup for the PostgreSQL database.
     -   `migrations`: SQL scripts for initial database schema setup.
@@ -57,89 +58,219 @@ AI agents can report explicit feedback on the utility or correctness of a previo
 
 ## Quick Start Guide
 
-For a quick setup and teardown of all Hindsight AI services, use the provided convenience scripts. By default, the backend service runs on `http://localhost:8000`, and the frontend dashboard runs on `http://localhost:3000`.
+Get Hindsight AI running in minutes with Docker Compose.
 
-*   **Start All Services**: `./start_hindsight.sh`
-    This script automates the entire setup and launch of all Hindsight AI components in a single command:
-    1.  **PostgreSQL Database**: Starts the database using Docker Compose.
-    2.  **Database Migrations**: Applies necessary database schema migrations for the backend service.
-    3.  **Backend Service**: Launches the Python FastAPI backend on `http://localhost:8000`.
-    4.  **Frontend Dashboard**: Starts the React development server for the dashboard on `http://localhost:3000`.
-    The script includes checks to prevent starting services that are already running. This provides a quick way to get all services up and running compared to manually starting individual services, which offers more granular control.
+### Prerequisites
+- Docker and Docker Compose
+- Git
 
-*   **Stop All Services**: `./stop_hindsight.sh`
-    This script will gracefully terminate processes listening on ports 3000 and 8000, and shut down the Dockerized PostgreSQL database. This provides a quick way to stop all Hindsight AI services.
+### 1. Clone and Setup
+```bash
+git clone https://github.com/your-repo/hindsight-ai.git
+cd hindsight-ai
+cp .env.example .env
+```
 
-For detailed, step-by-step setup, continue with the instructions below:
+### 2. Configure Environment
+Edit `.env` and add your LLM API key:
+```bash
+# Required for local development
+LLM_API_KEY=your_api_key_here
+LLM_MODEL_NAME=gemini-1.5-flash
+```
 
-1.  **Prerequisites**:
-    To set up and run the entire Hindsight AI project locally, the essential prerequisites (software and tools) are:
-    *   Docker and Docker Compose
-    *   Python 3.13+ and `uv` (or `pipenv`/`poetry`)
-    *   Node.js and npm (or yarn)
+### 3. Start Services
+```bash
+./start_hindsight.sh
+```
 
-2.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/your-repo/hindsight-ai.git
-    cd hindsight-ai
-    ```
+This will:
+- Start PostgreSQL database
+- Apply database migrations
+- Launch backend service on http://localhost:8000
+- Launch frontend dashboard on http://localhost:3000
 
-3.  **Set up Infrastructure (PostgreSQL)**:
-    To set up and initialize the PostgreSQL database for Hindsight AI, first navigate to the `infra/postgres` directory and start the database using Docker Compose:
-    ```bash
-    cd infra/postgres
-    docker-compose up -d
-    ```
-    Wait a few moments for the database to initialize.
+### 4. Stop Services
+```bash
+./stop_hindsight.sh
+```
 
-    **Configuring PostgreSQL Connection Details**:
-    The PostgreSQL database connection details can be configured using the `DATABASE_URL` environment variable in an `.env` file. An example is provided in `apps/hindsight-service/.env.example`. You can set the `DATABASE_URL` in the format `postgresql://user:password@host:port/database_name` in your `.env` file, and the `hindsight-service` backend will load these values at startup.
+## ⚠️ Important Database Setup Notice
 
-    **Apply Initial Database Schema**:
-    The initial database schema is applied via SQL scripts. Ensure the database container is running. You might need a tool like `psql` or a general database client to apply the `infra/migrations/V1__initial_schema.sql` script.
-    ```bash
-    # For example, if using psql from your host:
-    # psql -h localhost -p 5432 -U user -d hindsight_db -f ../migrations/V1__initial_schema.sql
-    # (Replace `user` with your configured user and `hindsight_db` with your database name if different)
-    ```
-    The `hindsight-service` handles its own database migrations using Alembic *after* this initial database schema has been applied. The initial schema sets up the base database, while Alembic manages subsequent schema changes over time.
+⚠️ **IMPORTANT: Alembic migrations are currently broken.** ⚠️
 
-4.  **Set up and Run Hindsight Service (Backend)**:
-    Navigate to the `apps/hindsight-service` directory, install dependencies, and run the service. The `uv` tool is used for Python dependency management and for running the `hindsight-service` backend. It is recommended for managing Python environments and executing the backend application due to its speed and efficiency.
-    The recommended way to install Python dependencies for the `hindsight-service` is by using `uv`:
-    ```bash
-    cd ../../apps/hindsight-service
-    uv sync # or poetry install / pipenv install
-    uv run uvicorn core.api.main:app --reload
-    ```
+To initialize the database, please use the provided backup file and restore script:
 
-    To manually start the Hindsight Service (backend) with hot-reloading for development, navigate to the `apps/hindsight-service` directory and run:
-    ```bash
-    uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000 --reload
-    ```
-    The `--reload` flag enables hot-reloading, meaning the server will automatically restart when code changes are detected. Logs will be visible directly in your terminal. The backend service should now be running, typically on `http://localhost:8000`.
+1. **Restore from Backup:** Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, and restart the `db` container.
 
-5.  **Set up and Run Hindsight Dashboard (Frontend)**:
-    In a new terminal, navigate to the `apps/hindsight-dashboard` directory, install dependencies if not already done (`npm install`), and then start the development server:
-    ```bash
-    cd ../../apps/hindsight-dashboard
-    npm install # or yarn install
-    npm start # or yarn start
-    ```
-    The frontend dashboard should open in your browser, typically on `http://localhost:3000`. `npm start` typically includes hot-reloading by default for React applications, and logs will be displayed in your terminal.
+**Note:** This is a temporary workaround while the alembic migration issues are being resolved. The provided backup contains sample data including memory blocks and consolidation suggestions to help you understand the system's capabilities.
 
-You now have the entire Hindsight AI system running locally.
+## Local Development with Docker Compose
+
+For development with hot-reload and debugging capabilities:
+
+### Start Development Environment
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+Services available at:
+- **Frontend Dashboard**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **Database**: localhost:5432
+
+### Stop Development Environment
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+```
+
+## Advanced Setup (Manual)
+
+For developers who need granular control or want to run services outside Docker:
+
+### Prerequisites
+- Python 3.13+ with `uv` (or pipenv/poetry)
+- Node.js and npm
+- PostgreSQL (or use Docker for database)
+
+### 1. Database Setup
+```bash
+cd infra/postgres
+docker-compose up -d
+```
+
+### 2. Backend Service
+```bash
+cd apps/hindsight-service
+uv sync  # Install dependencies
+uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 3. Frontend Dashboard
+```bash
+cd apps/hindsight-dashboard
+npm install
+npm start
+```
+
+## Deployment
+
+This section provides instructions for deploying the Hindsight AI application using Docker Compose, both locally and to a remote server.
+
+### Local Development with Docker Compose
+
+For local development, you can use Docker Compose to build and run the services directly from the source code. This setup uses Docker Compose profiles to exclude production services like Traefik and OAuth2 proxy, making local development simpler.
+
+1.  **Create a `.env` file:**
+    *   Copy the `.env.example` file to a new file named `.env`.
+    *   Fill in the required values for your local environment. You can leave `HINDSIGHT_SERVICE_IMAGE` and `HINDSIGHT_DASHBOARD_IMAGE` as they are, since Docker Compose will build the images from the source code.
+
+2.  **Start Services for Local Development:**
+    *   From the root of the project, run the following command:
+        ```bash
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+        ```
+    *   This will build the Docker images for the `hindsight-service` and `hindsight-dashboard` and start the database, backend, and frontend services.
+    *   The services will be accessible at:
+        *   **Frontend Dashboard**: http://localhost:3000
+        *   **Backend API**: http://localhost:8000
+        *   **Database**: localhost:5432 (if you need direct access)
+
+3.  **Stop Services:**
+    *   Press `Ctrl+C` to stop the services, or run:
+        ```bash
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+        ```
+
+### Production Deployment with Docker Compose
+
+For production deployment, you can use the same Docker Compose setup but include the production profile to enable Traefik and OAuth2 proxy.
+
+1.  **Create a `.env` file:**
+    *   Copy the `.env.example` file to a new file named `.env`.
+    *   Fill in all required values including production-specific ones like OAuth2 credentials and Cloudflare settings.
+
+2.  **Start Services for Production:**
+    *   From the root of the project, run the following command:
+        ```bash
+        docker compose --profile prod -f docker-compose.yml up -d --build
+        ```
+    *   This will build the Docker images and start all services including Traefik for reverse proxy and OAuth2 proxy for authentication.
+    *   Services will be accessible via your configured domain names (e.g., https://dashboard.hindsight-ai.com, https://api.hindsight-ai.com).
+
+### Remote Deployment
+
+Remote deployment is automated via a GitHub Actions workflow. The workflow builds the Docker images, pushes them to the GitHub Container Registry, and then deploys them to a remote server using Docker Compose.
+
+1.  **Prerequisites:**
+    *   A remote server with Docker and Docker Compose installed.
+    *   SSH access to the remote server.
+
+2.  **Configure GitHub Secrets:**
+    *   In your GitHub repository, go to `Settings > Secrets and variables > Actions` and add the following secrets:
+        *   `SSH_HOST`: The IP address or hostname of your remote server.
+        *   `SSH_USERNAME`: The username for SSH access to your remote server.
+        *   `SSH_KEY`: The private SSH key for your remote server.
+        *   `SSH_PORT`: The SSH port for your remote server (usually 22).
+        *   `CLOUDFLARE_DNS_EMAIL`: Your Cloudflare email address.
+        *   `CLOUDFLARE_DNS_API_TOKEN`: Your Cloudflare API token.
+        *   `OAUTH2_PROXY_CLIENT_ID`: Your Google OAuth2 client ID.
+        *   `OAUTH2_PROXY_CLIENT_SECRET`: Your Google OAuth2 client secret.
+        *   `OAUTH2_PROXY_COOKIE_SECRET`: A long, random string for the OAuth2 Proxy cookie secret.
+        *   `LLM_API_KEY`: Your API key for the LLM service.
+        *   `LLM_MODEL_NAME`: The name of the LLM model you want to use.
+        *   `CONSOLIDATION_BATCH_SIZE`: The batch size for the consolidation worker.
+        *   `FALLBACK_SIMILARITY_THRESHOLD`: The similarity threshold for the fallback mechanism.
+        *   `POSTGRES_USER`: The username for the PostgreSQL database.
+        *   `POSTGRES_PASSWORD`: The password for the PostgreSQL database.
+        *   `POSTGRES_USER`: The username for the PostgreSQL database.
+        *   `POSTGRES_PASSWORD`: The password for the PostgreSQL database.
+        *   `AUTHORIZED_EMAILS_CONTENT`: A comma-separated list of email addresses that are authorized to access the application.
+
+3.  **Deployment:**
+    *   Pushing to the `main` or `feat/docker-compose-deployment` branch will trigger the GitHub Actions workflow.
+    *   The workflow will automatically build and push the Docker images, and then deploy the application to your remote server.
+
+### Google OAuth2 Provider Configuration
+
+To use Google as an OAuth2 provider, you need to create a project in the [Google Cloud Console](https://console.cloud.google.com/) and configure the OAuth2 consent screen and credentials.
+
+1.  **Create a new project.**
+2.  **Configure the OAuth consent screen:**
+    *   Select "External" for the user type.
+    *   Fill in the required information (app name, user support email, etc.).
+    *   Add the following authorized domains:
+        *   `hindsight-ai.com`
+        *   `google.com`
+3.  **Create OAuth 2.0 client IDs:**
+    *   Select "Web application" for the application type.
+    *   Add the following authorized redirect URIs:
+        *   `https://dashboard.hindsight-ai.com/oauth2/callback`
+        *   `https://api.hindsight-ai.com/oauth2/callback`
+        *   `https://traefik.hindsight-ai.com/oauth2/callback`
+    *   Copy the "Client ID" and "Client secret" and add them to your GitHub secrets as `OAUTH2_PROXY_CLIENT_ID` and `OAUTH2_PROXY_CLIENT_SECRET`.
 
 ## Database Backup and Restore
+
+⚠️ **IMPORTANT: Alembic migrations are currently broken.** ⚠️
 
 A full backup and restore of the Hindsight AI PostgreSQL database (`hindsight_db`) can be performed using the `backup_db.sh` and `restore_db.sh` shell scripts located in `infra/scripts/`.
 
 *   **Backup (`backup_db.sh`):**
-    Ensure the script is executable (`chmod +x infra/scripts/backup_db.sh`), then run `./infra/scripts/backup_db.sh` from the project root. Backups are timestamped, include the Alembic revision, and are stored in `~/hindsight_db_backups/data/`. The script manages old backups (keeping 100 by default). Hourly backups can be automated via cron jobs.
+    Ensure the script is executable (`chmod +x infra/scripts/backup_db.sh`), then run `./infra/scripts/backup_db.sh` from the project root. Backups are timestamped, include the Alembic revision, and are stored in `./hindsight_db_backups/data/`. The script manages old backups (keeping 100 by default). Hourly backups can be automated via cron jobs.
 
 *   **Restore (`restore_db.sh`):**
-    Ensure the script is executable (`chmod +x infra/scripts/restore_db.sh`) and the PostgreSQL Docker container is running. Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, restart the `db` container, and run Alembic to align the schema. **Caution: Restoring overwrites current data.**
+    Ensure the script is executable (`chmod +x infra/scripts/restore_db.sh`) and the PostgreSQL Docker container is running. Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, and restart the `db` container. **Caution: Restoring overwrites current data.**
     Database data is persisted using Docker Volumes, but backups are crucial to protect against explicit volume removal.
+
+**Note:** The restore process no longer attempts to run Alembic migrations due to current issues with the migration system. The backup file contains a complete database schema and data snapshot.
+
+The provided database backup includes sample memory blocks and consolidation suggestions that demonstrate the system's capabilities:
+* **Memory Blocks:** Example operational memories showing how the system stores AI agent interactions, errors, lessons learned, and metadata
+* **Consolidation Suggestions:** Examples of how the knowledge distillation process identifies similar memories and generates consolidated insights
+* **Keywords:** Sample keyword extractions that show how the system categorizes and indexes memories for retrieval
+
+This sample data helps users understand how Hindsight AI captures, organizes, and distills AI agent operational intelligence.
 
 ## Running Tests
 

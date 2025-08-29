@@ -8,12 +8,13 @@ DB_PASSWORD="password"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Define paths relative to the script's location
-DOCKER_COMPOSE_DIR="$SCRIPT_DIR/../postgres"
+# Use the main docker-compose files to ensure the correct context for the 'db' service
+DOCKER_COMPOSE_FILES="-f $SCRIPT_DIR/../../docker-compose.yml -f $SCRIPT_DIR/../../docker-compose.dev.yml -f $SCRIPT_DIR/../postgres/docker-compose.yml"
 DB_SERVICE_NAME="db"
 HINDSIGHT_SERVICE_DIR="$SCRIPT_DIR/../../apps/hindsight-service" # Added for Alembic revision lookup
 
 # Backup directory and file prefix
-BACKUP_DIR="/home/jean/hindsight_db_backups/data"
+BACKUP_DIR="$SCRIPT_DIR/../../hindsight_db_backups/data"
 FILENAME_PREFIX="hindsight_db_backup"
 MAX_BACKUPS=100 # Configurable roll on 100 files
 
@@ -27,7 +28,7 @@ echo "Starting PostgreSQL backup for database '$DB_NAME'..."
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL database to be ready..."
-until docker compose -f "$DOCKER_COMPOSE_DIR/docker-compose.yml" exec -T "$DB_SERVICE_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME"; do
+until docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME"; do
   echo "PostgreSQL is unavailable - sleeping"
   sleep 1
 done
@@ -47,7 +48,7 @@ echo "Backup file will be: $BACKUP_FILE"
 
 # Use docker exec to run pg_dump inside the container
 # This ensures pg_dump uses the container's environment and connects directly to the service
-docker compose -f "$DOCKER_COMPOSE_DIR/docker-compose.yml" exec -T "$DB_SERVICE_NAME" \
+docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" \
   pg_dump -U "$DB_USER" -d "$DB_NAME" > "$BACKUP_FILE"
 
 if [ $? -eq 0 ]; then

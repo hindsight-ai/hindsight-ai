@@ -63,13 +63,19 @@ const MemoryBlockList = () => {
         keywords: filters.keywords.join(','), // Convert array to comma-separated string
         include_archived: false, // Filter out archived blocks by default
       });
-      setMemoryBlocks(response.items);
+      // Ensure response.items is an array before setting memory blocks
+      if (response && Array.isArray(response.items)) {
+        setMemoryBlocks(response.items);
+      } else {
+        setMemoryBlocks([]); // Default to empty array if items is not found or not an array
+      }
       setPagination((prevPagination) => ({
         ...prevPagination,
         total_items: response.total_items,
         total_pages: response.total_pages,
       }));
     } catch (err) {
+      // The memoryService will already show the 401 notification, so we just need to set the error for display
       setError('Failed to fetch memory blocks: ' + err.message);
     } finally {
       setLoading(false);
@@ -82,15 +88,22 @@ const MemoryBlockList = () => {
       setAvailableKeywords(response);
     } catch (err) {
       console.error('Failed to fetch keywords:', err);
+      // The memoryService will already show the 401 notification, so we don't need to do anything here
     }
   }, []);
 
   const fetchAgentIds = useCallback(async () => {
     try {
       const response = await agentService.getAgents({ per_page: 1000 }); // Fetch a reasonable number of agents
-      setAvailableAgentIds(response.items.map(agent => agent.id));
+      // Ensure response.items is an array before mapping
+      if (response && Array.isArray(response.items)) {
+        setAvailableAgentIds(response.items.map(agent => agent.id));
+      } else {
+        setAvailableAgentIds([]); // Default to empty array if items is not found or not an array
+      }
     } catch (err) {
       console.error('Failed to fetch agent IDs:', err);
+      // The agentService will already show the 401 notification, so we don't need to do anything here
     }
   }, []);
 

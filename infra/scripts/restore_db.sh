@@ -8,12 +8,13 @@ DB_PASSWORD="password"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Define paths relative to the script's location
-DOCKER_COMPOSE_DIR="$SCRIPT_DIR/../postgres"
+# Use the main docker-compose files to ensure the correct context for the 'db' service
+DOCKER_COMPOSE_FILES="-f $SCRIPT_DIR/../../docker-compose.yml -f $SCRIPT_DIR/../../docker-compose.dev.yml -f $SCRIPT_DIR/../postgres/docker-compose.yml"
 DB_SERVICE_NAME="db"
 HINDSIGHT_SERVICE_DIR="$SCRIPT_DIR/../../apps/hindsight-service"
 
 # Backup directory
-BACKUP_DIR="/home/jean/hindsight_db_backups/data"
+BACKUP_DIR="$SCRIPT_DIR/../../hindsight_db_backups/data"
 
 echo "Available backups:"
 select BACKUP_FILE_PATH in "$BACKUP_DIR"/hindsight_db_backup_*.sql; do
@@ -26,7 +27,7 @@ select BACKUP_FILE_PATH in "$BACKUP_DIR"/hindsight_db_backup_*.sql; do
 done
 
 echo "Stopping PostgreSQL container..."
-docker compose -f "$DOCKER_COMPOSE_DIR/docker-compose.yml" stop "$DB_SERVICE_NAME"
+docker compose $DOCKER_COMPOSE_FILES stop "$DB_SERVICE_NAME"
 
 if [ $? -ne 0 ]; then
   echo "Failed to stop PostgreSQL container. Exiting."
@@ -34,7 +35,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Starting PostgreSQL container to ensure it's running for psql commands..."
-docker compose -f "$DOCKER_COMPOSE_DIR/docker-compose.yml" start "$DB_SERVICE_NAME"
+docker compose $DOCKER_COMPOSE_FILES start "$DB_SERVICE_NAME"
 
 if [ $? -ne 0 ]; then
   echo "Failed to start PostgreSQL container. Exiting."
@@ -43,7 +44,7 @@ fi
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL database to be ready..."
-until docker compose -f "$DOCKER_COMPOSE_DIR/docker-compose.yml" exec -T "$DB_SERVICE_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME"; do
+until docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME"; do
   echo "PostgreSQL is unavailable - sleeping"
   sleep 1
 done
@@ -55,10 +56,10 @@ echo "Restoring database from $BACKUP_FILE_PATH..."
 # This requires connecting as a superuser or a user with CREATE DATABASE privileges
 # For simplicity, we'll use the same user, assuming it has sufficient privileges
 # In a production environment, you might connect as 'postgres' user for this step
-docker compose -f "$DOCKER_COMPOSE_DIR/docker-compose.yml" exec -T "$DB_SERVICE_NAME" \
+docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" \
   psql -U "$DB_USER" -d postgres -c "DROP DATABASE IF EXISTS $DB_NAME WITH (FORCE);"
 
-docker compose -f "$DOCKER_COMPOSE_DIR/docker-compose.yml" exec -T "$DB_SERVICE_NAME" \
+docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" \
   psql -U "$DB_USER" -d postgres -c "CREATE DATABASE $DB_NAME OWNER \"$DB_USER\";"
 
 if [ $? -ne 0 ]; then
@@ -67,7 +68,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Restore the database
-docker compose -f "$DOCKER_COMPOSE_DIR/docker-compose.yml" exec -T "$DB_SERVICE_NAME" \
+docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" \
   psql -U "$DB_USER" -d "$DB_NAME" < "$BACKUP_FILE_PATH"
 
 if [ $? -eq 0 ]; then
