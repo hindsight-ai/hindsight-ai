@@ -54,7 +54,24 @@ export class MemoryBlocksPage {
    * Get all memory block IDs currently visible
    */
   async getVisibleMemoryBlockIds() {
-    return await this.page.locator('.memory-block-table-row [data-testid*="id"], .memory-block-table-row .id-cell').allTextContents();
+    // Try multiple selectors to find the ID column content
+    const selectors = [
+      '.memory-block-table-row .truncated-id', // CopyToClipboardButton truncated text
+      '.memory-block-table-row .copy-id-container .truncated-id', // Full path to truncated ID
+      '.memory-block-table-row .id-cell', // Fallback ID cell
+      '.memory-block-table-row [data-testid*="id"]' // Data test ID
+    ];
+
+    for (const selector of selectors) {
+      const elements = this.page.locator(selector);
+      const count = await elements.count();
+      if (count > 0) {
+        return await elements.allTextContents();
+      }
+    }
+
+    // If no selectors work, return empty array
+    return [];
   }
 
   /**
