@@ -47,7 +47,7 @@ To simplify database backup and restoration, two shell scripts have been created
 This script automates the process of creating a timestamped backup of the `hindsight_db` database. It also captures the current Alembic migration revision and includes it in the backup filename. It manages old backups, ensuring only a configurable number of recent backups are kept.
 
 *   **Location:** `infra/scripts/backup_db.sh`
-*   **Backup Storage:** Backups are stored in `~/hindsight_db_backups/data/`.
+*   **Backup Storage:** Backups are stored in `./hindsight_db_backups/data/`.
 *   **Filename Format:** Backups are named `hindsight_db_backup_YYYYMMDD_HHMMSS_ALEMBICREV.sql`. The `ALEMBICREV` is the 12-character hexadecimal revision ID of the database schema at the time of backup. If the revision cannot be determined, `unknown` will be used.
 *   **File Roll:** The script is configured to keep a maximum of `100` backup files by default. When a new backup is created, if the total number of backups exceeds this limit, the oldest files are automatically removed. This `MAX_BACKUPS` value can be changed by editing the `infra/scripts/backup_db.sh` script.
 
@@ -63,7 +63,7 @@ This script automates the process of creating a timestamped backup of the `hinds
     ```bash
     ./infra/scripts/backup_db.sh
     ```
-    This will create a new backup file (e.g., `hindsight_db_backup_20250609_213000_2a9c8674c949.sql`) in the `~/hindsight_db_backups/data/` directory.
+    This will create a new backup file (e.g., `hindsight_db_backup_20250609_213000_2a9c8674c949.sql`) in the `./hindsight_db_backups/data/` directory.
 
 ### 2.2. Restore Script (`infra/scripts/restore_db.sh`)
 
@@ -83,7 +83,7 @@ This script allows you to restore the `hindsight_db` database from a previously 
     ```bash
     ./infra/scripts/restore_db.sh
     ```
-    The script will list all available backup files in `~/hindsight_db_backups/data/` and prompt you to select which one to restore.
+    The script will list all available backup files in `./hindsight_db_backups/data/` and prompt you to select which one to restore.
     It will then:
     *   Stop the `db` Docker container.
     *   Drop and recreate the `hindsight_db` database.
@@ -121,12 +121,12 @@ To ensure regular, automatic backups, you can schedule the `backup_db.sh` script
         *   `*`: Every month
         *   `*`: Every day of the week
         So, this job will run every hour at the start of the hour (e.g., 1:00, 2:00, 3:00, etc.).
-    *   `/home/jean/git/hindsight-ai/infra/scripts/backup_db.sh`: This is the full path to the backup script.
-    *   `>> /home/jean/hindsight_db_backups/logs/backup.log`: This redirects the standard output of the script to a log file, appending new output to the end of the file. You might need to create the `logs` directory first: `mkdir -p ~/hindsight_db_backups/logs`.
+    *   `./infra/scripts/backup_db.sh`: This is the relative path to the backup script.
+    *   `>> ./hindsight_db_backups/logs/backup.log`: This redirects the standard output of the script to a log file, appending new output to the end of the file. You might need to create the `logs` directory first: `mkdir -p ./hindsight_db_backups/logs`.
     *   `2>&1`: This redirects any error messages (standard error) to the same log file as the regular output. This is useful for debugging if your cron job doesn't work as expected.
 
 3.  **Save and exit the crontab editor.**
     *   If using `nano`: Press `Ctrl+X`, then `Y` to confirm saving, then `Enter`.
     *   If using `vi`: Press `Esc`, then type `:wq` and press `Enter`.
 
-Your cron job is now set up! It will automatically create hourly backups. Remember to create the `logs` directory: `mkdir -p ~/hindsight_db_backups/logs`.
+Your cron job is now set up! It will automatically create hourly backups. Remember to create the `logs` directory: `mkdir -p ./hindsight_db_backups/logs`.

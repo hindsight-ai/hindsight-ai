@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session, joinedload # Import joinedload
 from . import models, schemas
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import or_, func # Import func
 from typing import List, Optional
 
@@ -278,14 +278,30 @@ def update_memory_block(db: Session, memory_id: uuid.UUID, memory_block: schemas
         db.refresh(db_memory_block)
     return db_memory_block
 
+import logging # Added to top of file
+
+logger = logging.getLogger(__name__) # Added to top of file
+
+# ... (rest of the file)
+
 def archive_memory_block(db: Session, memory_id: uuid.UUID):
+    logger.info(f"Attempting to archive memory block with ID: {memory_id}")
     db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
     if db_memory_block:
+        logger.info(f"Memory block {memory_id} found. Setting archived=True and archived_at.")
         db_memory_block.archived = True
-        db.commit()
-        db.refresh(db_memory_block)
-        return True
-    return False
+        db_memory_block.archived_at = datetime.now(timezone.utc)
+        try:
+            db.commit()
+            db.refresh(db_memory_block)
+            logger.info(f"Memory block {memory_id} successfully archived at {db_memory_block.archived_at}.")
+            return db_memory_block # Return the updated memory block
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error archiving memory block {memory_id}: {e}")
+            raise # Re-raise the exception to be caught by the API endpoint
+    logger.warning(f"Memory block with ID: {memory_id} not found for archiving.")
+    return None # Return None if not found
 
 def delete_memory_block(db: Session, memory_id: uuid.UUID):
     # This function now performs a hard delete, used for actual removal, not archiving
@@ -492,6 +508,7 @@ def apply_consolidation(db: Session, suggestion_id: uuid.UUID):
                     db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
                     if db_memory_block:
                         db_memory_block.archived = True # Set archived to True
+                        db_memory_block.archived_at = datetime.now(timezone.utc) # Set archived timestamp
                         db.add(db_memory_block) # Re-add to session to mark as dirty
 
                 # Update suggestion status

@@ -135,6 +135,26 @@ services:
       - "traefik.http.routers.hindsight-dashboard-router.service=hindsight-dashboard-svc@docker"
       - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
 
+  hindsight-copilot-assistant:
+    image: ${HINDSIGHT_COPILOT_ASSISTANT_IMAGE:-hindsight-copilot-assistant:latest}
+    build:
+      context: ./apps/hindsight-copilot-assistant
+      dockerfile: Dockerfile
+    container_name: hindsight-copilot-assistant
+    networks:
+      - hindsight-ai
+    ports:
+      - "3001:3000"
+    depends_on:
+      - hindsight-service
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hindsight-copilot-assistant-router.rule=Host(`copilot.hindsight-ai.com`)"
+      - "traefik.http.routers.hindsight-copilot-assistant-router.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-copilot-assistant-router.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-copilot-assistant-router.service=hindsight-copilot-assistant-svc@docker"
+      - "traefik.http.services.hindsight-copilot-assistant-svc.loadbalancer.server.port=3001"
+
 networks:
   hindsight-ai:
     driver: bridge

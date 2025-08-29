@@ -7,6 +7,7 @@ import AgentManagementPage from './components/AgentManagementPage';
 import ConsolidationSuggestions from './components/ConsolidationSuggestions';
 import ConsolidationSuggestionDetail from './components/ConsolidationSuggestionDetail';
 import ArchivedMemoryBlockList from './components/ArchivedMemoryBlockList';
+import PruningSuggestions from './components/PruningSuggestions';
 import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
 import authService from './api/authService';
@@ -113,6 +114,11 @@ function AppContent() {
                   Archived Memory Blocks
                 </Link>
               </li>
+              <li className="nav-item">
+                <Link to="/pruning-suggestions" className={`nav-link ${location.pathname === '/pruning-suggestions' ? 'active' : ''}`}>
+                  Memory Pruning
+                </Link>
+              </li>
             </ul>
           </nav>
         </div>
@@ -127,6 +133,7 @@ function AppContent() {
           <Route path="/consolidation-suggestions" element={<ConsolidationSuggestions key={location.pathname} />} />
           <Route path="/consolidation-suggestions/:id" element={<ConsolidationSuggestionDetail />} />
           <Route path="/archived-memory-blocks" element={<ArchivedMemoryBlockList key={location.pathname} />} />
+          <Route path="/pruning-suggestions" element={<PruningSuggestions key={location.pathname} />} />
         </Routes>
       </main>
       <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} />

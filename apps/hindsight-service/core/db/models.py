@@ -45,6 +45,7 @@ class MemoryBlock(Base):
     feedback_score = Column(Integer, default=0)
     retrieval_count = Column(Integer, default=0) # Added retrieval_count
     archived = Column(Boolean, default=False) # Added archived column
+    archived_at = Column(DateTime(timezone=True), nullable=True) # Added archived timestamp
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -60,6 +61,7 @@ class MemoryBlock(Base):
         Index('idx_memory_blocks_agent_id', 'agent_id'),
         Index('idx_memory_blocks_conversation_id', 'conversation_id'),
         Index('idx_memory_blocks_timestamp', 'timestamp'),
+        Index('idx_memory_blocks_archived_at', 'archived_at'),
     )
 
 class FeedbackLog(Base):

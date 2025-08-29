@@ -21,7 +21,20 @@ const agentService = {
       }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    try {
+      const data = await response.json();
+      // Ensure the response always has an 'items' array, even if empty
+      if (data && Array.isArray(data.items)) {
+        return data;
+      } else if (Array.isArray(data)) {
+        // If the API returns a raw array, wrap it in an object with 'items'
+        return { items: data };
+      }
+      return { items: [] }; // Default to an empty items array
+    } catch (jsonError) {
+      console.error('Failed to parse JSON response for agents:', jsonError);
+      return { items: [] }; // Return empty items on JSON parsing error
+    }
   },
 
   createAgent: async (data) => {

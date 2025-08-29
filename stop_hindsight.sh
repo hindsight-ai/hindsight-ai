@@ -14,13 +14,23 @@ else
 fi
 
 # Also stop any legacy processes that might be running on ports
-echo "Checking for legacy processes on ports 3000 and 8000..."
+echo "Checking for legacy processes on ports 3000, 3001, and 8000..."
 
 # Stop dashboard on port 3000
 PIDS_3000=$(lsof -t -i:3000 || true)
 if [ -n "$PIDS_3000" ]; then
     echo "Killing legacy processes on port 3000 (PIDs: $PIDS_3000)"
     for PID in $PIDS_3000; do
+        kill "$PID" || true
+    done
+    sleep 1
+fi
+
+# Stop copilot assistant on port 3001
+PIDS_3001=$(lsof -t -i:3001 || true)
+if [ -n "$PIDS_3001" ]; then
+    echo "Killing legacy processes on port 3001 (PIDs: $PIDS_3001)"
+    for PID in $PIDS_3001; do
         kill "$PID" || true
     done
     sleep 1
@@ -35,10 +45,6 @@ if [ -n "$PIDS_8000" ]; then
     done
     sleep 1
 fi
-
-# Clean up legacy PID files
-rm -f "apps/hindsight-dashboard/.dashboard.pid" || true
-rm -f "apps/hindsight-service/.backend.pid" || true
 
 echo "All Hindsight services stopped."
 

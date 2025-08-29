@@ -360,11 +360,11 @@ const ConsolidationSuggestions = () => {
                     </button>
                     {suggestion.status === 'pending' && (
                       <>
-                        <button onClick={() => handleValidate(suggestion.suggestion_id)} className="action-icon-button view-edit-button" title="Validate Suggestion">
-                          ✔️
+                        <button onClick={() => handleValidate(suggestion.suggestion_id)} className="action-icon-button view-edit-button" title="Accept Suggestion">
+                          ✓ Accept
                         </button>
                         <button onClick={() => handleReject(suggestion.suggestion_id)} className="action-icon-button remove-button" title="Reject Suggestion">
-                          ✖️
+                          ✗ Reject
                         </button>
                       </>
                     )}

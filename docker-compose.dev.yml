@@ -10,7 +10,8 @@ services:
       - "8000:8000"
     # Ensure the API URL for the dashboard points to localhost:8000
     environment:
-      REACT_APP_HINDSIGHT_SERVICE_API_URL: http://localhost:8000
+      REACT_APP_HINDSIGHT_SERVICE_API_URL: http://hindsight-service:8000
+      DATABASE_URL: postgresql://user:password@db:5432/hindsight_db
       DEV_MODE: "true"
       BUILD_SHA: ${BACKEND_BUILD_SHA}
       BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}
@@ -21,13 +22,15 @@ services:
   hindsight-dashboard:
     ports:
       - "3000:80"
-    # Set the API URL to localhost:8000 for the frontend
+
+  # Add hindsight-copilot-assistant service
+  hindsight-copilot-assistant:
     build:
-      args:
-        REACT_APP_HINDSIGHT_SERVICE_API_URL: http://localhost:8000
-        REACT_APP_VERSION: ${REACT_APP_VERSION}
-        REACT_APP_BUILD_SHA: ${REACT_APP_BUILD_SHA}
-        REACT_APP_BUILD_TIMESTAMP: ${REACT_APP_BUILD_TIMESTAMP}
-        REACT_APP_DASHBOARD_IMAGE_TAG: ${REACT_APP_DASHBOARD_IMAGE_TAG}
+      context: ./apps/hindsight-copilot-assistant
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
     environment:
-      REACT_APP_HINDSIGHT_SERVICE_API_URL: http://localhost:8000
+      GOOGLE_API_KEY: ${LLM_API_KEY}
+    networks:
+      - hindsight-ai

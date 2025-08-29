@@ -13,9 +13,8 @@ http:
     cors-headers:
       headers:
         customResponseHeaders:
-          Access-Control-Allow-Origin: "https://dashboard.hindsight-ai.com"
+          Access-Control-Allow-Origin: "*"
           Access-Control-Allow-Methods: "GET, POST, PUT, DELETE, OPTIONS"
           Access-Control-Allow-Headers: "Content-Type, Authorization"
           Access-Control-Allow-Credentials: "true"
         addVaryHeader: true # Re-add addVaryHeader for good measure
-

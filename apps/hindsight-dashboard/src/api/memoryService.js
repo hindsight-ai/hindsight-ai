@@ -317,6 +317,45 @@ const memoryService = {
     return response.json();
   },
 
+  // Pruning Endpoints
+  generatePruningSuggestions: async (params = {}) => {
+    const response = await fetch(`${API_BASE_URL}/memory/prune/suggest`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  confirmPruning: async (memoryBlockIds) => {
+    const response = await fetch(`${API_BASE_URL}/memory/prune/confirm`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ memory_block_ids: memoryBlockIds }),
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
   // Build Info
   getBuildInfo: async () => {
     const response = await fetch(`${API_BASE_URL}/build-info`, {
@@ -354,5 +393,7 @@ export const {
   rejectConsolidationSuggestion,
   triggerConsolidation,
   deleteConsolidationSuggestion, // Export the new function
+  generatePruningSuggestions,
+  confirmPruning,
   getBuildInfo
 } = memoryService;

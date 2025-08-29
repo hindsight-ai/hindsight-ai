@@ -14,6 +14,7 @@ The monorepo includes the following main applications and infrastructure compone
 -   **Applications (`apps/`):**
     -   [`hindsight-dashboard`](apps/hindsight-dashboard/README.md): The frontend application for visualizing and interacting with the memory service.
     -   [`hindsight-service`](apps/hindsight-service/README.md): The core backend service for managing AI agent memories, keyword extraction, and database interactions.
+    -   [`hindsight-copilot-assistant`](apps/hindsight-copilot-assistant/README.md): A Next.js application that serves as a Copilot Assistant for the Hindsight AI memory service, providing a generative UI for interacting with the AI Agent Memory Service.
 -   **Infrastructure (`infra/`):**
     -   `postgres`: Docker Compose setup for the PostgreSQL database.
     -   `migrations`: SQL scripts for initial database schema setup.
@@ -244,7 +245,7 @@ To use Google as an OAuth2 provider, you need to create a project in the [Google
 A full backup and restore of the Hindsight AI PostgreSQL database (`hindsight_db`) can be performed using the `backup_db.sh` and `restore_db.sh` shell scripts located in `infra/scripts/`.
 
 *   **Backup (`backup_db.sh`):**
-    Ensure the script is executable (`chmod +x infra/scripts/backup_db.sh`), then run `./infra/scripts/backup_db.sh` from the project root. Backups are timestamped, include the Alembic revision, and are stored in `~/hindsight_db_backups/data/`. The script manages old backups (keeping 100 by default). Hourly backups can be automated via cron jobs.
+    Ensure the script is executable (`chmod +x infra/scripts/backup_db.sh`), then run `./infra/scripts/backup_db.sh` from the project root. Backups are timestamped, include the Alembic revision, and are stored in `./hindsight_db_backups/data/`. The script manages old backups (keeping 100 by default). Hourly backups can be automated via cron jobs.
 
 *   **Restore (`restore_db.sh`):**
     Ensure the script is executable (`chmod +x infra/scripts/restore_db.sh`) and the PostgreSQL Docker container is running. Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, restart the `db` container, and run Alembic to align the schema. **Caution: Restoring overwrites current data.**
