@@ -82,8 +82,8 @@ export class MemoryServiceClient {
    * @param payload The data to create the memory block with.
    * @returns An object containing the created memory ID.
    */
-  async createMemoryBlock(payload: CreateMemoryBlockPayload): Promise<{ memory_id: string }> {
-    const response = await this.client.post<{ memory_id: string }>(
+  async createMemoryBlock(payload: CreateMemoryBlockPayload): Promise<{ id: string }> {
+    const response = await this.client.post<{ id: string }>(
       '/memory-blocks',
       payload
     );

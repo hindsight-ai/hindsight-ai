@@ -322,7 +322,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       const result = await memoryServiceClient.createMemoryBlock(payload);
       return {
-        content: [{ type: "text", text: `Successfully created memory block with ID: ${result.memory_id}` }]
+        content: [{ type: "text", text: `Successfully created memory block with ID: ${result.id}` }]
       };
     }
 
