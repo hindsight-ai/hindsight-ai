@@ -109,10 +109,10 @@ const MemoryBlockList = () => {
     }
   }, []);
 
+  // Clear selections when page changes (but not when memoryBlocks change due to other reasons)
   useEffect(() => {
-    // Clear selections when memory blocks change (e.g., after fetch or delete)
     setSelectedMemoryBlocks([]);
-  }, [memoryBlocks]);
+  }, [pagination.page]);
 
   // Effect to trigger fetch when filters (excluding search), pagination, or sort change
   const location = useLocation(); // Get location object

@@ -23,7 +23,7 @@
 .memory-block-table-body {
   display: flex;
   flex-direction: column;
-  pointer-events: none; /* Prevent table body from intercepting clicks */
+  /* Removed pointer-events: none to allow proper interaction */
 }
 
 .memory-block-table-row {
@@ -52,7 +52,7 @@
   align-items: stretch;
   box-sizing: border-box;
   border-right: 1px solid #ccc; /* Use border-right for column separation */
-  pointer-events: none; /* Prevent data cells from intercepting clicks */
+  /* Removed pointer-events: none to allow proper interaction */
 }
 
 .header-cell,
@@ -197,6 +197,46 @@
   line-height: 1.5; /* Better readability */
 }
 
+/* Checkbox specific styles to ensure they work with pointer events */
+.memory-block-table-row {
+  pointer-events: auto !important;
+}
+
+.data-cell {
+  pointer-events: auto !important;
+}
+
+.data-cell input[type="checkbox"] {
+  pointer-events: auto !important;
+}
+
+.header-cell input[type="checkbox"] {
+  pointer-events: auto !important;
+}
+
+/* Ensure data cell wrappers containing checkboxes allow pointer events */
+.data-cell-wrapper:has(input[type="checkbox"]) {
+  pointer-events: auto !important;
+}
+
+.data-cell:has(input[type="checkbox"]) {
+  pointer-events: auto !important;
+}
+
+/* More specific rules for select cells */
+.select-cell {
+  pointer-events: auto !important;
+}
+
+.select-cell .data-cell {
+  pointer-events: auto !important;
+}
+
+.select-cell input[type="checkbox"] {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
 /* Pagination */
 .pagination {
   display: flex;
@@ -208,6 +248,32 @@
   position: relative; /* Establish stacking context */
   z-index: 10; /* Ensure pagination is above table */
   pointer-events: auto; /* Ensure pagination can receive clicks */
+}
+
+/* Ensure pagination buttons are never blocked by table content */
+.pagination button {
+  position: relative;
+  z-index: 1000; /* Very high z-index to ensure they're on top */
+  pointer-events: auto !important;
+}
+
+/* Additional rules for mobile browsers */
+@media (max-width: 768px) {
+  .pagination button {
+    min-height: 44px; /* iOS recommended minimum touch target */
+    min-width: 44px;
+  }
+
+  /* Ensure table content doesn't interfere with pagination on mobile */
+  .memory-block-table-container {
+    position: relative;
+    z-index: 1;
+  }
+
+  .pagination {
+    position: relative;
+    z-index: 1001; /* Higher than table container */
+  }
 }
 
 .pagination-per-page {
@@ -801,6 +867,37 @@
 .bulk-action-bar button.remove:hover {
   background-color: #c0392b;
   box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
+}
+
+/* Specific button classes for tests */
+.bulk-remove-button {
+  background-color: #e74c3c;
+  box-shadow: 0 2px 5px rgba(231, 76, 60, 0.2);
+}
+
+.bulk-remove-button:hover {
+  background-color: #c0392b;
+  box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
+}
+
+.bulk-tag-button {
+  background-color: #007bff;
+  box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2);
+}
+
+.bulk-tag-button:hover {
+  background-color: #0056b3;
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+.bulk-export-button {
+  background-color: #007bff;
+  box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2);
+}
+
+.bulk-export-button:hover {
+  background-color: #0056b3;
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
 }
 
 /* Keyword Tags in Table */

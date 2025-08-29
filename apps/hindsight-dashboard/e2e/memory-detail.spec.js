@@ -28,7 +28,7 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
 
     // Since ID column is hidden, we'll use a known ID from the API
     // For now, let's use the first ID we know exists from the API response we saw earlier
-    const firstMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc'; // From API response
+    const firstMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c'; // From API response
 
     // Click on the view/edit button for the first memory block
     const firstRow = page.locator('.memory-block-table-row').first();
@@ -58,8 +58,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should display all required memory block detail fields', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     await memoryBlockDetailPage.goto(testMemoryBlockId);
 
@@ -73,8 +73,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should display memory block metadata correctly', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     await memoryBlockDetailPage.goto(testMemoryBlockId);
 
@@ -93,8 +93,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should navigate back to memory blocks list', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     await memoryBlockDetailPage.goto(testMemoryBlockId);
 
@@ -108,7 +108,7 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
 
   test('should enter and exit edit mode', async ({ page }) => {
     // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     await memoryBlockDetailPage.goto(testMemoryBlockId);
 
@@ -129,8 +129,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should update memory block fields in edit mode', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     await memoryBlockDetailPage.goto(testMemoryBlockId);
 
@@ -173,8 +173,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should display creation date in readable format', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     await memoryBlockDetailPage.goto(testMemoryBlockId);
 
@@ -192,8 +192,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should display feedback score and retrieval count', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     await memoryBlockDetailPage.goto(testMemoryBlockId);
 
@@ -219,8 +219,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should display keywords correctly', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     await memoryBlockDetailPage.goto(testMemoryBlockId);
 
@@ -236,8 +236,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should handle loading states properly', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     // Start navigation
     await page.goto(`/memory-blocks/${testMemoryBlockId}`);
@@ -254,8 +254,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should maintain URL structure for direct navigation', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     // Navigate directly to detail page
     await page.goto(`/memory-blocks/${testMemoryBlockId}`);
@@ -269,8 +269,8 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
   });
 
   test('should handle page refresh on detail view', async ({ page }) => {
-    // Use a known memory block ID
-    const testMemoryBlockId = 'cf81384c-23f6-42d1-a438-439ec8d699bc';
+    // Use an existing memory block ID from the database
+    const testMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c';
 
     await memoryBlockDetailPage.goto(testMemoryBlockId);
 

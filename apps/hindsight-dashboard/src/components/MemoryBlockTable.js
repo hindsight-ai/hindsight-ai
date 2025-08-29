@@ -68,10 +68,30 @@ const MemoryBlockTable = ({
               style={{ padding: 0, margin: 0 }}
             >
               <div
-                className={`header-cell ${col.isSortable ? 'sortable-header' : ''}`}
-                onClick={() => col.isSortable && onSortChange(col.id)}
-                onKeyDown={(e) => col.isSortable && (e.key === 'Enter' || e.key === ' ') && onSortChange(col.id)}
-                tabIndex={col.isSortable ? 0 : -1}
+                className={`header-cell ${col.isSortable ? 'sortable-header' : ''} ${col.id === 'select' ? 'checkbox-header' : ''}`}
+                onClick={(e) => {
+                  // Prevent click propagation for select column to avoid interfering with checkbox
+                  if (col.id === 'select') {
+                    e.stopPropagation();
+                  } else if (col.isSortable) {
+                    onSortChange(col.id);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (col.id === 'select') {
+                    // Allow keyboard navigation for checkbox
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      const checkbox = e.currentTarget.querySelector('input[type="checkbox"]');
+                      if (checkbox) {
+                        checkbox.click();
+                      }
+                    }
+                  } else if (col.isSortable && (e.key === 'Enter' || e.key === ' ')) {
+                    onSortChange(col.id);
+                  }
+                }}
+                tabIndex={col.isSortable || col.id === 'select' ? 0 : -1}
                 role="columnheader"
                 aria-sort={sort.field === col.id ? (sort.order === 'asc' ? 'ascending' : 'descending') : 'none'}
               >
@@ -81,6 +101,7 @@ const MemoryBlockTable = ({
                     onChange={onSelectAllMemoryBlocks}
                     checked={selectedMemoryBlocks.length === memoryBlocks.length && memoryBlocks.length > 0}
                     aria-label="Select all memory blocks"
+                    style={{ pointerEvents: 'auto', cursor: 'pointer' }}
                   />
                 ) : (
                   <>
@@ -123,6 +144,8 @@ const MemoryBlockTable = ({
             type="checkbox"
             checked={selectedMemoryBlocks.includes(block.id)}
             onChange={() => onSelectMemoryBlock(block.id)}
+            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+            onClick={(e) => e.stopPropagation()} // Prevent row click interference
           />
         );
       case 'id':
