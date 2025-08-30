@@ -345,17 +345,7 @@ The Hindsight Dashboard is a single-page React application that communicates wit
 - Filter combination presets
 - User-friendly management interface
 
-#### 3.9.7 Keyboard Shortcuts
-**Requirement ID:** UI-012
-**Description:** The system shall provide keyboard shortcuts for power users.
-**Priority:** Medium
-**Validation Criteria:**
-- Keyboard shortcut cheat sheet accessible via icon
-- Comprehensive shortcut coverage for common actions
-- Customizable shortcut preferences
-- Visual shortcut indicators in UI
-- Accessibility compliance
-- Cross-platform compatibility
+
 
 ## 4. Non-Functional Requirements
 

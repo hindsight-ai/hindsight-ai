@@ -12,7 +12,7 @@ import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
 import FloatingActionButton from './components/FloatingActionButton';
 import ThemeToggle from './components/ThemeToggle';
-import KeyboardShortcutHelp from './components/KeyboardShortcutHelp';
+
 import authService from './api/authService';
 import './App.css';
 
@@ -22,24 +22,12 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+
 
   useEffect(() => {
     fetchUserInfo();
     // Set document title
     document.title = 'Hindsight-AI';
-
-    // Add keyboard shortcuts
-    const handleKeyDown = (event) => {
-      // Ctrl/Cmd + / to show shortcuts
-      if ((event.ctrlKey || event.metaKey) && event.key === '/') {
-        event.preventDefault();
-        setShowShortcutHelp(true);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const fetchUserInfo = async () => {
@@ -162,13 +150,7 @@ function AppContent() {
             >
               About
             </button>
-            <button
-              className="shortcut-help-button"
-              onClick={() => setShowShortcutHelp(true)}
-              aria-label="Keyboard shortcuts help"
-              title="Keyboard shortcuts (Ctrl+/)">
-              ?
-            </button>
+
           </div>
         </div>
 
@@ -222,11 +204,7 @@ function AppContent() {
         }} />
       )}
 
-      {/* Keyboard Shortcuts Help */}
-      <KeyboardShortcutHelp
-        isOpen={showShortcutHelp}
-        onClose={() => setShowShortcutHelp(false)}
-      />
+
 
       <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} />
     </div>

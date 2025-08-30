@@ -150,7 +150,7 @@ const MemoryBlockList = () => {
 
     window.addEventListener('memoryBlockAdded', handleMemoryBlockAdded);
     return () => window.removeEventListener('memoryBlockAdded', handleMemoryBlockAdded);
-  }, [fetchMemoryBlocks]);
+  }, []); // Remove fetchMemoryBlocks dependency to prevent unnecessary re-addition of listeners
 
   useEffect(() => {
     // Reset memory blocks and set loading state immediately on navigation/dependency change
@@ -159,7 +159,7 @@ const MemoryBlockList = () => {
     fetchMemoryBlocks();
     fetchKeywords();
     fetchAgentIds(); // Fetch agent IDs
-  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchMemoryBlocks, fetchKeywords, fetchAgentIds]); // Add location.pathname and memoized functions as dependencies
+  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchKeywords, fetchAgentIds]); // Remove fetchMemoryBlocks from dependencies to prevent infinite loop
 
   // Update URL parameters when pagination state changes
   useEffect(() => {

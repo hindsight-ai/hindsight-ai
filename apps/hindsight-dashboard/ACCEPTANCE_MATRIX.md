@@ -39,7 +39,7 @@
 | UI-009 | TC-UI-009 | E2E | High | Full | Not Started |
 | UI-010 | TC-UI-010 | Unit + Integration | Medium | Full | Not Started |
 | UI-011 | TC-UI-011 | Integration | Medium | Full | Not Started |
-| UI-012 | TC-UI-012 | E2E | Medium | Full | Not Started |
+
 | PERF-001 | TC-PERF-001 | Performance | High | Partial | Not Started |
 | PERF-002 | TC-PERF-002 | Performance | Medium | Partial | Not Started |
 | SEC-001 | TC-SEC-001 | Security | High | Partial | Not Started |
@@ -940,41 +940,7 @@
 - No data loss in saved filters
 - Mobile-friendly interface maintained
 
-#### TC-UI-012: Keyboard Shortcuts
-**Requirement:** UI-012
-**Test Type:** E2E Test
-**Priority:** Medium
-**Automation:** Full
 
-**Preconditions:**
-- Keyboard shortcut system implemented
-- Cheat sheet component available
-
-**Test Steps:**
-1. Verify keyboard shortcut cheat sheet accessibility
-2. Test comprehensive shortcut coverage
-3. Check customizable shortcut preferences
-4. Verify visual shortcut indicators
-5. Test accessibility compliance
-6. Check cross-platform compatibility
-7. Verify shortcut conflict resolution
-8. Test shortcut help system
-
-**Expected Results:**
-- Cheat sheet accessible via icon
-- All common actions have shortcuts
-- Preferences customizable by user
-- Visual indicators helpful but not intrusive
-- Screen reader compatible
-- Works across Windows/Mac/Linux
-- Conflicts resolved automatically
-- Help system comprehensive
-
-**Validation Criteria:**
-- Shortcuts follow platform conventions
-- No conflicts with browser shortcuts
-- Accessibility features maintained
-- Performance impact minimal
 
 ## Test Execution Guidelines
 
