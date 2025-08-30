@@ -38,7 +38,7 @@ const MemoryBlockList = () => {
   });
   const [availableKeywords, setAvailableKeywords] = useState([]);
   const [selectedMemoryBlocks, setSelectedMemoryBlocks] = useState([]);
-  const [showFilters, setShowFilters] = useState(true); // State for toggling filter visibility
+  const [showFilters, setShowFilters] = useState(true); // State for toggling filter visibility - always visible for better UX
   const [availableAgentIds, setAvailableAgentIds] = useState([]); // New state for agent IDs
 
   // Debounce logic for search term
