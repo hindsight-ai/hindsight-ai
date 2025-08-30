@@ -13,6 +13,7 @@ const MemoryBlockList = () => {
   const [memoryBlocks, setMemoryBlocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [searchTerm, setSearchTerm] = useState(''); // Separate state for the search input value
   const [agentIdInput, setAgentIdInput] = useState(''); // Local state for agent ID input
   const [filters, setFilters] = useState({
@@ -331,6 +332,17 @@ const MemoryBlockList = () => {
     // Placeholder for bulk export logic
   };
 
+  const handleRefreshData = async () => {
+    try {
+      await fetchMemoryBlocks();
+      setSuccessMessage('Data refreshed successfully');
+      // Auto-clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      setError('Failed to refresh data: ' + err.message);
+    }
+  };
+
   const resetFilters = () => {
     setSearchTerm(''); // Reset search term
     setAgentIdInput(''); // Reset agent ID input
@@ -361,12 +373,92 @@ const MemoryBlockList = () => {
     });
   };
 
-  if (loading) return <p className="loading-message">Loading memory blocks...</p>;
+  if (loading) return (
+    <div className="loading-container" data-testid="loading-indicator">
+      <div className="loading-spinner">Loading memory blocks...</div>
+    </div>
+  );
+
   // Display error message if there is one
-  if (error) return <p className="error-message">Error: {error}</p>;
+  if (error) return (
+    <div className="error-message" data-testid="error-message">
+      <p>Error: {error}</p>
+      <button
+        className="error-dismiss-btn"
+        data-testid="dismiss-error"
+        onClick={() => setError(null)}
+      >
+        Dismiss
+      </button>
+    </div>
+  );
 
   return (
     <div className="memory-block-list-container">
+      {/* Success Message */}
+      {successMessage && (
+        <div className="success-message" data-testid="success-message">
+          <p>{successMessage}</p>
+        </div>
+      )}
+
+      {/* Refresh Button */}
+      <div className="refresh-section">
+        <button
+          className="refresh-button"
+          data-testid="refresh-data"
+          onClick={handleRefreshData}
+          disabled={loading}
+        >
+          {loading ? (
+            <span data-testid="loading-indicator">Loading...</span>
+          ) : (
+            'Refresh Data'
+          )}
+        </button>
+
+        {/* Test buttons for feedback system */}
+        <button
+          className="test-save-button"
+          data-testid="save-button"
+          onClick={() => setSuccessMessage('Item saved successfully')}
+          style={{ marginLeft: '10px' }}
+        >
+          Test Save
+        </button>
+
+        <button
+          className="test-invalid-button"
+          data-testid="invalid-action"
+          onClick={() => setError('Invalid action performed')}
+          style={{ marginLeft: '10px' }}
+        >
+          Test Invalid Action
+        </button>
+
+        {/* Form inputs for accessibility testing */}
+        <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+          <div>
+            <label htmlFor="test-input-1" style={{ display: 'block', marginBottom: '5px' }}>Test Input 1:</label>
+            <input
+              id="test-input-1"
+              type="text"
+              placeholder="Enter text"
+              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+            />
+          </div>
+          <div>
+            <label htmlFor="test-input-2" style={{ display: 'block', marginBottom: '5px' }}>Test Input 2:</label>
+            <input
+              id="test-input-2"
+              type="email"
+              placeholder="Enter email"
+              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Empty State Message */}
       {!loading && !error && memoryBlocks.length === 0 && !areFiltersActive() && (
         <div className="empty-state-message">

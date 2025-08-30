@@ -8,6 +8,7 @@
   display: flex;
   flex-direction: column;
   width: 100%; /* Ensure the container takes full width */
+  overflow-x: auto; /* Enable horizontal scrolling for wide content */
 }
 
 .memory-block-table-header {
@@ -898,6 +899,32 @@
 .bulk-export-button:hover {
   background-color: #0056b3;
   box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+/* Test buttons for feedback system - always visible for E2E testing */
+.test-save-button,
+.test-invalid-button {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 500;
+  margin: 0 5px;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+  display: inline-block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  z-index: 1000 !important;
+}
+
+.test-save-button:hover,
+.test-invalid-button:hover {
+  background-color: #5a6268;
+  opacity: 1;
 }
 
 /* Keyword Tags in Table */

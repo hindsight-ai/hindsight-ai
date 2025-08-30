@@ -229,7 +229,7 @@ const MemoryBlockTable = ({
   };
 
   return (
-    <div className="memory-block-table-container" role="table">
+    <div className="memory-block-table-container" role="table" data-testid="memory-blocks-table">
       {renderHeader()}
       <div className="memory-block-table-body" role="rowgroup">
         {memoryBlocks.map(renderRow)}
