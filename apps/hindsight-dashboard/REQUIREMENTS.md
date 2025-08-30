@@ -2,10 +2,10 @@
 
 ## Document Information
 
-- **Document Version:** 1.0
-- **Date:** August 29, 2025
+- **Document Version:** 2.0
+- **Date:** August 30, 2025
 - **Author:** Cline (AI Assistant)
-- **Purpose:** Define functional and non-functional requirements for the Hindsight Dashboard application
+- **Purpose:** Define functional and non-functional requirements for the Hindsight Dashboard application with modern UI/UX enhancements
 - **Validation Method:** Requirements are validated through automated tests, manual testing, and user acceptance criteria
 
 ## 1. Introduction
@@ -256,6 +256,107 @@ The Hindsight Dashboard is a single-page React application that communicates wit
 - Progress bars for long-running operations
 - Toast notifications for background operations
 
+#### 3.8.5 Pagination Scroll Behavior
+**Requirement ID:** UI-005
+**Description:** The system shall provide smooth scroll behavior during pagination to maintain user context and improve navigation experience.
+**Priority:** Medium
+**Validation Criteria:**
+- When navigating to next/previous page, page automatically scrolls to bring table content into view
+- Smooth scrolling animation (200-300ms duration) for better user experience
+- Scroll position targets the table header or first data row
+- No jarring "jump to top" behavior that loses user's place in the interface
+- Works consistently across all paginated views (Memory Blocks, Agents, Keywords, etc.)
+- Keyboard navigation (page up/down) respects scroll behavior
+- Mobile responsive - adjusts scroll target based on screen size
+- Scroll behavior works with both programmatic pagination and user-initiated pagination
+- **Scroll positioning prioritizes table header and top content - if entire table doesn't fit viewport, only bottom portion is cut off**
+- **Maximum visible table content is preserved by positioning scroll to show as much data as possible from the top**
+
+### 3.9 Modern UI/UX Enhancements
+
+#### 3.9.1 Navigation System
+**Requirement ID:** UI-006
+**Description:** The system shall provide a collapsible sticky sidebar navigation system.
+**Priority:** High
+**Validation Criteria:**
+- Sticky positioning for consistent access
+- Mobile-responsive navigation with toggle functionality
+- Keyboard navigation support
+- Active tab visual indicators
+- Smooth expand/collapse animations
+
+#### 3.9.2 Floating Action Button (FAB)
+**Requirement ID:** UI-007
+**Description:** The system shall provide a floating action button for primary actions.
+**Priority:** High
+**Validation Criteria:**
+- "Add New Memory Block" relocated to FAB
+- Bottom-right corner positioning
+- Consistent FAB design across all pages
+- Touch-friendly sizing for mobile devices
+- Visual feedback on interaction
+- Accessibility compliance with ARIA labels
+
+#### 3.9.3 Enhanced Filter Panel
+**Requirement ID:** UI-008
+**Description:** The system shall provide a collapsible filter panel with preset options.
+**Priority:** High
+**Validation Criteria:**
+- Collapsible filter panel design
+- Preset filter options ("Last 7 Days," "High Feedback", etc.)
+- Efficient filter application
+- Filter state persistence
+- Mobile-responsive filter layout
+- Clear visual feedback for active filters
+
+#### 3.9.4 Responsive Data Table
+**Requirement ID:** UI-009
+**Description:** The system shall provide an optimized responsive table with tooltips.
+**Priority:** High
+**Validation Criteria:**
+- Responsive table design for all screen sizes
+- Horizontal scrolling for wide content
+- Tooltips for detailed "Lessons Learned" data
+- Mobile-optimized column visibility
+- Touch-friendly interactions
+- Performance optimization for large datasets
+
+#### 3.9.5 Dark Mode Theme
+**Requirement ID:** UI-010
+**Description:** The system shall support dark mode for improved readability.
+**Priority:** Medium
+**Validation Criteria:**
+- Dark mode toggle functionality
+- Automatic theme detection based on system preferences
+- Consistent theme application across all components
+- Improved readability, especially for late-night usage
+- Smooth theme transitions
+- Theme preference persistence
+
+#### 3.9.6 Search and Filter Management
+**Requirement ID:** UI-011
+**Description:** The system shall provide search history and saved filters functionality.
+**Priority:** Medium
+**Validation Criteria:**
+- "Recent Searches" section for quick reuse
+- "Saved Filters" functionality
+- Search history with timestamps
+- Quick access to frequently used queries
+- Filter combination presets
+- User-friendly management interface
+
+#### 3.9.7 Keyboard Shortcuts
+**Requirement ID:** UI-012
+**Description:** The system shall provide keyboard shortcuts for power users.
+**Priority:** Medium
+**Validation Criteria:**
+- Keyboard shortcut cheat sheet accessible via icon
+- Comprehensive shortcut coverage for common actions
+- Customizable shortcut preferences
+- Visual shortcut indicators in UI
+- Accessibility compliance
+- Cross-platform compatibility
+
 ## 4. Non-Functional Requirements
 
 ### 4.1 Performance
@@ -483,3 +584,36 @@ This requirements document can be validated through:
 5. **Accessibility Audit:** WCAG compliance verification
 
 **Document Maintenance:** This document should be updated whenever new features are added or existing requirements are modified. All changes should be tracked with version control and change logs.
+
+---
+
+## Implementation Priority Matrix
+
+### Phase 1: Core UI/UX Improvements (High Priority - Immediate Implementation)
+| Requirement ID | Feature | Priority | Effort | Business Impact |
+|----------------|---------|----------|--------|-----------------|
+| UI-006 | Navigation System | High | Medium | Improved navigation UX, mobile accessibility |
+| UI-007 | Floating Action Button | High | Low | Better primary action accessibility |
+| UI-008 | Enhanced Filter Panel | High | Medium | Improved filtering efficiency |
+| UI-009 | Responsive Data Table | High | Medium | Better mobile/tablet experience |
+
+### Phase 2: Advanced Features (Medium Priority - Next Sprint)
+| Requirement ID | Feature | Priority | Effort | Business Impact |
+|----------------|---------|----------|--------|-----------------|
+| UI-010 | Dark Mode Theme | Medium | Medium | Improved readability, user preference |
+| UI-011 | Search and Filter Management | Medium | High | Power user efficiency, productivity |
+| UI-012 | Keyboard Shortcuts | Medium | Medium | Power user productivity, accessibility |
+
+### Implementation Dependencies
+- **Phase 1** features can be implemented independently
+- **Phase 2** features may depend on Phase 1 completion
+- All features require cross-browser testing (Chrome, Firefox, Safari, Edge)
+- Mobile responsiveness testing required for all features
+- Accessibility compliance (WCAG 2.1 AA) required for all features
+
+### Success Metrics
+- **User Experience:** Task completion time reduction by 20-30%
+- **Accessibility:** WCAG 2.1 AA compliance maintained
+- **Performance:** No degradation in page load times
+- **Mobile Usage:** 40%+ improvement in mobile user satisfaction
+- **Power Users:** 50%+ improvement in advanced user productivity

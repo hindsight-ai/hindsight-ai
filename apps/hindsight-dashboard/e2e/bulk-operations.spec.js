@@ -26,7 +26,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
     await expect(bulkActionBar).not.toBeVisible();
 
     // Select first memory block using force click to bypass pointer events issues
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const checkbox = firstRow.locator('input[type="checkbox"]');
     await checkbox.check({ force: true });
 
@@ -44,7 +44,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
     expect(visibleRowCount).toBeGreaterThanOrEqual(3);
 
     // Select first memory block
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const firstCheckbox = firstRow.locator('input[type="checkbox"]');
     await firstCheckbox.check({ force: true });
 
@@ -53,7 +53,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
     await expect(firstCheckbox).toBeChecked();
 
     // Select third memory block
-    const thirdRow = page.locator('.memory-block-table-row').nth(2);
+    const thirdRow = page.locator('.data-table-row').nth(2);
     const thirdCheckbox = thirdRow.locator('input[type="checkbox"]');
     await thirdCheckbox.check({ force: true });
 
@@ -75,14 +75,14 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
     expect(visibleRowCount).toBeGreaterThan(0);
 
     // Find and check the select all checkbox
-    const selectAllCheckbox = page.locator('.memory-block-table-header input[type="checkbox"]');
+    const selectAllCheckbox = page.locator('.data-table-header input[type="checkbox"]');
     await selectAllCheckbox.check({ force: true });
 
     // Wait for state updates
     await page.waitForTimeout(200);
 
     // Verify all individual checkboxes are checked
-    const allCheckboxes = page.locator('.memory-block-table-row input[type="checkbox"]');
+    const allCheckboxes = page.locator('.data-table-row input[type="checkbox"]');
     const checkboxCount = await allCheckboxes.count();
 
     // Check a few key checkboxes instead of all to avoid timeout
@@ -101,14 +101,14 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
   test('should deselect all memory blocks using select all checkbox', async ({ page }) => {
     // First select all
-    const selectAllCheckbox = page.locator('.memory-block-table-header input[type="checkbox"]');
+    const selectAllCheckbox = page.locator('.data-table-header input[type="checkbox"]');
     await selectAllCheckbox.check({ force: true });
 
     // Wait for state updates
     await page.waitForTimeout(200);
 
     // Verify some checkboxes are selected (don't check all to avoid timeout)
-    const allCheckboxes = page.locator('.memory-block-table-row input[type="checkbox"]');
+    const allCheckboxes = page.locator('.data-table-row input[type="checkbox"]');
     const checkboxCount = await allCheckboxes.count();
     if (checkboxCount > 0) {
       await expect(allCheckboxes.first()).toBeChecked();
@@ -132,11 +132,11 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
   test('should deselect individual memory blocks', async ({ page }) => {
     // Select all first
-    const selectAllCheckbox = page.locator('.memory-block-table-header input[type="checkbox"]');
+    const selectAllCheckbox = page.locator('.data-table-header input[type="checkbox"]');
     await selectAllCheckbox.check({ force: true });
 
     // Get initial count
-    const allCheckboxes = page.locator('.memory-block-table-row input[type="checkbox"]');
+    const allCheckboxes = page.locator('.data-table-row input[type="checkbox"]');
     const initialCount = await allCheckboxes.count();
 
     // Deselect first memory block
@@ -155,7 +155,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
   test('should show confirmation dialog for bulk remove action', async ({ page }) => {
     // Select first memory block
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const checkbox = firstRow.locator('input[type="checkbox"]');
     await checkbox.check({ force: true });
 
@@ -181,7 +181,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
   test('should cancel bulk remove action', async ({ page }) => {
     // Select first memory block
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const checkbox = firstRow.locator('input[type="checkbox"]');
     await checkbox.check({ force: true });
 
@@ -203,7 +203,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
   test('should show confirmation dialog for bulk remove action without executing', async ({ page }) => {
     // Select first memory block
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const checkbox = firstRow.locator('input[type="checkbox"]');
     await checkbox.check({ force: true });
 
@@ -230,7 +230,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
   test('should handle bulk tag action', async ({ page }) => {
     // Select first memory block
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const checkbox = firstRow.locator('input[type="checkbox"]');
     await checkbox.check({ force: true });
 
@@ -257,7 +257,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
   test('should handle bulk export action', async ({ page }) => {
     // Select first memory block
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const checkbox = firstRow.locator('input[type="checkbox"]');
     await checkbox.check({ force: true });
 
@@ -288,7 +288,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
     await expect(bulkActionBar).not.toBeVisible();
 
     // Select and then deselect an item to trigger the bar
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const checkbox = firstRow.locator('input[type="checkbox"]');
     await checkbox.check({ force: true });
 
@@ -314,7 +314,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
     if (visibleRowCount >= 10) { // Assuming default page size is 10
       // Select first item
-      const firstRow = page.locator('.memory-block-table-row').first();
+      const firstRow = page.locator('.data-table-row').first();
       const checkbox = firstRow.locator('input[type="checkbox"]');
       await checkbox.check({ force: true });
 
@@ -337,7 +337,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
   test('should handle bulk operations with large number of selections', async ({ page }) => {
     // Select all available memory blocks
-    const selectAllCheckbox = page.locator('.memory-block-table-header input[type="checkbox"]');
+    const selectAllCheckbox = page.locator('.data-table-header input[type="checkbox"]');
     await selectAllCheckbox.check({ force: true });
 
     // Wait for state updates
@@ -364,7 +364,7 @@ test.describe('TC-MEM-005: Bulk Memory Operations', () => {
 
   test('should clear selection when memory blocks are refreshed', async ({ page }) => {
     // Select first memory block
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const checkbox = firstRow.locator('input[type="checkbox"]');
     await checkbox.check({ force: true });
 

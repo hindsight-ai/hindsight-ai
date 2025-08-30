@@ -1,6 +1,6 @@
 .notification {
   position: fixed;
-  top: 20px;
+  bottom: 20px;
   right: 20px;
   z-index: 10000;
   min-width: 300px;
@@ -10,6 +10,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   animation: slideIn 0.3s ease-out;
+  margin-bottom: 10px; /* Space between stacked notifications */
 }
 
 @keyframes slideIn {
@@ -27,6 +28,24 @@
   background-color: #fee;
   border: 1px solid #fcc;
   color: #c33;
+}
+
+.notification-success {
+  background-color: #efe;
+  border: 1px solid #cfc;
+  color: #363;
+}
+
+.notification-info {
+  background-color: #eff;
+  border: 1px solid #ccf;
+  color: #336;
+}
+
+.notification-warning {
+  background-color: #fef3cd;
+  border: 1px solid #f39c12;
+  color: #8b4513;
 }
 
 .notification-content {

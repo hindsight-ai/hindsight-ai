@@ -47,7 +47,7 @@ test.describe('Memory Block Search & Filtering', () => {
 
       // If results are filtered, verify they contain the search term
       if (filteredRowCount < initialRowCount && filteredRowCount > 0) {
-        const firstRowText = await page.locator('.memory-block-table-row').first().textContent();
+        const firstRowText = await page.locator('.data-table-row').first().textContent();
         expect(firstRowText.toLowerCase()).toContain(term.toLowerCase());
       }
     }
@@ -133,7 +133,7 @@ test.describe('Memory Block Search & Filtering', () => {
 
           // If results exist, verify they match the selected agent
           if (filteredRowCount > 0) {
-            const firstRow = page.locator('.memory-block-table-row').first();
+            const firstRow = page.locator('.data-table-row').first();
             const agentCell = firstRow.locator('.agent_id-cell');
             if (await agentCell.isVisible()) {
               const agentText = await agentCell.textContent();

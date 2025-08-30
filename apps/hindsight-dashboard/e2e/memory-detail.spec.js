@@ -31,7 +31,7 @@ test.describe('TC-MEM-002: Memory Block Detail View', () => {
     const firstMemoryBlockId = 'ba33a681-dbdd-4543-ba36-37874c4fb80c'; // From API response
 
     // Click on the view/edit button for the first memory block
-    const firstRow = page.locator('.memory-block-table-row').first();
+    const firstRow = page.locator('.data-table-row').first();
     const viewButton = firstRow.locator('.view-edit-button, button[title="View Details"], button:has-text("👁️")');
     await viewButton.click();
 

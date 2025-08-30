@@ -145,7 +145,7 @@ test.describe('UI Component Tests (UI-001 through UI-004)', () => {
       await expect(page.locator('[data-testid="main-content"]')).toBeVisible();
 
       // Check table responsiveness
-      const table = page.locator('[data-testid="memory-blocks-table"]');
+      const table = page.locator('[data-testid="data-table"]');
       await expect(table).toBeVisible();
 
       // Verify horizontal scroll for wide content
@@ -327,7 +327,7 @@ test.describe('UI Component Tests (UI-001 through UI-004)', () => {
       await expect(loadingText).toBeHidden({ timeout: 10000 });
 
       // Verify data is loaded
-      await expect(page.locator('[data-testid="memory-blocks-table"]')).toBeVisible();
+      await expect(page.locator('[data-testid="data-table"]')).toBeVisible();
     });
   });
 });

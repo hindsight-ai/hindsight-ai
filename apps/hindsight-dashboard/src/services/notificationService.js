@@ -100,6 +100,42 @@ class NotificationService {
       }
     });
   }
+
+  // Show success notification
+  showSuccess(message, duration = 5000) {
+    return this.addNotification({
+      type: 'success',
+      message: message,
+      duration: duration
+    });
+  }
+
+  // Show info notification
+  showInfo(message, duration = 5000) {
+    return this.addNotification({
+      type: 'info',
+      message: message,
+      duration: duration
+    });
+  }
+
+  // Show warning notification
+  showWarning(message, duration = 7000) {
+    return this.addNotification({
+      type: 'warning',
+      message: message,
+      duration: duration
+    });
+  }
+
+  // Show error notification
+  showError(message, duration = 10000) {
+    return this.addNotification({
+      type: 'error',
+      message: message,
+      duration: duration
+    });
+  }
 }
 
 // Create singleton instance

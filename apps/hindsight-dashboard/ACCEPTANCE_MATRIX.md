@@ -2,10 +2,10 @@
 
 ## Document Information
 
-- **Document Version:** 1.0
-- **Date:** August 29, 2025
+- **Document Version:** 2.0
+- **Date:** August 30, 2025
 - **Author:** Cline (AI Assistant)
-- **Purpose:** Define comprehensive test cases for validating all requirements in the Hindsight Dashboard
+- **Purpose:** Define comprehensive test cases for validating all requirements in the Hindsight Dashboard including modern UI/UX enhancements
 - **Test Strategy:** Combination of automated unit tests, integration tests, and manual acceptance tests
 
 ## Test Matrix Overview
@@ -32,6 +32,14 @@
 | UI-002 | TC-UI-002 | Manual | High | None | Not Started |
 | UI-003 | TC-UI-003 | Manual | Medium | None | Not Started |
 | UI-004 | TC-UI-004 | Unit + Integration | Medium | Full | Not Started |
+| UI-005 | TC-UI-005 | E2E | Medium | Full | Not Started |
+| UI-006 | TC-UI-006 | E2E | High | Full | Not Started |
+| UI-007 | TC-UI-007 | Unit + E2E | High | Full | Not Started |
+| UI-008 | TC-UI-008 | Integration | High | Full | Not Started |
+| UI-009 | TC-UI-009 | E2E | High | Full | Not Started |
+| UI-010 | TC-UI-010 | Unit + Integration | Medium | Full | Not Started |
+| UI-011 | TC-UI-011 | Integration | Medium | Full | Not Started |
+| UI-012 | TC-UI-012 | E2E | Medium | Full | Not Started |
 | PERF-001 | TC-PERF-001 | Performance | High | Partial | Not Started |
 | PERF-002 | TC-PERF-002 | Performance | Medium | Partial | Not Started |
 | SEC-001 | TC-SEC-001 | Security | High | Partial | Not Started |
@@ -672,6 +680,301 @@
 - Profile retrieved
 - Logout functional
 - Sessions managed
+
+### Modern UI/UX Enhancement Tests
+
+#### TC-UI-005: Pagination Scroll Behavior
+**Requirement:** UI-013
+**Test Type:** E2E Test
+**Priority:** Medium
+**Automation:** Full
+
+**Preconditions:**
+- Memory blocks table with multiple pages of data
+- Pagination controls functional
+- Various screen sizes available for testing
+
+**Test Steps:**
+1. Navigate to memory blocks page with multiple pages
+2. Verify initial table position (should show table header and top content)
+3. Click "Next Page" or "Previous Page" pagination control
+4. Verify smooth scroll animation to table content
+5. Confirm table header remains visible after pagination
+6. Test pagination with different viewport sizes
+7. Verify scroll behavior works with keyboard navigation
+8. Test scroll behavior with filtered results
+9. Verify maximum table content is preserved (top content prioritized)
+10. Test scroll behavior consistency across all paginated views
+
+**Expected Results:**
+- Page automatically scrolls to bring table content into view
+- Smooth scrolling animation (200-300ms duration)
+- Table header and top content remain visible after pagination
+- No jarring "jump to top" behavior that loses user's place
+- Scroll behavior works consistently across different screen sizes
+- Keyboard navigation respects scroll behavior
+- Scroll behavior works with filtered and unfiltered results
+- Maximum visible table content preserved by prioritizing top content
+- Bottom table content may be cut off if entire table doesn't fit viewport
+
+**Validation Criteria:**
+- Scroll animation completes within 300ms
+- Table header always visible after pagination
+- No content jumping or disorientation
+- Works across all paginated views (Memory Blocks, Agents, Keywords, etc.)
+- Mobile responsive - adjusts scroll target based on screen size
+- Performance impact minimal (< 100ms additional load time)
+
+#### TC-UI-006: Navigation System
+**Requirement:** UI-006
+**Test Type:** E2E Test
+**Priority:** High
+**Automation:** Full
+
+**Preconditions:**
+- Application loaded with navigation elements
+- Multiple screen sizes available for testing
+
+**Test Steps:**
+1. Verify collapsible sidebar presence
+2. Test sidebar expand/collapse functionality
+3. Check sticky positioning behavior
+4. Test mobile navigation toggle
+5. Verify keyboard navigation support
+6. Check active tab visual indicators
+7. Test smooth expand/collapse animations
+8. Verify navigation persistence across page changes
+
+**Expected Results:**
+- Sidebar collapses and expands smoothly
+- Sticky positioning maintains accessibility
+- Mobile toggle works on small screens
+- Keyboard navigation functions properly
+- Active tabs clearly indicated
+- Animations perform without lag
+- Navigation state preserved during navigation
+
+**Validation Criteria:**
+- Sidebar width adjusts correctly
+- Mobile menu doesn't obstruct content
+- Keyboard focus management works
+- Animation performance > 60 FPS
+
+#### TC-UI-007: Floating Action Button
+**Requirement:** UI-007
+**Test Type:** Unit + E2E Test
+**Priority:** High
+**Automation:** Full
+
+**Preconditions:**
+- Memory blocks page loaded
+- FAB component rendered
+
+**Test Steps:**
+1. Verify FAB presence in bottom-right corner
+2. Check "Add New Memory Block" functionality
+3. Test FAB positioning across screen sizes
+4. Verify touch-friendly sizing on mobile
+5. Test visual feedback on interaction
+6. Check ARIA label compliance
+7. Verify FAB consistency across pages
+8. Test FAB accessibility with screen readers
+
+**Expected Results:**
+- FAB positioned correctly in bottom-right
+- "Add New Memory Block" action works
+- Responsive positioning on all devices
+- Adequate touch target size (44px minimum)
+- Visual feedback on hover/press
+- Proper ARIA labels for accessibility
+- Consistent design across application
+
+**Validation Criteria:**
+- FAB doesn't obstruct important content
+- Touch targets meet accessibility standards
+- Visual feedback provides clear interaction cues
+- Screen reader compatibility verified
+
+#### TC-UI-008: Enhanced Filter Panel
+**Requirement:** UI-008
+**Test Type:** Integration Test
+**Priority:** High
+**Automation:** Full
+
+**Preconditions:**
+- Filter panel component loaded
+- Test data with various filter criteria available
+
+**Test Steps:**
+1. Verify collapsible filter panel design
+2. Test preset filter options ("Last 7 Days," "High Feedback")
+3. Check filter application efficiency
+4. Verify filter state persistence
+5. Test mobile-responsive filter layout
+6. Check visual feedback for active filters
+7. Test filter combination functionality
+8. Verify filter panel accessibility
+
+**Expected Results:**
+- Filter panel collapses/expands smoothly
+- Preset options apply correct filters
+- Filter application performs quickly
+- Filter state maintained across sessions
+- Mobile layout adapts properly
+- Active filters clearly indicated
+- Multiple filters work together
+- Keyboard navigation supported
+
+**Validation Criteria:**
+- Filter application < 500ms
+- No data loss during filtering
+- Mobile usability maintained
+- Accessibility compliance verified
+
+#### TC-UI-009: Responsive Data Table
+**Requirement:** UI-009
+**Test Type:** E2E Test
+**Priority:** High
+**Automation:** Full
+
+**Preconditions:**
+- Memory blocks table loaded
+- Various screen sizes available
+- Test data with long content available
+
+**Test Steps:**
+1. Verify responsive table design across breakpoints
+2. Test horizontal scrolling for wide content
+3. Check tooltips for "Lessons Learned" data
+4. Verify mobile-optimized column visibility
+5. Test touch-friendly interactions
+6. Check performance with large datasets
+7. Verify table accessibility features
+8. Test column visibility controls
+
+**Expected Results:**
+- Table adapts to all screen sizes
+- Horizontal scroll works smoothly
+- Tooltips display detailed content
+- Mobile columns prioritized correctly
+- Touch interactions responsive
+- Performance maintained with 1000+ rows
+- Screen reader compatibility
+- Column controls functional
+
+**Validation Criteria:**
+- Table renders < 1 second with large datasets
+- Touch targets meet 44px minimum
+- Tooltip content fully accessible
+- Horizontal scroll doesn't affect vertical navigation
+
+#### TC-UI-010: Dark Mode Theme
+**Requirement:** UI-010
+**Test Type:** Unit + Integration Test
+**Priority:** Medium
+**Automation:** Full
+
+**Preconditions:**
+- Theme toggle component available
+- Application supports theme switching
+
+**Test Steps:**
+1. Verify dark mode toggle functionality
+2. Test automatic theme detection
+3. Check theme application across all components
+4. Verify improved readability in dark mode
+5. Test smooth theme transitions
+6. Check theme preference persistence
+7. Verify theme consistency across pages
+8. Test theme accessibility compliance
+
+**Expected Results:**
+- Dark mode toggle works correctly
+- System preference detection functions
+- All components support dark theme
+- Readability improved in low light
+- Transitions smooth and professional
+- User preferences saved and restored
+- Consistent theming across application
+- Accessibility standards maintained
+
+**Validation Criteria:**
+- Contrast ratios meet WCAG AA standards
+- Theme persistence across sessions
+- No layout shifts during theme changes
+- Performance impact minimal (< 100ms)
+
+#### TC-UI-011: Search and Filter Management
+**Requirement:** UI-011
+**Test Type:** Integration Test
+**Priority:** Medium
+**Automation:** Full
+
+**Preconditions:**
+- Search functionality implemented
+- Filter management features available
+
+**Test Steps:**
+1. Verify "Recent Searches" section functionality
+2. Test "Saved Filters" feature
+3. Check search history with timestamps
+4. Verify quick access to frequent queries
+5. Test filter combination presets
+6. Check user-friendly management interface
+7. Verify search history persistence
+8. Test filter preset customization
+
+**Expected Results:**
+- Recent searches displayed chronologically
+- Saved filters easily accessible
+- Timestamps accurate and useful
+- Quick access reduces navigation
+- Filter presets save time
+- Interface intuitive and discoverable
+- History persists across sessions
+- Customization options available
+
+**Validation Criteria:**
+- Search history loads < 200ms
+- Filter application from history works
+- No data loss in saved filters
+- Mobile-friendly interface maintained
+
+#### TC-UI-012: Keyboard Shortcuts
+**Requirement:** UI-012
+**Test Type:** E2E Test
+**Priority:** Medium
+**Automation:** Full
+
+**Preconditions:**
+- Keyboard shortcut system implemented
+- Cheat sheet component available
+
+**Test Steps:**
+1. Verify keyboard shortcut cheat sheet accessibility
+2. Test comprehensive shortcut coverage
+3. Check customizable shortcut preferences
+4. Verify visual shortcut indicators
+5. Test accessibility compliance
+6. Check cross-platform compatibility
+7. Verify shortcut conflict resolution
+8. Test shortcut help system
+
+**Expected Results:**
+- Cheat sheet accessible via icon
+- All common actions have shortcuts
+- Preferences customizable by user
+- Visual indicators helpful but not intrusive
+- Screen reader compatible
+- Works across Windows/Mac/Linux
+- Conflicts resolved automatically
+- Help system comprehensive
+
+**Validation Criteria:**
+- Shortcuts follow platform conventions
+- No conflicts with browser shortcuts
+- Accessibility features maintained
+- Performance impact minimal
 
 ## Test Execution Guidelines
 

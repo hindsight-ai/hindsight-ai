@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import './MemoryBlockList.css';
 
-const MemoryBlockTable = ({
+const MemoryBlockTable = React.forwardRef(({
   memoryBlocks,
   selectedMemoryBlocks,
   onSelectMemoryBlock,
@@ -15,7 +15,7 @@ const MemoryBlockTable = ({
   onKeywordClick,
   navigate,
   isArchivedView = false, // New prop to indicate if this is the archived view
-}) => {
+}, ref) => {
   const defaultHiddenColumns = isArchivedView 
     ? ['id', 'agent_id', 'conversation_id', 'keywords', 'errors'] 
     : ['id', 'agent_id', 'conversation_id', 'keywords', 'errors'];
@@ -57,7 +57,7 @@ const MemoryBlockTable = ({
   }, [initialColumnLayout]);
 
   const renderHeader = () => (
-    <div className="memory-block-table-header" role="row">
+    <div className="data-table-header" role="row">
       <PanelGroup direction="horizontal" onLayout={setColumnLayout} >
         {columnDefinitions.map((col, index) => (
           <React.Fragment key={col.id}>
@@ -119,7 +119,7 @@ const MemoryBlockTable = ({
   );
 
   const renderRow = (block) => (
-    <div className="memory-block-table-row" key={block.id} role="row">
+    <div className="data-table-row" key={block.id} role="row">
       {columnDefinitions.map((col, index) => (
         <React.Fragment key={col.id}>
           <div
@@ -229,13 +229,15 @@ const MemoryBlockTable = ({
   };
 
   return (
-    <div className="memory-block-table-container" role="table" data-testid="memory-blocks-table">
+    <div ref={ref} className="data-table-container" role="table" data-testid="data-table">
       {renderHeader()}
-      <div className="memory-block-table-body" role="rowgroup">
+      <div className="data-table-body" role="rowgroup">
         {memoryBlocks.map(renderRow)}
       </div>
     </div>
   );
-};
+});
+
+MemoryBlockTable.displayName = 'MemoryBlockTable';
 
 export default MemoryBlockTable;

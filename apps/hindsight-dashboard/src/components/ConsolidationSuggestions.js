@@ -267,112 +267,114 @@ const ConsolidationSuggestions = () => {
 
       {/* Render table content only if there are suggestions */}
       {!loading && !error && suggestions.length > 0 && (
-        <div className="memory-block-table-container">
-          <div className="memory-block-table-header">
-            <PanelGroup direction="horizontal" onLayout={setColumnLayout}>
-              <Panel defaultSize={3} minSize={3} maxSize={3} style={{ padding: 0, margin: 0 }}>
-                <div className="header-cell select-cell">
-                  <input
-                    type="checkbox"
-                    onChange={handleSelectAll}
-                    checked={selectedSuggestionIds.length === suggestions.length && suggestions.length > 0}
-                  />
+        <div>
+          <div className="data-table-container">
+            <div className="data-table-header">
+              <PanelGroup direction="horizontal" onLayout={setColumnLayout}>
+                <Panel defaultSize={3} minSize={3} maxSize={3} style={{ padding: 0, margin: 0 }}>
+                  <div className="header-cell select-cell">
+                    <input
+                      type="checkbox"
+                      onChange={handleSelectAll}
+                      checked={selectedSuggestionIds.length === suggestions.length && suggestions.length > 0}
+                    />
+                  </div>
+                </Panel>
+                <PanelResizeHandle className="resize-handle" />
+                <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
+                  <div className="header-cell sortable-header" onClick={() => handleSortChange('suggestion_id')}>
+                    ID {sort.field === 'suggestion_id' && (sort.order === 'asc' ? '↑' : '↓')}
+                  </div>
+                </Panel>
+                <PanelResizeHandle className="resize-handle" />
+                <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
+                  <div className="header-cell sortable-header" onClick={() => handleSortChange('group_id')}>
+                    Group ID {sort.field === 'group_id' && (sort.order === 'asc' ? '↑' : '↓')}
+                  </div>
+                </Panel>
+                <PanelResizeHandle className="resize-handle" />
+                <Panel defaultSize={50} minSize={20} style={{ padding: 0, margin: 0 }}>
+                  <div className="header-cell">Suggested Content</div>
+                </Panel>
+                <PanelResizeHandle className="resize-handle" />
+                <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
+                  <div className="header-cell">Original Memories</div>
+                </Panel>
+                <PanelResizeHandle className="resize-handle" />
+                <Panel defaultSize={7} minSize={5} style={{ padding: 0, margin: 0 }}>
+                  <div className="header-cell sortable-header" onClick={() => handleSortChange('status')}>
+                    Status {sort.field === 'status' && (sort.order === 'asc' ? '↑' : '↓')}
+                  </div>
+                </Panel>
+                <PanelResizeHandle className="resize-handle" />
+                <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
+                  <div className="header-cell actions-cell">Actions</div>
+                </Panel>
+              </PanelGroup>
+            </div>
+            <div className="data-table-body">
+              {suggestions.map((suggestion, rowIndex) => (
+                <div key={suggestion.suggestion_id} className="data-table-row">
+                  <PanelGroup direction="horizontal" id={`row-panel-group-${rowIndex}`}>
+                    <Panel defaultSize={3} minSize={3} maxSize={3} style={{ padding: 0, margin: 0 }}>
+                      <div className="data-cell select-cell">
+                        <input
+                          type="checkbox"
+                          checked={selectedSuggestionIds.includes(suggestion.suggestion_id)}
+                          onChange={(event) => handleSelectItem(event, suggestion.suggestion_id)}
+                        />
+                      </div>
+                    </Panel>
+                    <PanelResizeHandle className="resize-handle" />
+                    <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
+                      <div className="data-cell id-cell">{suggestion.suggestion_id.toString().slice(0, 8)}...</div>
+                    </Panel>
+                    <PanelResizeHandle className="resize-handle" />
+                    <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
+                      <div className="data-cell id-cell">{suggestion.group_id.toString().slice(0, 8)}...</div>
+                    </Panel>
+                    <PanelResizeHandle className="resize-handle" />
+                    <Panel defaultSize={50} minSize={20} style={{ padding: 0, margin: 0 }}>
+                      <div className="data-cell lessons-learned-cell">{suggestion.suggested_content.slice(0, 150)}...</div>
+                    </Panel>
+                    <PanelResizeHandle className="resize-handle" />
+                    <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
+                      <div className="data-cell">{suggestion.original_memory_ids.length} memories</div>
+                    </Panel>
+                    <PanelResizeHandle className="resize-handle" />
+                    <Panel defaultSize={7} minSize={5} style={{ padding: 0, margin: 0 }}>
+                      <div className="data-cell">{suggestion.status}</div>
+                    </Panel>
+                    <PanelResizeHandle className="resize-handle" />
+                    <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
+                      <div className="data-cell actions-cell">
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          navigate(`/consolidation-suggestions/${suggestion.suggestion_id}`);
+                        }}
+                        className="action-icon-button view-edit-button"
+                        title="View Details"
+                      >
+                        👁️
+                      </button>
+                      {suggestion.status === 'pending' && (
+                        <>
+                          <button onClick={() => handleValidate(suggestion.suggestion_id)} className="action-icon-button view-edit-button" title="Accept Suggestion">
+                            ✓ Accept
+                          </button>
+                          <button onClick={() => handleReject(suggestion.suggestion_id)} className="action-icon-button remove-button" title="Reject Suggestion">
+                            ✗ Reject
+                          </button>
+                        </>
+                      )}
+                      </div>
+                    </Panel>
+                  </PanelGroup>
                 </div>
-              </Panel>
-              <PanelResizeHandle className="resize-handle" />
-              <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
-                <div className="header-cell sortable-header" onClick={() => handleSortChange('suggestion_id')}>
-                  ID {sort.field === 'suggestion_id' && (sort.order === 'asc' ? '↑' : '↓')}
-                </div>
-              </Panel>
-              <PanelResizeHandle className="resize-handle" />
-              <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
-                <div className="header-cell sortable-header" onClick={() => handleSortChange('group_id')}>
-                  Group ID {sort.field === 'group_id' && (sort.order === 'asc' ? '↑' : '↓')}
-                </div>
-              </Panel>
-              <PanelResizeHandle className="resize-handle" />
-              <Panel defaultSize={50} minSize={20} style={{ padding: 0, margin: 0 }}>
-                <div className="header-cell">Suggested Content</div>
-              </Panel>
-              <PanelResizeHandle className="resize-handle" />
-              <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
-                <div className="header-cell">Original Memories</div>
-              </Panel>
-              <PanelResizeHandle className="resize-handle" />
-              <Panel defaultSize={7} minSize={5} style={{ padding: 0, margin: 0 }}>
-                <div className="header-cell sortable-header" onClick={() => handleSortChange('status')}>
-                  Status {sort.field === 'status' && (sort.order === 'asc' ? '↑' : '↓')}
-                </div>
-              </Panel>
-              <PanelResizeHandle className="resize-handle" />
-              <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
-                <div className="header-cell actions-cell">Actions</div>
-              </Panel>
-            </PanelGroup>
-          </div>
-          <div className="memory-block-table-body">
-            {suggestions.map((suggestion, rowIndex) => (
-              <div key={suggestion.suggestion_id} className="memory-block-table-row">
-                <PanelGroup direction="horizontal" id={`row-panel-group-${rowIndex}`}>
-                  <Panel defaultSize={3} minSize={3} maxSize={3} style={{ padding: 0, margin: 0 }}>
-                    <div className="data-cell select-cell">
-                      <input
-                        type="checkbox"
-                        checked={selectedSuggestionIds.includes(suggestion.suggestion_id)}
-                        onChange={(event) => handleSelectItem(event, suggestion.suggestion_id)}
-                      />
-                    </div>
-                  </Panel>
-                  <PanelResizeHandle className="resize-handle" />
-                  <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
-                    <div className="data-cell id-cell">{suggestion.suggestion_id.toString().slice(0, 8)}...</div>
-                  </Panel>
-                  <PanelResizeHandle className="resize-handle" />
-                  <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
-                    <div className="data-cell id-cell">{suggestion.group_id.toString().slice(0, 8)}...</div>
-                  </Panel>
-                  <PanelResizeHandle className="resize-handle" />
-                  <Panel defaultSize={50} minSize={20} style={{ padding: 0, margin: 0 }}>
-                    <div className="data-cell lessons-learned-cell">{suggestion.suggested_content.slice(0, 150)}...</div>
-                  </Panel>
-                  <PanelResizeHandle className="resize-handle" />
-                  <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
-                    <div className="data-cell">{suggestion.original_memory_ids.length} memories</div>
-                  </Panel>
-                  <PanelResizeHandle className="resize-handle" />
-                  <Panel defaultSize={7} minSize={5} style={{ padding: 0, margin: 0 }}>
-                    <div className="data-cell">{suggestion.status}</div>
-                  </Panel>
-                  <PanelResizeHandle className="resize-handle" />
-                  <Panel defaultSize={10} minSize={5} style={{ padding: 0, margin: 0 }}>
-                    <div className="data-cell actions-cell">
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        navigate(`/consolidation-suggestions/${suggestion.suggestion_id}`);
-                      }}
-                      className="action-icon-button view-edit-button"
-                      title="View Details"
-                    >
-                      👁️
-                    </button>
-                    {suggestion.status === 'pending' && (
-                      <>
-                        <button onClick={() => handleValidate(suggestion.suggestion_id)} className="action-icon-button view-edit-button" title="Accept Suggestion">
-                          ✓ Accept
-                        </button>
-                        <button onClick={() => handleReject(suggestion.suggestion_id)} className="action-icon-button remove-button" title="Reject Suggestion">
-                          ✗ Reject
-                        </button>
-                      </>
-                    )}
-                    </div>
-                  </Panel>
-                </PanelGroup>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
           <PaginationControls
             pagination={pagination}

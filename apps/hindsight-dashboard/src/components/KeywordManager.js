@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import memoryService from '../api/memoryService';
+import notificationService from '../services/notificationService';
+import FloatingActionButton from './FloatingActionButton';
+import AddKeywordModal from './AddKeywordModal';
 
 const KeywordManager = () => {
   const [keywords, setKeywords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [newKeyword, setNewKeyword] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
   const [editingKeywordId, setEditingKeywordId] = useState(null);
   const [editingKeywordText, setEditingKeywordText] = useState('');
 
@@ -26,43 +29,36 @@ const KeywordManager = () => {
     }
   };
 
-  const handleAddKeyword = async () => {
-    if (!newKeyword.trim()) return;
-    setError(null);
-    try {
-      await memoryService.createKeyword({ keyword: newKeyword });
-      setNewKeyword('');
-      fetchKeywords();
-    } catch (err) {
-      setError('Failed to add keyword: ' + err.message);
-    }
+  const handleKeywordAdded = () => {
+    fetchKeywords(); // Refresh the list when a new keyword is added
   };
 
   const handleEditClick = (keyword) => {
+    // For now, keep inline editing - could be moved to modal later
     setEditingKeywordId(keyword.id);
     setEditingKeywordText(keyword.keyword_text);
   };
 
   const handleSaveEdit = async (id) => {
-    setError(null);
     try {
       await memoryService.updateKeyword(id, { keyword_text: editingKeywordText });
       setEditingKeywordId(null);
       setEditingKeywordText('');
       fetchKeywords();
+      notificationService.showSuccess('Keyword updated successfully');
     } catch (err) {
-      setError('Failed to update keyword: ' + err.message);
+      notificationService.showError('Failed to update keyword: ' + err.message);
     }
   };
 
   const handleDeleteKeyword = async (id) => {
     if (window.confirm('Are you sure you want to delete this keyword?')) {
-      setError(null);
       try {
         await memoryService.deleteKeyword(id);
         fetchKeywords();
+        notificationService.showSuccess('Keyword deleted successfully');
       } catch (err) {
-        setError('Failed to delete keyword: ' + err.message);
+        notificationService.showError('Failed to delete keyword: ' + err.message);
       }
     }
   };
@@ -72,18 +68,6 @@ const KeywordManager = () => {
 
   return (
     <div className="keyword-manager-container">
-      <h2>Keyword Manager</h2>
-
-      <div className="add-keyword">
-        <input
-          type="text"
-          placeholder="New Keyword"
-          value={newKeyword}
-          onChange={(e) => setNewKeyword(e.target.value)}
-        />
-        <button onClick={handleAddKeyword}>Add Keyword</button>
-      </div>
-
       <table>
         <thead>
           <tr>
@@ -124,6 +108,16 @@ const KeywordManager = () => {
           ))}
         </tbody>
       </table>
+
+      {/* Floating Action Button for adding keywords */}
+      <FloatingActionButton
+        onMemoryBlockAdded={handleKeywordAdded}
+        customIcon="+"
+        customTooltip="Add Keyword"
+        customTestId="fab-add-keyword"
+      >
+        <AddKeywordModal />
+      </FloatingActionButton>
     </div>
   );
 };

@@ -48,11 +48,11 @@ test.describe('Memory Block Pagination', () => {
 
   test('TC-MEM-001-02: Page navigation works in all directions', async ({ page }) => {
     // Wait for the table to be fully loaded
-    await page.waitForSelector('.memory-block-table-container', { timeout: 10000 });
-    await page.waitForSelector('.memory-block-table-body', { timeout: 10000 });
+    await page.waitForSelector('.data-table-container', { timeout: 10000 });
+    await page.waitForSelector('.data-table-body', { timeout: 10000 });
 
     // Get initial page content to compare - use more specific selector
-    const initialRows = await page.locator('.memory-block-table-body > div').count();
+    const initialRows = await page.locator('.data-table-body > div').count();
 
     // Get current page number first
     const pageInput = page.locator('.page-input');
@@ -63,7 +63,7 @@ test.describe('Memory Block Pagination', () => {
     const nextButton = page.locator('button:has-text("Next")');
     if (await nextButton.isVisible() && !(await nextButton.isDisabled())) {
       // Get first row content before navigation (more reliable approach)
-      const firstRowBefore = await page.locator('.memory-block-table-body > div').first().textContent();
+      const firstRowBefore = await page.locator('.data-table-body > div').first().textContent();
 
       // Use JavaScript click to bypass pointer-events issues
       await nextButton.click({ force: true });
@@ -71,12 +71,12 @@ test.describe('Memory Block Pagination', () => {
 
       // Wait for the table to update
       await page.waitForFunction(() => {
-        const rows = document.querySelectorAll('.memory-block-table-body > div');
+        const rows = document.querySelectorAll('.data-table-body > div');
         return rows.length > 0;
       }, { timeout: 5000 });
 
       // Verify we're on a different page by checking the first row content
-      const firstRowAfter = await page.locator('.memory-block-table-body > div').first().textContent();
+      const firstRowAfter = await page.locator('.data-table-body > div').first().textContent();
       expect(firstRowAfter).not.toBe(firstRowBefore);
 
       // Verify page indicator changed (using input field)
@@ -124,7 +124,7 @@ test.describe('Memory Block Pagination', () => {
 
   test('TC-MEM-001-03: Page size selection works correctly', async ({ page }) => {
     // Wait for the table to be fully loaded
-    await page.waitForSelector('.memory-block-table-container', { timeout: 10000 });
+    await page.waitForSelector('.data-table-container', { timeout: 10000 });
 
     const pageSizeOptions = [10, 20, 50, 100]; // Updated to match actual options
     const pageSizeSelector = page.locator('#per-page-select');
@@ -137,12 +137,12 @@ test.describe('Memory Block Pagination', () => {
 
         // Wait for the table to update
         await page.waitForFunction(() => {
-          const rows = document.querySelectorAll('.memory-block-table-body > div');
+          const rows = document.querySelectorAll('.data-table-body > div');
           return rows.length > 0;
         }, { timeout: 5000 });
 
         // Verify the correct number of rows are displayed
-        const visibleRows = await page.locator('.memory-block-table-body > div').count();
+        const visibleRows = await page.locator('.data-table-body > div').count();
         expect(visibleRows).toBeLessThanOrEqual(pageSize);
 
         // If we have enough data, verify we can fill the page
@@ -181,14 +181,14 @@ test.describe('Memory Block Pagination', () => {
 
   test('TC-MEM-001-05: Pagination works with filtered results', async ({ page }) => {
     // Wait for the table to be fully loaded
-    await page.waitForSelector('.memory-block-table-container', { timeout: 10000 });
+    await page.waitForSelector('.data-table-container', { timeout: 10000 });
 
     // Look for search/filter input
     const searchInput = page.locator('input[type="search"], input[placeholder*="search"], [data-testid="search-input"]');
 
     if (await searchInput.isVisible()) {
       // Get initial row count
-      const initialRowCount = await page.locator('.memory-block-table-body > div').count();
+      const initialRowCount = await page.locator('.data-table-body > div').count();
 
       // Enter a search term that should return fewer results
       await searchInput.fill('test');
@@ -197,12 +197,12 @@ test.describe('Memory Block Pagination', () => {
 
       // Wait for the table to update
       await page.waitForFunction(() => {
-        const rows = document.querySelectorAll('.memory-block-table-body > div');
+        const rows = document.querySelectorAll('.data-table-body > div');
         return rows.length >= 0; // Allow for 0 results
       }, { timeout: 5000 });
 
       // Verify results are filtered
-      const filteredRowCount = await page.locator('.memory-block-table-body > div').count();
+      const filteredRowCount = await page.locator('.data-table-body > div').count();
 
       // If we have fewer results, verify pagination still works
       if (filteredRowCount < initialRowCount) {
@@ -218,12 +218,12 @@ test.describe('Memory Block Pagination', () => {
 
           // Wait for the table to update
           await page.waitForFunction(() => {
-            const rows = document.querySelectorAll('.memory-block-table-body > div');
+            const rows = document.querySelectorAll('.data-table-body > div');
             return rows.length > 0;
           }, { timeout: 5000 });
 
           // Verify we can navigate through filtered results
-          const newRowCount = await page.locator('.memory-block-table-body > div').count();
+          const newRowCount = await page.locator('.data-table-body > div').count();
           expect(newRowCount).toBeGreaterThan(0);
         }
       }
@@ -271,8 +271,8 @@ test.describe('Memory Block Pagination', () => {
     const startTime = Date.now();
 
     // Wait for table to load
-    await page.waitForSelector('.memory-block-table-container', { timeout: 10000 });
-    await page.waitForSelector('.memory-block-table-body', { timeout: 10000 });
+    await page.waitForSelector('.data-table-container', { timeout: 10000 });
+    await page.waitForSelector('.data-table-body', { timeout: 10000 });
 
     const loadTime = Date.now() - startTime;
     expect(loadTime).toBeLessThan(5000); // Increased timeout for realistic performance
@@ -282,7 +282,7 @@ test.describe('Memory Block Pagination', () => {
     if (await nextButton.isVisible() && !(await nextButton.isDisabled())) {
       const pageStartTime = Date.now();
       await nextButton.click({ force: true });
-      await page.waitForSelector('.memory-block-table-body > div', { timeout: 3000 });
+      await page.waitForSelector('.data-table-body > div', { timeout: 3000 });
       const pageLoadTime = Date.now() - pageStartTime;
       expect(pageLoadTime).toBeLessThan(3000); // Increased timeout for realistic performance
     }
@@ -290,10 +290,10 @@ test.describe('Memory Block Pagination', () => {
 
   test('TC-MEM-001-09: No data loss during pagination', async ({ page }) => {
     // Wait for the table to be fully loaded
-    await page.waitForSelector('.memory-block-table-container', { timeout: 10000 });
+    await page.waitForSelector('.data-table-container', { timeout: 10000 });
 
     // Get all memory block IDs on current page - use more reliable approach
-    const initialRows = await page.locator('.memory-block-table-body > div').allTextContents();
+    const initialRows = await page.locator('.data-table-body > div').allTextContents();
 
     // Navigate to next page if possible
     const nextButton = page.locator('button:has-text("Next")');
@@ -303,12 +303,12 @@ test.describe('Memory Block Pagination', () => {
 
       // Wait for the table to update
       await page.waitForFunction(() => {
-        const rows = document.querySelectorAll('.memory-block-table-body > div');
+        const rows = document.querySelectorAll('.data-table-body > div');
         return rows.length > 0;
       }, { timeout: 5000 });
 
       // Get content on new page
-      const newRows = await page.locator('.memory-block-table-body > div').allTextContents();
+      const newRows = await page.locator('.data-table-body > div').allTextContents();
 
       // Verify no overlap (different data) - compare first few characters of content
       const overlap = initialRows.filter(initialRow =>
@@ -324,12 +324,12 @@ test.describe('Memory Block Pagination', () => {
 
         // Wait for the table to update
         await page.waitForFunction(() => {
-          const rows = document.querySelectorAll('.memory-block-table-body > div');
+          const rows = document.querySelectorAll('.data-table-body > div');
           return rows.length > 0;
         }, { timeout: 5000 });
 
         // Verify we're back to original data
-        const backRows = await page.locator('.memory-block-table-body > div').allTextContents();
+        const backRows = await page.locator('.data-table-body > div').allTextContents();
         expect(backRows.length).toBe(initialRows.length);
       }
     }

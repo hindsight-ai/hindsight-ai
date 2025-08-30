@@ -1,33 +1,62 @@
 /* MemoryBlockList Component - Resizable Table */
-.memory-block-table-container {
+
+/* CSS Custom Properties for Consistent Spacing */
+:root {
+  --content-margin: 25px;
+  --content-margin-tablet: 20px;
+  --content-margin-mobile: 10px;
+  --content-max-width: calc(100% - (2 * var(--content-margin)));
+  --content-max-width-tablet: calc(100% - (2 * var(--content-margin-tablet)));
+  --content-max-width-mobile: calc(100% - (2 * var(--content-margin-mobile)));
+}
+
+.data-table-container {
   margin-top: 25px;
-  background-color: #fff;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  margin-left: var(--content-margin);
+  margin-right: var(--content-margin);
   border-radius: 10px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  width: 100%; /* Ensure the container takes full width */
+  width: var(--content-max-width);
   overflow-x: auto; /* Enable horizontal scrolling for wide content */
+  /* Removed background and box-shadow to make it consistent with memory blocks page */
 }
 
-.memory-block-table-header {
-  background-color: #f8f8f8;
+/* Responsive margins for tablet */
+@media (max-width: 1199px) and (min-width: 768px) {
+  .data-table-container {
+    margin-left: var(--content-margin-tablet);
+    margin-right: var(--content-margin-tablet);
+    width: var(--content-max-width-tablet);
+  }
+}
+
+/* Responsive margins for mobile */
+@media (max-width: 767px) {
+  .data-table-container {
+    margin-left: var(--content-margin-mobile);
+    margin-right: var(--content-margin-mobile);
+    width: var(--content-max-width-mobile);
+  }
+}
+
+.data-table-header {
+  background-color: transparent;
   border-bottom: 1px solid #e0e0e0;
-  border-top-left-radius: 10px;
-  border-top-right-radius: 10px;
   height: 45px;
   display: flex;
   align-items: center;
+  /* Removed border-radius and background to make it consistent with memory blocks page */
 }
 
-.memory-block-table-body {
+.data-table-body {
   display: flex;
   flex-direction: column;
   /* Removed pointer-events: none to allow proper interaction */
 }
 
-.memory-block-table-row {
+.data-table-row {
   display: flex;
   background-color: #fff;
   border-radius: 8px;
@@ -39,13 +68,27 @@
   pointer-events: auto; /* Re-enable pointer events for interactive elements */
 }
 
-.memory-block-table-row:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+/* Zebra Striping for Better Table Readability */
+.data-table-row:nth-child(even) {
+  background-color: #f0f2f5; /* Much lighter gray for reduced contrast in light mode */
 }
 
-.memory-block-table-row:nth-child(even) {
-  background-color: #fdfdfd;
+.data-table-row:nth-child(odd) {
+  background-color: #ffffff; /* White for odd rows */
+}
+
+/* Dark mode zebra striping with strong contrast */
+[data-theme="dark"] .data-table-row:nth-child(even) {
+  background-color: #9ca3af; /* Much lighter gray for better contrast in dark mode */
+}
+
+[data-theme="dark"] .data-table-row:nth-child(odd) {
+  background-color: #0f172a; /* Very dark gray for odd rows in dark mode */
+}
+
+.data-table-row:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .data-cell-wrapper {
@@ -78,6 +121,11 @@
 
 .header-cell.sortable-header:hover {
   background-color: #f0f0f0;
+}
+
+/* Dark mode header hover */
+[data-theme="dark"] .header-cell.sortable-header:hover {
+  background-color: #374151;
 }
 
 .header-cell.checkbox-header {
@@ -121,20 +169,20 @@
   flex-shrink: 0;
 }
 
-.memory-block-table-container .Panel[data-panel-group-direction="horizontal"] {
+.data-table-container .Panel[data-panel-group-direction="horizontal"] {
   /* Panels should not have flex-direction: column; when in a horizontal group */
 }
 
-.memory-block-table-container .Panel[data-panel-group-direction="horizontal"] > div {
+.data-table-container .Panel[data-panel-group-direction="horizontal"] > div {
   /* Removed min-height as header-cell/data-cell already have height: 100% */
 }
 
-.memory-block-table-container .Panel[data-panel-group-direction="horizontal"] .header-cell,
-.memory-block-table-container .Panel[data-panel-group-direction="horizontal"] .data-cell {
+.data-table-container .Panel[data-panel-group-direction="horizontal"] .header-cell,
+.data-table-container .Panel[data-panel-group-direction="horizontal"] .data-cell {
   width: 100%; /* Ensure cells fill the width of their Panel */
 }
 
-.memory-block-table .selected-row { /* Keep for visual highlight */
+.data-table .selected-row { /* Keep for visual highlight */
   background-color: #e6f7ff;
   border: 1px solid #a7d9ff;
 }
@@ -199,7 +247,7 @@
 }
 
 /* Checkbox specific styles to ensure they work with pointer events */
-.memory-block-table-row {
+.data-table-row {
   pointer-events: auto !important;
 }
 
@@ -243,12 +291,35 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 25px; /* Reduced space above pagination */
-  gap: 10px; /* Reduced gap */
+  margin-top: 25px;
+  margin-left: var(--content-margin);
+  margin-right: var(--content-margin);
+  margin-bottom: 25px; /* Add bottom margin for consistency */
+  gap: 10px;
   flex-wrap: wrap;
-  position: relative; /* Establish stacking context */
-  z-index: 10; /* Ensure pagination is above table */
-  pointer-events: auto; /* Ensure pagination can receive clicks */
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+  width: var(--content-max-width);
+  /* Ensure consistent spacing with table container */
+  box-sizing: border-box;
+}
+
+/* Responsive margins for pagination */
+@media (max-width: 1199px) and (min-width: 768px) {
+  .pagination {
+    margin-left: var(--content-margin-tablet);
+    margin-right: var(--content-margin-tablet);
+    width: var(--content-max-width-tablet);
+  }
+}
+
+@media (max-width: 767px) {
+  .pagination {
+    margin-left: var(--content-margin-mobile);
+    margin-right: var(--content-margin-mobile);
+    width: var(--content-max-width-mobile);
+  }
 }
 
 /* Ensure pagination buttons are never blocked by table content */
@@ -266,9 +337,12 @@
   }
 
   /* Ensure table content doesn't interfere with pagination on mobile */
-  .memory-block-table-container {
+  .data-table-container {
     position: relative;
     z-index: 1;
+    margin-left: 5px; /* Reduced margins for mobile */
+    margin-right: 5px; /* Reduced margins for mobile */
+    width: calc(100% - 10px); /* Adjust width for mobile margins (5px + 5px) */
   }
 
   .pagination {
@@ -357,7 +431,7 @@
 }
 
 .pagination-summary {
-  margin-left: 25px; /* More margin */
+  margin-left: 15px; /* Reduced margin for consistency */
   color: #777;
   font-size: 0.95em; /* Slightly larger */
 }
@@ -393,11 +467,32 @@
 
 /* Filters */
 .search-and-filters-section {
+  margin-top: 25px;
+  margin-left: var(--content-margin);
+  margin-right: var(--content-margin);
   margin-bottom: 25px; /* More space below the filter section */
   padding: 0; /* Removed padding */
   background-color: transparent; /* Transparent background */
   border-radius: 0; /* No border radius */
   box-shadow: none; /* No shadow */
+  width: var(--content-max-width);
+}
+
+/* Responsive margins for search/filter section */
+@media (max-width: 1199px) and (min-width: 768px) {
+  .search-and-filters-section {
+    margin-left: var(--content-margin-tablet);
+    margin-right: var(--content-margin-tablet);
+    width: var(--content-max-width-tablet);
+  }
+}
+
+@media (max-width: 767px) {
+  .search-and-filters-section {
+    margin-left: var(--content-margin-mobile);
+    margin-right: var(--content-margin-mobile);
+    width: var(--content-max-width-mobile);
+  }
 }
 
 
@@ -675,9 +770,12 @@
   justify-content: space-between;
   top: 0px; /* Adjusted position to be higher above the track */
   font-size: 0.85em; /* Slightly reduced font size */
-  color: #555;
+  color: #222 !important; /* Much darker color for better contrast */
+  font-weight: 700 !important; /* Bolder text for better visibility */
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9) !important; /* Light text shadow for contrast */
   padding: 0 20px; /* Align with slider thumbs */
   line-height: 1;
+  z-index: 10; /* Ensure values appear above slider track */
 }
 
 /* MultiSelectDropdown specific styles */
@@ -825,13 +923,35 @@
 .bulk-action-bar {
   background-color: #eaf6ff;
   border: 1px solid #a7d9ff;
-  padding: 15px 25px; /* Increased padding */
-  margin-bottom: 25px; /* More margin */
-  border-radius: 10px; /* More rounded */
+  padding: 15px 25px;
+  margin-top: 25px;
+  margin-left: var(--content-margin);
+  margin-right: var(--content-margin);
+  margin-bottom: 25px;
+  border-radius: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  width: var(--content-max-width);
+  box-sizing: border-box;
+}
+
+/* Responsive margins for bulk action bar */
+@media (max-width: 1199px) and (min-width: 768px) {
+  .bulk-action-bar {
+    margin-left: var(--content-margin-tablet);
+    margin-right: var(--content-margin-tablet);
+    width: var(--content-max-width-tablet);
+  }
+}
+
+@media (max-width: 767px) {
+  .bulk-action-bar {
+    margin-left: var(--content-margin-mobile);
+    margin-right: var(--content-margin-mobile);
+    width: var(--content-max-width-mobile);
+  }
 }
 
 .bulk-action-bar span {

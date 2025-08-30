@@ -527,7 +527,7 @@ test.describe('Keyword Management', () => {
         await page.waitForTimeout(1000);
 
         // Verify filtering occurred
-        const filteredRows = page.locator('.memory-block-table-row');
+        const filteredRows = page.locator('.data-table-row');
         const filteredCount = await filteredRows.count();
 
         if (filteredCount > 0) {
@@ -556,7 +556,7 @@ test.describe('Keyword Management', () => {
         await page.waitForTimeout(1000);
 
         // Verify filter is removed (results should increase or stay same)
-        const finalCount = await page.locator('.memory-block-table-row').count();
+        const finalCount = await page.locator('.data-table-row').count();
         expect(finalCount).toBeGreaterThanOrEqual(filteredCount);
       } else {
         console.log('No keyword tags found for association test');

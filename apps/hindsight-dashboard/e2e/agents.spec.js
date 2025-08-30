@@ -28,7 +28,7 @@ test.describe('Agent Management Tests (AGENT-001, AGENT-002)', () => {
       console.log('Testing agent list display...');
 
       // Check if agents table is present
-      const agentsTable = page.locator('.memory-block-table-container');
+      const agentsTable = page.locator('.data-table-container');
       const tableCount = await agentsTable.count();
 
       if (tableCount === 0) {
@@ -48,7 +48,7 @@ test.describe('Agent Management Tests (AGENT-001, AGENT-002)', () => {
       await expect(headerCells.first()).toBeVisible();
 
       // Check for at least one data row if agents exist
-      const dataRows = page.locator('.memory-block-table-row');
+      const dataRows = page.locator('.data-table-row');
       const rowCount = await dataRows.count();
       console.log(`Found ${rowCount} agent rows`);
 
@@ -69,7 +69,7 @@ test.describe('Agent Management Tests (AGENT-001, AGENT-002)', () => {
       // Wait for agents to load
       await page.waitForTimeout(2000);
 
-      const dataRows = page.locator('.memory-block-table-row');
+      const dataRows = page.locator('.data-table-row');
       const rowCount = await dataRows.count();
 
       if (rowCount === 0) {
@@ -102,7 +102,7 @@ test.describe('Agent Management Tests (AGENT-001, AGENT-002)', () => {
       // Wait for agents to load
       await page.waitForTimeout(2000);
 
-      const dataRows = page.locator('.memory-block-table-row');
+      const dataRows = page.locator('.data-table-row');
       const rowCount = await dataRows.count();
 
       if (rowCount === 0) {
@@ -216,7 +216,7 @@ test.describe('Agent Management Tests (AGENT-001, AGENT-002)', () => {
       // Wait for agents to load
       await page.waitForTimeout(2000);
 
-      const dataRows = page.locator('.memory-block-table-row');
+      const dataRows = page.locator('.data-table-row');
       const rowCount = await dataRows.count();
 
       if (rowCount === 0) {
@@ -255,7 +255,7 @@ test.describe('Agent Management Tests (AGENT-001, AGENT-002)', () => {
       // Wait for agents to load
       await page.waitForTimeout(2000);
 
-      const dataRows = page.locator('.memory-block-table-row');
+      const dataRows = page.locator('.data-table-row');
       const initialRowCount = await dataRows.count();
 
       if (initialRowCount === 0) {
@@ -286,7 +286,7 @@ test.describe('Agent Management Tests (AGENT-001, AGENT-002)', () => {
         await page.waitForTimeout(2000);
 
         // Verify filtered results
-        const filteredRows = page.locator('.memory-block-table-row');
+        const filteredRows = page.locator('.data-table-row');
         const filteredCount = await filteredRows.count();
 
         if (filteredCount > 0) {
@@ -312,7 +312,7 @@ test.describe('Agent Management Tests (AGENT-001, AGENT-002)', () => {
       console.log(`Testing agent management on ${browserName}...`);
 
       // Basic functionality test
-      const agentsTable = page.locator('.memory-block-table-container');
+      const agentsTable = page.locator('.data-table-container');
       const tableCount = await agentsTable.count();
 
       if (tableCount > 0) {

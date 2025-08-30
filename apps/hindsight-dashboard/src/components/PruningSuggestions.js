@@ -99,11 +99,6 @@ const PruningSuggestions = () => {
 
   return (
     <div className="memory-block-list-container">
-      <div className="page-header">
-        <h1>Memory Pruning Suggestions</h1>
-        <p>Review and confirm memory blocks for pruning. Selected blocks will be archived.</p>
-      </div>
-
       {/* Pruning Parameters */}
       <div className="pruning-params-section">
         <h3>Pruning Parameters</h3>
@@ -185,8 +180,8 @@ const PruningSuggestions = () => {
             </div>
           </div>
 
-          <div className="memory-block-table-container">
-            <div className="memory-block-table-header">
+          <div className="data-table-container">
+            <div className="data-table-header">
               <div className="header-cell">Select</div>
               <div className="header-cell">ID</div>
               <div className="header-cell">Score</div>
@@ -196,9 +191,9 @@ const PruningSuggestions = () => {
               <div className="header-cell">Actions</div>
             </div>
             
-            <div className="memory-block-table-body">
+            <div className="data-table-body">
               {suggestions.map((block) => (
-                <div key={block.memory_block_id} className="memory-block-table-row">
+                <div key={block.memory_block_id} className="data-table-row">
                   <div className="data-cell">
                     <input
                       type="checkbox"

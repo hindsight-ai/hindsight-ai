@@ -37,7 +37,7 @@ test.describe('Memory Block Sorting', () => {
     const dateHeader = page.locator('.sortable-header:has-text("Creation Date")');
     if (await dateHeader.isVisible()) {
       // Get initial first row content
-      const firstRowBefore = await page.locator('.memory-block-table-row').first().textContent();
+      const firstRowBefore = await page.locator('.data-table-row').first().textContent();
 
       // Click to sort ascending
       await dateHeader.click();
@@ -49,7 +49,7 @@ test.describe('Memory Block Sorting', () => {
       await expect(sortArrow).toHaveText('▲');
 
       // Get first row content after ascending sort
-      const firstRowAfterAsc = await page.locator('.memory-block-table-row').first().textContent();
+      const firstRowAfterAsc = await page.locator('.data-table-row').first().textContent();
 
       // Click again to sort descending
       await dateHeader.click();
@@ -59,7 +59,7 @@ test.describe('Memory Block Sorting', () => {
       await expect(sortArrow).toHaveText('▼');
 
       // Get first row content after descending sort
-      const firstRowAfterDesc = await page.locator('.memory-block-table-row').first().textContent();
+      const firstRowAfterDesc = await page.locator('.data-table-row').first().textContent();
 
       // Verify that sorting actually changed the order
       expect(firstRowAfterAsc).not.toBe(firstRowAfterDesc);
@@ -92,7 +92,7 @@ test.describe('Memory Block Sorting', () => {
         await expect(sortArrow).toBeVisible();
 
         // Get first row content to verify sorting worked
-        const firstRowContent = await page.locator('.memory-block-table-row').first().textContent();
+        const firstRowContent = await page.locator('.data-table-row').first().textContent();
         expect(firstRowContent).toBeTruthy();
 
         // Toggle sort direction
@@ -125,7 +125,7 @@ test.describe('Memory Block Sorting', () => {
       await expect(sortArrow).toHaveText('▲');
 
       // Get first row content after ascending sort
-      const firstRowAsc = await page.locator('.memory-block-table-row').first().textContent();
+      const firstRowAsc = await page.locator('.data-table-row').first().textContent();
 
       // Second click - should sort descending
       await firstSortableHeader.click();
@@ -134,7 +134,7 @@ test.describe('Memory Block Sorting', () => {
       await expect(sortArrow).toHaveText('▼');
 
       // Get first row content after descending sort
-      const firstRowDesc = await page.locator('.memory-block-table-row').first().textContent();
+      const firstRowDesc = await page.locator('.data-table-row').first().textContent();
 
       // Third click - should go back to ascending
       await firstSortableHeader.click();
@@ -143,7 +143,7 @@ test.describe('Memory Block Sorting', () => {
       await expect(sortArrow).toHaveText('▲');
 
       // Get first row content after third click
-      const firstRowAscAgain = await page.locator('.memory-block-table-row').first().textContent();
+      const firstRowAscAgain = await page.locator('.data-table-row').first().textContent();
 
       // Verify toggling works (first and third sorts should be the same)
       expect(firstRowAsc).toBe(firstRowAscAgain);
@@ -293,7 +293,7 @@ test.describe('Memory Block Sorting', () => {
       expect(sortTime).toBeLessThan(4000); // Should complete within 4 seconds (more realistic for all browsers)
 
       // Verify table updates after sort
-      const rows = page.locator('.memory-block-table-row');
+      const rows = page.locator('.data-table-row');
       await expect(rows.first()).toBeVisible();
 
       // Test multiple rapid sort operations
@@ -314,7 +314,7 @@ test.describe('Memory Block Sorting', () => {
 
     if (await searchInput.isVisible() && await sortableHeaders.first().isVisible()) {
       // Get initial row count
-      const initialRowCount = await page.locator('.memory-block-table-row').count();
+      const initialRowCount = await page.locator('.data-table-row').count();
 
       // Apply a search filter
       await searchInput.fill('test');
@@ -322,7 +322,7 @@ test.describe('Memory Block Sorting', () => {
       await page.waitForTimeout(1000);
 
       // Get filtered row count
-      const filteredRowCount = await page.locator('.memory-block-table-row').count();
+      const filteredRowCount = await page.locator('.data-table-row').count();
 
       // If filtering worked, test sorting on filtered results
       if (filteredRowCount < initialRowCount || filteredRowCount > 0) {
@@ -335,7 +335,7 @@ test.describe('Memory Block Sorting', () => {
         await expect(sortArrow).toBeVisible();
 
         // Verify table still has content after sorting filtered results
-        const sortedRows = page.locator('.memory-block-table-row');
+        const sortedRows = page.locator('.data-table-row');
         await expect(sortedRows.first()).toBeVisible();
 
         // Verify sort direction can be toggled on filtered results
@@ -388,7 +388,7 @@ test.describe('Memory Block Sorting', () => {
 
       // Verify interface is still functional
       await expect(firstHeader).toBeVisible();
-      const rows = page.locator('.memory-block-table-row');
+      const rows = page.locator('.data-table-row');
       await expect(rows.first()).toBeVisible();
 
       // Test that sort state is consistent after rapid operations

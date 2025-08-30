@@ -4,8 +4,9 @@ import PaginationControls from './PaginationControls';
 import { CopyToClipboardButton } from './CopyToClipboardButton';
 import { BulkActionBar } from './BulkActionBar';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
-import AddAgentDialog from './AddAgentDialog'; // Import the new dialog component
-import './MemoryBlockList.css'; // Reusing existing styles
+import FloatingActionButton from './FloatingActionButton';
+import AddAgentModal from './AddAgentModal';
+import './MemoryBlockList.css';
 
 const AgentManagementPage = () => {
   const [agents, setAgents] = useState([]);
@@ -20,7 +21,6 @@ const AgentManagementPage = () => {
   });
   const [sort, setSort] = useState({ field: 'created_at', order: 'desc' });
   const [selectedAgents, setSelectedAgents] = useState([]);
-  const [showAddAgentDialog, setShowAddAgentDialog] = useState(false); // State for dialog visibility
   const [confirmationMessage, setConfirmationMessage] = useState(null); // State for confirmation message
 
   const fetchAgents = useCallback(async () => {
@@ -64,22 +64,8 @@ const AgentManagementPage = () => {
     fetchAgents();
   }, [fetchAgents]);
 
-  const handleAddAgent = async (agentName) => {
-    setError(null); // Clear previous errors
-    setLoading(true);
-    try {
-      await agentService.createAgent({ agent_name: agentName });
-      setConfirmationMessage(`Agent "${agentName}" created successfully!`);
-      setShowAddAgentDialog(false); // Close dialog on success
-      await fetchAgents(); // Refresh the list
-      // Clear confirmation message after a few seconds
-      setTimeout(() => setConfirmationMessage(null), 5000);
-    } catch (err) {
-      console.error('Failed to create agent:', err);
-      setError(`Failed to create agent: ${err.response?.data?.detail || err.message}. Please try again.`);
-    } finally {
-      setLoading(false);
-    }
+  const handleAgentAdded = () => {
+    fetchAgents(); // Refresh the list when a new agent is added
   };
 
   const handleDeleteAgent = async (agentId) => {
@@ -106,7 +92,7 @@ const AgentManagementPage = () => {
   const handlePageChange = (newPage) => {
     setPagination(prev => ({ ...prev, page: newPage }));
   };
-
+  
   const handlePerPageChange = (e) => {
     setPagination(prev => ({ ...prev, per_page: parseInt(e.target.value, 10), page: 1 }));
   };
@@ -169,7 +155,7 @@ const AgentManagementPage = () => {
   const [columnLayout, setColumnLayout] = useState(initialColumnLayout);
 
   const renderHeader = () => (
-    <PanelGroup direction="horizontal" className="memory-block-table-header" onLayout={setColumnLayout}>
+    <PanelGroup direction="horizontal" className="data-table-header" onLayout={setColumnLayout}>
       {columnDefinitions.map((col, index) => (
         <React.Fragment key={col.id}>
           <Panel
@@ -207,7 +193,7 @@ const AgentManagementPage = () => {
   );
 
   const renderRow = (agent) => (
-    <div className="memory-block-table-row" key={agent.agent_id} role="row">
+    <div className="data-table-row" key={agent.agent_id} role="row">
       {columnDefinitions.map((col, index) => (
         <React.Fragment key={col.id}>
           <div
@@ -264,8 +250,6 @@ const AgentManagementPage = () => {
 
   return (
     <div className="agent-management-page">
-      <h1>Agent Management</h1>
-
       <div className="search-bar-container">
         <input
           type="text"
@@ -277,10 +261,7 @@ const AgentManagementPage = () => {
         <button onClick={fetchAgents} className="filter-toggle-button">Search</button>
       </div>
 
-      {/* Removed the direct input field for new agent name */}
-      <div className="add-agent-section">
-        <button onClick={() => setShowAddAgentDialog(true)} className="filter-toggle-button">Add Agent</button>
-      </div>
+
 
       {selectedAgents.length > 0 && (
         <BulkActionBar selectedCount={selectedAgents.length} onBulkRemove={handleBulkDelete} />
@@ -294,14 +275,13 @@ const AgentManagementPage = () => {
 
       {agents.length === 0 && !loading && !error && !searchTerm ? ( // Adjusted condition for empty state
         <div className="empty-state-message">
-          <p>No agents found. Click "Add Agent" to create your first agent!</p>
-          <button onClick={() => setShowAddAgentDialog(true)}>Add First Agent</button>
+          <p>No agents found. Click the "+" button to create your first agent!</p>
         </div>
       ) : (
         <>
-          <div className="memory-block-table-container">
+          <div className="data-table-container">
             {renderHeader()}
-            <div className="memory-block-table-body">
+            <div className="data-table-body">
               {agents.map(renderRow)}
             </div>
           </div>
@@ -317,13 +297,15 @@ const AgentManagementPage = () => {
         </>
       )}
 
-      <AddAgentDialog
-        show={showAddAgentDialog}
-        onClose={() => setShowAddAgentDialog(false)}
-        onCreate={handleAddAgent}
-        loading={loading}
-        error={error}
-      />
+      {/* Floating Action Button for adding agents */}
+      <FloatingActionButton
+        onMemoryBlockAdded={handleAgentAdded}
+        customIcon="+"
+        customTooltip="Add Agent"
+        customTestId="fab-add-agent"
+      >
+        <AddAgentModal />
+      </FloatingActionButton>
     </div>
   );
 };

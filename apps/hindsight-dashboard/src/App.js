@@ -10,6 +10,9 @@ import ArchivedMemoryBlockList from './components/ArchivedMemoryBlockList';
 import PruningSuggestions from './components/PruningSuggestions';
 import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
+import FloatingActionButton from './components/FloatingActionButton';
+import ThemeToggle from './components/ThemeToggle';
+import KeyboardShortcutHelp from './components/KeyboardShortcutHelp';
 import authService from './api/authService';
 import './App.css';
 
@@ -19,9 +22,24 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
 
   useEffect(() => {
     fetchUserInfo();
+    // Set document title
+    document.title = 'Hindsight-AI';
+
+    // Add keyboard shortcuts
+    const handleKeyDown = (event) => {
+      // Ctrl/Cmd + / to show shortcuts
+      if ((event.ctrlKey || event.metaKey) && event.key === '/') {
+        event.preventDefault();
+        setShowShortcutHelp(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const fetchUserInfo = async () => {
@@ -70,48 +88,16 @@ function AppContent() {
   return (
     <div className="App" data-testid="dashboard-container">
       <NotificationContainer />
-      <header className="App-header" role="banner">
+      <header className="App-header fixed-header" role="banner">
         <div className="header-content">
-          <h1 className="app-title">AI Agent Memory Dashboard</h1>
-          <div className="header-right">
-            <div className="user-info">
-              <span className="user-email">{user.email || user.user}</span>
-            </div>
-            <button
-              className="about-button"
-              onClick={() => setShowAboutModal(true)}
-              aria-label="About this application"
-            >
-              About
-            </button>
-            {(location.pathname === '/' || location.pathname === '/memory-blocks') && (
-              <Link
-                to="/new-memory-block"
-                className="add-button"
-                aria-label="Add new memory block"
-              >
-                + Add New Memory Block
-              </Link>
-            )}
-          </div>
-        </div>
-        <div className="header-bottom">
-          <nav className="main-nav" data-testid="sidebar-nav" role="navigation" aria-label="Main navigation">
+          {/* Navigation Tabs - Now in the same row */}
+          <nav className="main-nav inline-nav" data-testid="main-nav" role="navigation" aria-label="Main navigation">
             <ul className="nav-tabs">
               <li className="nav-item">
                 <Link
                   to="/"
-                  className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
+                  className={`nav-link ${location.pathname === '/' || location.pathname === '/memory-blocks' ? 'active' : ''}`}
                   data-testid="nav-dashboard"
-                >
-                  Dashboard
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  to="/memory-blocks"
-                  className={`nav-link ${location.pathname === '/memory-blocks' ? 'active' : ''}`}
-                  data-testid="nav-memory-blocks"
                 >
                   Memory Blocks
                 </Link>
@@ -164,16 +150,37 @@ function AppContent() {
             </ul>
           </nav>
 
-          {/* Mobile Menu Toggle */}
-          <button
-            className="mobile-menu-toggle"
-            data-testid="mobile-menu-toggle"
-            aria-label="Toggle mobile menu"
-            onClick={() => setShowMobileMenu(!showMobileMenu)}
-          >
-            ☰
-          </button>
+          <div className="header-right">
+            <ThemeToggle />
+            <div className="user-info">
+              <span className="user-email">{user.email || user.user}</span>
+            </div>
+            <button
+              className="about-button"
+              onClick={() => setShowAboutModal(true)}
+              aria-label="About this application"
+            >
+              About
+            </button>
+            <button
+              className="shortcut-help-button"
+              onClick={() => setShowShortcutHelp(true)}
+              aria-label="Keyboard shortcuts help"
+              title="Keyboard shortcuts (Ctrl+/)">
+              ?
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Menu Toggle - Now positioned differently */}
+        <button
+          className="mobile-menu-toggle"
+          data-testid="mobile-menu-toggle"
+          aria-label="Toggle mobile menu"
+          onClick={() => setShowMobileMenu(!showMobileMenu)}
+        >
+          ☰
+        </button>
       </header>
       <main role="main" data-testid="main-content">
         <Routes>
@@ -196,8 +203,7 @@ function AppContent() {
       >
         <nav role="navigation" aria-label="Mobile navigation">
           <ul>
-            <li><Link to="/" data-testid="mobile-nav-dashboard" onClick={() => setShowMobileMenu(false)}>Dashboard</Link></li>
-            <li><Link to="/memory-blocks" data-testid="mobile-nav-memory-blocks" onClick={() => setShowMobileMenu(false)}>Memory Blocks</Link></li>
+            <li><Link to="/" data-testid="mobile-nav-dashboard" onClick={() => setShowMobileMenu(false)}>Memory Blocks</Link></li>
             <li><Link to="/keywords" data-testid="mobile-nav-keywords" onClick={() => setShowMobileMenu(false)}>Keywords</Link></li>
             <li><Link to="/agents" data-testid="mobile-nav-agents" onClick={() => setShowMobileMenu(false)}>Agents</Link></li>
             <li><Link to="/consolidation-suggestions" data-testid="mobile-nav-consolidation" onClick={() => setShowMobileMenu(false)}>Consolidation</Link></li>
@@ -206,6 +212,22 @@ function AppContent() {
           </ul>
         </nav>
       </div>
+
+      {/* Floating Action Button */}
+      {(location.pathname === '/' || location.pathname === '/memory-blocks') && (
+        <FloatingActionButton onMemoryBlockAdded={() => {
+          // This will trigger a refresh of the memory blocks list
+          // The MemoryBlockList component will handle the refresh
+          window.dispatchEvent(new CustomEvent('memoryBlockAdded'));
+        }} />
+      )}
+
+      {/* Keyboard Shortcuts Help */}
+      <KeyboardShortcutHelp
+        isOpen={showShortcutHelp}
+        onClose={() => setShowShortcutHelp(false)}
+      />
+
       <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} />
     </div>
   );

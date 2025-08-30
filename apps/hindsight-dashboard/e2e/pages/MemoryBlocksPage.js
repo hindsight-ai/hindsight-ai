@@ -5,9 +5,9 @@
 export class MemoryBlocksPage {
   constructor(page) {
     this.page = page;
-    this.tableContainer = page.locator('.memory-block-table-container');
-    this.tableRows = page.locator('.memory-block-table-row');
-    this.tableHeader = page.locator('.memory-block-table-header');
+    this.tableContainer = page.locator('.data-table-container');
+    this.tableRows = page.locator('.data-table-row');
+    this.tableHeader = page.locator('.data-table-header');
   }
 
   /**
@@ -23,8 +23,8 @@ export class MemoryBlocksPage {
    * Wait for table to load completely
    */
   async waitForTableLoad() {
-    await this.page.waitForSelector('.memory-block-table-container', { timeout: 10000 });
-    await this.page.waitForSelector('.memory-block-table-row', { timeout: 10000 });
+    await this.page.waitForSelector('.data-table-container', { timeout: 10000 });
+    await this.page.waitForSelector('.data-table-row', { timeout: 10000 });
   }
 
   /**
@@ -56,10 +56,10 @@ export class MemoryBlocksPage {
   async getVisibleMemoryBlockIds() {
     // Try multiple selectors to find the ID column content
     const selectors = [
-      '.memory-block-table-row .truncated-id', // CopyToClipboardButton truncated text
-      '.memory-block-table-row .copy-id-container .truncated-id', // Full path to truncated ID
-      '.memory-block-table-row .id-cell', // Fallback ID cell
-      '.memory-block-table-row [data-testid*="id"]' // Data test ID
+      '.data-table-row .truncated-id', // CopyToClipboardButton truncated text
+      '.data-table-row .copy-id-container .truncated-id', // Full path to truncated ID
+      '.data-table-row .id-cell', // Fallback ID cell
+      '.data-table-row [data-testid*="id"]' // Data test ID
     ];
 
     for (const selector of selectors) {
