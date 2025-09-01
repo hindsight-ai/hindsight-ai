@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import AddMemoryBlockModal from './AddMemoryBlockModal';
-import './FloatingActionButton.css';
 
 const FloatingActionButton = ({
   onMemoryBlockAdded,
@@ -31,13 +30,12 @@ const FloatingActionButton = ({
   return (
     <>
       <button
-        className="fab"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center text-xl font-bold z-40"
         onClick={handleClick}
         aria-label={customTooltip}
         data-testid={customTestId}
       >
-        <span className="fab-icon">{customIcon}</span>
-        <span className="fab-tooltip">{customTooltip}</span>
+        {customIcon}
       </button>
 
       {children ? (

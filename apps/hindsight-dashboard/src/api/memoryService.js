@@ -1,9 +1,9 @@
 import notificationService from '../services/notificationService';
 
-const API_BASE_URL = process.env.REACT_APP_HINDSIGHT_SERVICE_API_URL;
+const API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL;
 
 if (!API_BASE_URL) {
-  throw new Error("Environment variable REACT_APP_HINDSIGHT_SERVICE_API_URL is not defined.");
+  throw new Error("Environment variable VITE_HINDSIGHT_SERVICE_API_URL is not defined.");
 }
 
 const memoryService = {
@@ -174,6 +174,38 @@ const memoryService = {
   deleteKeyword: async (id) => {
     const response = await fetch(`${API_BASE_URL}/keywords/${id}`, {
       method: 'DELETE',
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  getKeywordMemoryBlocks: async (keywordId, skip = 0, limit = 50) => {
+    const params = new URLSearchParams({
+      skip: skip.toString(),
+      limit: limit.toString()
+    });
+    const response = await fetch(`${API_BASE_URL}/keywords/${keywordId}/memory-blocks/?${params.toString()}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  getKeywordMemoryBlocksCount: async (keywordId) => {
+    const response = await fetch(`${API_BASE_URL}/keywords/${keywordId}/memory-blocks/count`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -382,6 +414,274 @@ const memoryService = {
     }
     return response.json();
   },
+
+  // Conversations Count
+  getConversationsCount: async () => {
+    const response = await fetch(`${API_BASE_URL}/conversations/count`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  // Suggest Keywords for Memory Block
+  suggestKeywords: async (memoryBlockId) => {
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/suggest-keywords`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  // Compress Memory Block
+  compressMemoryBlock: async (memoryBlockId, userInstructions = {}) => {
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/compress`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(userInstructions),
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  // Apply Memory Compression
+  applyMemoryCompression: async (memoryBlockId, compressionData) => {
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/compress/apply`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(compressionData),
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  // Memory Optimization Center
+  getMemoryOptimizationSuggestions: async (filters = {}) => {
+    const params = new URLSearchParams();
+    
+    // Add filter parameters if they exist
+    if (filters.agentId) params.append('agent_id', filters.agentId);
+    if (filters.priority) params.append('priority', filters.priority);
+    if (filters.dateRange) params.append('date_range', filters.dateRange);
+    
+    const url = `${API_BASE_URL}/memory-optimization/suggestions${params.toString() ? `?${params.toString()}` : ''}`;
+    
+    const response = await fetch(url, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  executeOptimizationSuggestion: async (suggestionId, signal) => {
+    const response = await fetch(`${API_BASE_URL}/memory-optimization/suggestions/${suggestionId}/execute`, {
+      method: 'POST',
+      credentials: 'include',
+      signal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  getSuggestionDetails: async (suggestionId) => {
+    const response = await fetch(`${API_BASE_URL}/memory-optimization/suggestions/${suggestionId}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  bulkCompactMemoryBlocks: async (memoryBlockIds, userInstructions = '', maxConcurrent = 4, signal) => {
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/bulk-compact`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        memory_block_ids: memoryBlockIds,
+        user_instructions: userInstructions,
+        max_concurrent: maxConcurrent
+      }),
+      credentials: 'include',
+      signal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  bulkGenerateKeywords: async (memoryBlockIds, signal) => {
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/bulk-generate-keywords`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ memory_block_ids: memoryBlockIds }),
+      credentials: 'include',
+      signal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  bulkApplyKeywords: async (applications, signal) => {
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/bulk-apply-keywords`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ applications }),
+      credentials: 'include',
+      signal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  mergeMemoryBlocks: async (memoryBlockIds, mergedContent) => {
+    const response = await fetch(`${API_BASE_URL}/memory-blocks/merge`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        memory_block_ids: memoryBlockIds,
+        merged_content: mergedContent 
+      }),
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  },
+
+  // --- New batched helpers for large datasets ---
+  bulkGenerateKeywordsBatched: async (memoryBlockIds, { batchSize = 200, signal, onProgress } = {}) => {
+    // Process IDs in batches to avoid very large payloads/timeouts
+    const total = memoryBlockIds.length;
+    let processed = 0;
+    let aggregate = {
+      suggestions: [],
+      successful_count: 0,
+      failed_count: 0,
+      total_processed: 0,
+      message: ''
+    };
+
+    for (let i = 0; i < memoryBlockIds.length; i += batchSize) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      const batch = memoryBlockIds.slice(i, i + batchSize);
+      const resp = await memoryService.bulkGenerateKeywords(batch, signal);
+      aggregate.suggestions.push(...(resp.suggestions || []));
+      aggregate.successful_count += resp.successful_count || 0;
+      aggregate.failed_count += resp.failed_count || 0;
+      aggregate.total_processed += resp.total_processed || batch.length;
+      processed += batch.length;
+      onProgress && onProgress({ processed: Math.min(processed, total), total });
+    }
+
+    aggregate.message = `Generated keyword suggestions for ${aggregate.successful_count} memory blocks`;
+    return aggregate;
+  },
+
+  bulkApplyKeywordsBatched: async (applications, { batchSize = 200, signal, onProgress } = {}) => {
+    const total = applications.length;
+    let processed = 0;
+    let aggregate = {
+      results: [],
+      successful_count: 0,
+      failed_count: 0,
+      message: ''
+    };
+
+    for (let i = 0; i < applications.length; i += batchSize) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      const batch = applications.slice(i, i + batchSize);
+      const resp = await memoryService.bulkApplyKeywords(batch, signal);
+      aggregate.results.push(...(resp.results || []));
+      aggregate.successful_count += resp.successful_count || 0;
+      aggregate.failed_count += resp.failed_count || 0;
+      processed += batch.length;
+      onProgress && onProgress({ processed: Math.min(processed, total), total });
+    }
+
+    aggregate.message = `Applied keywords to ${aggregate.successful_count} memory blocks`;
+    return aggregate;
+  },
 };
 
 export default memoryService;
@@ -407,5 +707,12 @@ export const {
   deleteConsolidationSuggestion, // Export the new function
   generatePruningSuggestions,
   confirmPruning,
-  getBuildInfo
+  getBuildInfo,
+  getMemoryOptimizationSuggestions,
+  executeOptimizationSuggestion,
+  getSuggestionDetails,
+  bulkCompactMemoryBlocks,
+  bulkGenerateKeywords,
+  bulkApplyKeywords,
+  mergeMemoryBlocks
 } = memoryService;

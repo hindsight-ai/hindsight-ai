@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import memoryService from '../api/memoryService';
-import './MemoryBlockList.css';
 
 const PruningSuggestions = () => {
   const [suggestions, setSuggestions] = useState([]);

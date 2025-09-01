@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import agentService from '../api/agentService';
-import './AddMemoryBlockModal.css';
 
 const AddAgentModal = ({ isOpen, onClose, onSuccess }) => {
   const [agentName, setAgentName] = useState('');

@@ -8,7 +8,6 @@ import notificationService from '../services/notificationService'; // Import not
 import MemoryBlockFilterBar from './MemoryBlockFilterBar';
 import MemoryBlockTable from './MemoryBlockTable';
 import PaginationControls from './PaginationControls';
-import './MemoryBlockList.css'; // Import the new CSS file
 
 const MemoryBlockList = () => {
   const [memoryBlocks, setMemoryBlocks] = useState([]);
@@ -18,7 +17,7 @@ const MemoryBlockList = () => {
   const [searchTerm, setSearchTerm] = useState(''); // Separate state for the search input value
   const [agentIdInput, setAgentIdInput] = useState(''); // Local state for agent ID input
   const [filters, setFilters] = useState({
-    search: '', // This will be updated by the debounced searchTerm
+    search_query: '', // This will be updated by the debounced searchTerm
     agent_id: '', // This will be updated only on explicit apply/enter
     conversation_id: '',
     feedback_score_range: [0, 100], // Default range for feedback score
@@ -26,6 +25,13 @@ const MemoryBlockList = () => {
     start_date: '',
     end_date: '',
     keywords: [],
+    // Advanced search parameters
+    search_type: 'fulltext',
+    min_score: '',
+    similarity_threshold: '',
+    fulltext_weight: '',
+    semantic_weight: '',
+    min_combined_score: '',
   });
 
   const [pagination, setPagination] = useState({
@@ -36,7 +42,7 @@ const MemoryBlockList = () => {
   });
   const [pageInputValue, setPageInputValue] = useState('1'); // Separate state for page input
   const [sort, setSort] = useState({
-    field: 'creation_date',
+    field: 'created_at',
     order: 'desc',
   });
   const [availableKeywords, setAvailableKeywords] = useState([]);
@@ -44,6 +50,7 @@ const MemoryBlockList = () => {
   const [showFilters, setShowFilters] = useState(true); // State for toggling filter visibility - always visible for better UX
   const [availableAgentIds, setAvailableAgentIds] = useState([]); // New state for agent IDs
   const [lastUpdated, setLastUpdated] = useState(null); // Track when data was last updated
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false); // State for advanced search toggle
 
   // Debounce logic for search term
   const debounceTimeoutRef = useRef(null);
@@ -179,7 +186,7 @@ const MemoryBlockList = () => {
     }
   }, [pagination.page, pagination.per_page, location.pathname, location.search, navigate]);
 
-  // Effect to debounce search term and update filters.search
+  // Effect to debounce search term and update filters.search_query
   useEffect(() => {
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
@@ -188,7 +195,7 @@ const MemoryBlockList = () => {
     debounceTimeoutRef.current = setTimeout(() => {
       setFilters((prevFilters) => ({
         ...prevFilters,
-        search: searchTerm,
+        search_query: searchTerm,
       }));
     }, 500); // 500ms debounce delay
 
@@ -388,7 +395,7 @@ const MemoryBlockList = () => {
     setSearchTerm(''); // Reset search term
     setAgentIdInput(''); // Reset agent ID input
     setFilters({
-      search: '',
+      search_query: '',
       agent_id: '',
       conversation_id: '',
       feedback_score_range: [0, 100],
@@ -396,6 +403,13 @@ const MemoryBlockList = () => {
       start_date: '',
       end_date: '',
       keywords: [],
+      // Reset advanced search parameters
+      search_type: 'fulltext',
+      min_score: '',
+      similarity_threshold: '',
+      fulltext_weight: '',
+      semantic_weight: '',
+      min_combined_score: '',
     });
 
     // No need to call fetchMemoryBlocks here, as the state change will trigger it via useEffect
@@ -410,8 +424,22 @@ const MemoryBlockList = () => {
         if (key === 'retrieval_count_range') return value[0] !== 0 || value[1] !== 1000;
         return value.length > 0; // For other arrays like keywords
       }
+      // For advanced search parameters, check if they're not at default values
+      if (key === 'search_type') return value !== 'fulltext';
       return value !== '';
     });
+  };
+
+  const handleAdvancedFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((prevFilters) => ({
+      ...prevFilters,
+      [name]: value,
+    }));
+  };
+
+  const toggleAdvancedSearch = () => {
+    setShowAdvancedSearch(!showAdvancedSearch);
   };
 
   if (loading) return (
@@ -486,6 +514,10 @@ const MemoryBlockList = () => {
             toggleFilters={toggleFilters}
             resetFilters={resetFilters}
             areFiltersActive={areFiltersActive}
+            // Advanced search props
+            onAdvancedFilterChange={handleAdvancedFilterChange}
+            showAdvancedSearch={showAdvancedSearch}
+            toggleAdvancedSearch={toggleAdvancedSearch}
           />
 
           {selectedMemoryBlocks.length > 0 && (
@@ -499,29 +531,49 @@ const MemoryBlockList = () => {
             </div>
           )}
 
-          {/* Action Header with Refresh Button - positioned just above the table */}
-          <div className="action-header" style={{
+          {/* Memory Blocks Header - positioned above the table */}
+          <div className="memory-blocks-header" style={{
             display: 'flex',
-            justifyContent: 'flex-end',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            padding: '12px 25px',
+            padding: '16px 25px',
             borderBottom: '1px solid #e0e0e0',
             marginBottom: '0',
             marginLeft: 'var(--content-margin)',
             marginRight: 'var(--content-margin)',
             width: 'var(--content-max-width)',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            minWidth: '0' // Allow flex items to shrink below their content size
           }}>
-            <div className="action-controls" style={{
+            {/* Total Count - Left Side */}
+            <div className="total-count" style={{
+              fontSize: '0.9em',
+              color: '#666',
+              fontWeight: '500',
+              flexShrink: 0, // Prevent shrinking
+              whiteSpace: 'nowrap'
+            }}>
+              {pagination.total_items > 0 && (
+                <span>
+                  {pagination.total_items} memory block{pagination.total_items !== 1 ? 's' : ''} found
+                </span>
+              )}
+            </div>
+
+            {/* Last Updated and Refresh - Right Side */}
+            <div className="header-actions" style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '12px'
+              gap: '6px',
+              flexShrink: 0, // Prevent shrinking
+              marginLeft: 'auto' // Push to the right
             }}>
               {lastUpdated && (
                 <div className="last-updated" style={{
                   fontSize: '0.85em',
                   color: '#666',
-                  fontWeight: '500'
+                  fontWeight: '500',
+                  whiteSpace: 'nowrap'
                 }}>
                   Last updated: {lastUpdated.toLocaleString()}
                 </div>
@@ -545,7 +597,9 @@ const MemoryBlockList = () => {
                   alignItems: 'center',
                   gap: '4px',
                   opacity: loading ? 0.6 : 1,
-                  transition: 'background-color 0.2s ease'
+                  transition: 'background-color 0.2s ease',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
                 {loading ? (
@@ -576,7 +630,9 @@ const MemoryBlockList = () => {
                   padding: '6px 10px',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  fontSize: '11px'
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
                 Test Save
@@ -593,7 +649,9 @@ const MemoryBlockList = () => {
                   padding: '6px 10px',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  fontSize: '11px'
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
                 Test Error
@@ -611,6 +669,8 @@ const MemoryBlockList = () => {
             onActionChange={handleActionChange}
             onKeywordClick={handleKeywordChange}
             navigate={navigate}
+            searchType={filters.search_type}
+            showSearchScores={filters.search_type !== 'basic' && searchTerm.length > 0}
           />
 
           <PaginationControls

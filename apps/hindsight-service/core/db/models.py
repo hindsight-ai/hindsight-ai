@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, ForeignKey, Index, Boolean
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -48,6 +48,10 @@ class MemoryBlock(Base):
     archived_at = Column(DateTime(timezone=True), nullable=True) # Added archived timestamp
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Search-related fields
+    search_vector = Column(TSVECTOR, nullable=True)  # For full-text search
+    content_embedding = Column(Text, nullable=True)  # For future semantic search
 
     agent = relationship("Agent", back_populates="memory_blocks")
     feedback_logs = relationship("FeedbackLog", back_populates="memory_block", cascade="all, delete-orphan")

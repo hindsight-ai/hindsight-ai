@@ -1,7 +1,7 @@
-const API_BASE_URL = process.env.REACT_APP_HINDSIGHT_SERVICE_API_URL;
+const API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL;
 
 if (!API_BASE_URL) {
-  throw new Error("Environment variable REACT_APP_HINDSIGHT_SERVICE_API_URL is not defined.");
+  throw new Error("Environment variable VITE_HINDSIGHT_SERVICE_API_URL is not defined.");
 }
 
 const authService = {

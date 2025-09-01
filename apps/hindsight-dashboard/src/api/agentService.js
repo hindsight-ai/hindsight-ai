@@ -1,9 +1,9 @@
 import notificationService from '../services/notificationService';
 
-const API_BASE_URL = process.env.REACT_APP_HINDSIGHT_SERVICE_API_URL;
+const API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL;
 
 if (!API_BASE_URL) {
-  throw new Error("Environment variable REACT_APP_HINDSIGHT_SERVICE_API_URL is not defined.");
+  throw new Error("Environment variable VITE_HINDSIGHT_SERVICE_API_URL is not defined.");
 }
 
 const agentService = {
@@ -35,6 +35,20 @@ const agentService = {
       console.error('Failed to parse JSON response for agents:', jsonError);
       return { items: [] }; // Return empty items on JSON parsing error
     }
+  },
+
+  getAgentById: async (agentId) => {
+    const response = await fetch(`${API_BASE_URL}/agents/${agentId}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
   },
 
   createAgent: async (data) => {
@@ -70,6 +84,25 @@ const agentService = {
     }
     if (response.status === 204) {
       return;
+    }
+    return response.json();
+  },
+
+  updateAgent: async (agentId, data) => {
+    const response = await fetch(`${API_BASE_URL}/agents/${agentId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
   },

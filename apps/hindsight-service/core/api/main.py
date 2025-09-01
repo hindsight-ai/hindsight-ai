@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 from core.db import models, schemas, crud
 from core.db.database import engine, get_db
 from core.pruning.pruning_service import get_pruning_service
+from core.pruning.compression_service import get_compression_service
+from core.search.search_service import SearchService
 
 # models.Base.metadata.create_all(bind=engine) # Removed: Database schema is now managed by Alembic migrations.
 
@@ -77,11 +79,12 @@ def delete_agent_endpoint(agent_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Agent not found")
     return {"message": "Agent deleted successfully"}
 
-@router.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks) # Changed response_model
+@router.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks)
 def get_all_memory_blocks_endpoint(
     agent_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
     search_query: Optional[str] = None,
+    search_type: Optional[str] = "basic",  # basic, fulltext, semantic, hybrid, enhanced
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     min_feedback_score: Optional[str] = None,
@@ -91,56 +94,49 @@ def get_all_memory_blocks_endpoint(
     keywords: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "asc",
-    skip: int = 0, # Changed type to int and set default
-    limit: int = 50, # Changed type to int and set default
-    include_archived: Optional[bool] = False, # Added include_archived parameter
+    skip: int = 0,
+    limit: int = 50,
+    include_archived: Optional[bool] = False,
+    # Advanced search parameters
+    min_score: Optional[float] = None,  # Minimum relevance score threshold
+    similarity_threshold: Optional[float] = None,  # For semantic search
+    fulltext_weight: Optional[float] = None,  # For hybrid search
+    semantic_weight: Optional[float] = None,  # For hybrid search
+    min_combined_score: Optional[float] = None,  # For hybrid search
     db: Session = Depends(get_db)
 ):
     """
     Retrieve all memory blocks with advanced filtering, searching, and sorting capabilities.
+    Supports multiple search types: basic, fulltext (BM25), semantic, hybrid, and enhanced.
     """
     logger.info(f"Received query parameters:")
     logger.info(f"  agent_id: {agent_id} (type: {type(agent_id)})")
     logger.info(f"  conversation_id: {conversation_id} (type: {type(conversation_id)})")
     logger.info(f"  search_query: {search_query} (type: {type(search_query)})")
-    logger.info(f"  start_date: {start_date} (type: {type(start_date)})")
-    logger.info(f"  end_date: {end_date} (type: {type(end_date)})")
-    logger.info(f"  min_feedback_score: {min_feedback_score} (type: {type(min_feedback_score)})")
-    logger.info(f"  max_feedback_score: {max_feedback_score} (type: {type(max_feedback_score)})")
-    logger.info(f"  min_retrieval_count: {min_retrieval_count} (type: {type(min_retrieval_count)})")
-    logger.info(f"  max_retrieval_count: {max_retrieval_count} (type: {type(max_retrieval_count)})")
-    logger.info(f"  keywords: {keywords} (type: {type(keywords)})")
-    logger.info(f"  sort_by: {sort_by} (type: {type(sort_by)})")
-    logger.info(f"  sort_order: {sort_order} (type: {type(sort_order)})")
-    logger.info(f"  skip: {skip} (type: {type(skip)})") # Updated log to reflect int type
-    logger.info(f"  limit: {limit} (type: {type(limit)})") # Updated log to reflect int type
+    logger.info(f"  search_type: {search_type} (type: {type(search_type)})")
+    logger.info(f"  skip: {skip} (type: {type(skip)})")
+    logger.info(f"  limit: {limit} (type: {type(limit)})")
 
     # Process UUID parameters
     processed_agent_id: Optional[uuid.UUID] = None
-    if agent_id: # Check if agent_id is not None or empty string
+    if agent_id:
         try:
             processed_agent_id = uuid.UUID(agent_id)
         except ValueError:
-            # If it's not a valid UUID, but not an empty string, raise error
             if agent_id != "":
                 logger.error(f"Invalid UUID format for agent_id: '{agent_id}'")
                 raise HTTPException(status_code=422, detail="Invalid UUID format for agent_id.")
-            # If it's an empty string, treat as None
             processed_agent_id = None
-    logger.info(f"  processed_agent_id: {processed_agent_id} (type: {type(processed_agent_id)})")
 
     processed_conversation_id: Optional[uuid.UUID] = None
-    if conversation_id: # Check if conversation_id is not None or empty string
+    if conversation_id:
         try:
             processed_conversation_id = uuid.UUID(conversation_id)
         except ValueError:
-            # If it's not a valid UUID, but not an empty string, raise error
             if conversation_id != "":
                 logger.error(f"Invalid UUID format for conversation_id: '{conversation_id}'")
                 raise HTTPException(status_code=422, detail="Invalid UUID format for conversation_id.")
-            # If it's an empty string, treat as None
             processed_conversation_id = None
-    logger.info(f"  processed_conversation_id: {processed_conversation_id} (type: {type(processed_conversation_id)})")
 
     # Process datetime parameters
     processed_start_date: Optional[datetime] = None
@@ -157,11 +153,7 @@ def get_all_memory_blocks_endpoint(
         except ValueError:
             raise HTTPException(status_code=422, detail="Invalid datetime format for end_date. Expected ISO 8601.")
 
-    # Process integer parameters (feedback score, retrieval count)
-    # FastAPI will handle the conversion from query string to int directly if the type hint is int.
-    # If the parameter is Optional[str], we need to manually convert.
-    # Let's keep them as Optional[str] for now to avoid breaking changes with frontend sending empty strings,
-    # and convert them to int if they are not None or empty.
+    # Process integer parameters
     processed_min_feedback_score: Optional[int] = None
     if min_feedback_score:
         try:
@@ -202,43 +194,106 @@ def get_all_memory_blocks_endpoint(
         except ValueError:
             raise HTTPException(status_code=422, detail="Invalid UUID format in keywords parameter.")
 
-    # Convert empty strings to None for other Optional[str] parameters
-    # FastAPI handles Optional[str] where empty string is treated as None if not explicitly handled.
-    # However, for robustness, explicitly setting to None if empty string is received.
+    # Clean up parameters
     search_query = search_query if search_query else None
     sort_by = sort_by if sort_by else None
-    sort_order = sort_order if sort_order else "asc" # Default to "asc" if empty
+    sort_order = sort_order if sort_order else "asc"
 
-    # Process pagination parameters
-    processed_skip = skip
-    processed_limit = limit
+    # Handle different search types
+    if search_query and search_type in ["fulltext", "semantic", "hybrid"]:
+        # Use advanced search service
+        search_service = SearchService()
+        
+        try:
+            if search_type == "fulltext":
+                # Set defaults for fulltext search
+                min_score_val = min_score if min_score is not None else 0.1
+                
+                results, metadata = search_service.search_memory_blocks_fulltext(
+                    db=db,
+                    query=search_query,
+                    agent_id=processed_agent_id,
+                    conversation_id=processed_conversation_id,
+                    limit=skip + limit,  # Get extra to handle pagination
+                    min_score=min_score_val,
+                    include_archived=include_archived or False
+                )
+                
+                # Apply pagination manually since search doesn't support skip
+                paginated_results = results[skip:skip + limit]
+                total_items = len(results)
+                
+            elif search_type == "semantic":
+                # Set defaults for semantic search
+                similarity_threshold_val = similarity_threshold if similarity_threshold is not None else 0.7
+                
+                results, metadata = search_service.search_memory_blocks_semantic(
+                    db=db,
+                    query=search_query,
+                    agent_id=processed_agent_id,
+                    conversation_id=processed_conversation_id,
+                    limit=skip + limit,
+                    similarity_threshold=similarity_threshold_val,
+                    include_archived=include_archived or False
+                )
+                
+                paginated_results = results[skip:skip + limit]
+                total_items = len(results)
+                
+            elif search_type == "hybrid":
+                # Set defaults for hybrid search
+                fulltext_weight_val = fulltext_weight if fulltext_weight is not None else 0.7
+                semantic_weight_val = semantic_weight if semantic_weight is not None else 0.3
+                min_combined_score_val = min_combined_score if min_combined_score is not None else 0.1
+                
+                results, metadata = search_service.search_memory_blocks_hybrid(
+                    db=db,
+                    query=search_query,
+                    agent_id=processed_agent_id,
+                    conversation_id=processed_conversation_id,
+                    limit=skip + limit,
+                    fulltext_weight=fulltext_weight_val,
+                    semantic_weight=semantic_weight_val,
+                    min_combined_score=min_combined_score_val,
+                    include_archived=include_archived or False
+                )
+                
+                paginated_results = results[skip:skip + limit]
+                total_items = len(results)
+            
+            # For advanced search, return results directly without conversion
+            # The search results are already MemoryBlockWithScore but we'll extract the base fields
+            memories = paginated_results
+            
+            logger.info(f"Advanced search ({search_type}) for '{search_query}' returned {len(memories)} results")
+            
+        except Exception as e:
+            logger.error(f"Error in {search_type} search: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+            
+    else:
+        # Use basic CRUD search with filtering
+        memories, total_items = crud.get_all_memory_blocks(
+            db=db,
+            agent_id=processed_agent_id,
+            conversation_id=processed_conversation_id,
+            search_query=search_query,
+            start_date=processed_start_date,
+            end_date=processed_end_date,
+            min_feedback_score=processed_min_feedback_score,
+            max_feedback_score=processed_max_feedback_score,
+            min_retrieval_count=processed_min_retrieval_count,
+            max_retrieval_count=processed_max_retrieval_count,
+            keyword_ids=processed_keyword_ids,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            skip=skip,
+            limit=limit,
+            get_total=True,
+            include_archived=include_archived or False
+        )
 
-    # Get paginated memories and total count
-    memories, total_items = crud.get_all_memory_blocks( # crud function needs to return total_items
-        db=db,
-        agent_id=processed_agent_id,
-        conversation_id=processed_conversation_id,
-        search_query=search_query,
-        start_date=processed_start_date,
-        end_date=processed_end_date,
-        min_feedback_score=processed_min_feedback_score,
-        max_feedback_score=processed_max_feedback_score,
-        min_retrieval_count=processed_min_retrieval_count,
-        max_retrieval_count=processed_max_retrieval_count,
-        keyword_ids=processed_keyword_ids,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        skip=processed_skip,
-        limit=processed_limit,
-        get_total=True, # Add a parameter to crud function to get total count
-        include_archived=include_archived # Pass the include_archived parameter
-    )
-
-    # Debugging: Log archived_at for each memory block
-    for i, memory in enumerate(memories):
-        logger.info(f"Memory block {i} (ID: {memory.id}): archived_at = {memory.archived_at} (type: {type(memory.archived_at)})")
-
-    total_pages = math.ceil(total_items / processed_limit) if processed_limit > 0 else 0
+    total_pages = math.ceil(total_items / limit) if limit > 0 else 0
 
     return {
         "items": memories,
@@ -555,9 +610,35 @@ def get_memory_block_keywords_endpoint(memory_id: uuid.UUID, db: Session = Depen
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    
+
     keywords = crud.get_memory_block_keywords(db, memory_id=memory_id)
     return keywords
+
+@router.get("/keywords/{keyword_id}/memory-blocks/", response_model=List[schemas.MemoryBlock])
+def get_keyword_memory_blocks_endpoint(keyword_id: uuid.UUID, skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
+    """
+    Get all memory blocks associated with a specific keyword.
+    This endpoint is used for keyword analytics to show which memory blocks use each keyword.
+    """
+    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
+    if not db_keyword:
+        raise HTTPException(status_code=404, detail="Keyword not found")
+
+    memory_blocks = crud.get_keyword_memory_blocks(db, keyword_id=keyword_id, skip=skip, limit=limit)
+    return memory_blocks
+
+@router.get("/keywords/{keyword_id}/memory-blocks/count")
+def get_keyword_memory_blocks_count_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Get the count of memory blocks associated with a specific keyword.
+    This endpoint is used for displaying usage statistics on keyword cards.
+    """
+    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
+    if not db_keyword:
+        raise HTTPException(status_code=404, detail="Keyword not found")
+
+    count = crud.get_keyword_memory_blocks_count(db, keyword_id=keyword_id)
+    return {"count": count}
 
 # Consolidation Trigger Endpoint
 @router.post("/consolidation/trigger/", status_code=status.HTTP_202_ACCEPTED)
@@ -716,12 +797,12 @@ def get_user_info(
     """
     Returns the authenticated user information from OAuth2 proxy headers.
     These headers are set by the OAuth2 proxy when authentication is successful.
-    
+
     For local development, bypasses authentication and returns mock user info.
     """
     # Check if we're in development mode
     is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
-    
+
     if is_dev_mode:
         # Development mode: bypass authentication
         return {
@@ -729,16 +810,30 @@ def get_user_info(
             "user": "dev_user",
             "email": "dev@localhost"
         }
-    
+
     # Production mode: check OAuth2 proxy headers
     if not x_auth_request_user and not x_auth_request_email:
         return {"authenticated": False, "message": "No authentication headers found"}
-    
+
     return {
         "authenticated": True,
         "user": x_auth_request_user,
         "email": x_auth_request_email
     }
+
+# Dashboard Stats Endpoints
+@router.get("/conversations/count")
+def get_conversations_count_endpoint(db: Session = Depends(get_db)):
+    """
+    Get the count of unique conversations from memory blocks.
+    This endpoint is used by the dashboard to display conversation statistics.
+    """
+    try:
+        count = crud.get_unique_conversation_count(db)
+        return {"count": count or 0}  # Return 0 if count is None
+    except Exception as e:
+        logger.error(f"Error getting conversations count: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting conversations count: {str(e)}")
 
 # Pruning Endpoints
 @router.post("/memory/prune/suggest", response_model=dict)
@@ -830,4 +925,640 @@ def confirm_pruning_endpoint(
         logger.error(f"Error confirming pruning: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error confirming pruning: {str(e)}")
 
+# Compression Endpoints
+@router.post("/memory-blocks/{memory_id}/compress", response_model=dict)
+def compress_memory_block_endpoint(
+    memory_id: uuid.UUID,
+    request: dict = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Compress a memory block using LLM to create a more condensed version.
+    Returns the compression suggestion for user review and approval.
+    """
+    if request is None:
+        request = {}
+
+    user_instructions = request.get("user_instructions", "")
+
+    # Retrieve LLM_API_KEY from environment variables
+    llm_api_key = os.getenv("LLM_API_KEY")
+    if not llm_api_key:
+        logger.warning("LLM_API_KEY is not set. Cannot perform compression.")
+        raise HTTPException(status_code=500, detail="LLM service not available for compression")
+
+    try:
+        # Get compression service instance
+        compression_service = get_compression_service(llm_api_key)
+
+        # Compress the memory block
+        compression_result = compression_service.compress_memory_block(
+            db=db,
+            memory_id=memory_id,
+            user_instructions=user_instructions
+        )
+
+        # Check if compression was successful
+        if "error" in compression_result:
+            raise HTTPException(
+                status_code=400 if "not found" in compression_result["message"].lower() else 500,
+                detail=compression_result["message"]
+            )
+
+        return compression_result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error compressing memory block {memory_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error compressing memory block: {str(e)}")
+
+@router.post("/memory-blocks/{memory_id}/compress/apply", response_model=schemas.MemoryBlock)
+def apply_memory_compression_endpoint(
+    memory_id: uuid.UUID,
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Apply the compressed version to replace the original memory block content.
+    """
+    compressed_content = request.get("compressed_content")
+    compressed_lessons = request.get("compressed_lessons_learned")
+
+    if not compressed_content:
+        raise HTTPException(status_code=400, detail="Compressed content is required")
+
+    try:
+        # Update the memory block with compressed content
+        update_data = schemas.MemoryBlockUpdate(
+            content=compressed_content,
+            lessons_learned=compressed_lessons
+        )
+
+        updated_memory = crud.update_memory_block(
+            db=db,
+            memory_id=memory_id,
+            memory_block=update_data
+        )
+
+        if not updated_memory:
+            raise HTTPException(status_code=404, detail="Memory block not found")
+
+        logger.info(f"Successfully applied compression to memory block {memory_id}")
+        return updated_memory
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error applying compression to memory block {memory_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error applying compression: {str(e)}")
+
+# Bulk Keyword Generation Endpoint
+@router.post("/memory-blocks/bulk-generate-keywords", response_model=dict)
+def bulk_generate_keywords_endpoint(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate keywords for multiple memory blocks using basic keyword extraction.
+    Returns suggested keywords for each memory block for user review and approval.
+    """
+    memory_block_ids = request.get("memory_block_ids", [])
+    
+    if not memory_block_ids:
+        raise HTTPException(status_code=400, detail="No memory block IDs provided")
+    
+    try:
+        suggestions = []
+        successful_count = 0
+        failed_count = 0
+        
+        for memory_id_str in memory_block_ids:
+            try:
+                memory_id = uuid.UUID(memory_id_str)
+                memory_block = crud.get_memory_block(db, memory_id=memory_id)
+                
+                if not memory_block:
+                    logger.warning(f"Memory block not found: {memory_id_str}")
+                    continue
+                
+                # Extract keywords from content and lessons_learned
+                content_text = (memory_block.content or '') + ' ' + (memory_block.lessons_learned or '')
+                
+                # Simple keyword extraction (enhanced version of the disabled function)
+                suggested_keywords = extract_keywords_enhanced(content_text)
+                
+                if suggested_keywords:
+                    suggestions.append({
+                        "memory_block_id": str(memory_id),
+                        "memory_block_content_preview": (memory_block.content or '')[:100] + "..." if len(memory_block.content or '') > 100 else (memory_block.content or ''),
+                        "suggested_keywords": suggested_keywords,
+                        "current_keywords": [kw.keyword_text for kw in memory_block.keywords] if memory_block.keywords else []
+                    })
+                    successful_count += 1
+                else:
+                    logger.info(f"No keywords could be extracted for memory block {memory_id_str}")
+                    failed_count += 1
+                    
+            except ValueError:
+                failed_count += 1
+                logger.error(f"Invalid UUID format: {memory_id_str}")
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"Error processing memory block {memory_id_str}: {str(e)}")
+        
+        return {
+            "suggestions": suggestions,
+            "successful_count": successful_count,
+            "failed_count": failed_count,
+            "total_processed": len(memory_block_ids),
+            "message": f"Generated keyword suggestions for {successful_count} memory blocks"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in bulk keyword generation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating keywords: {str(e)}")
+
+def extract_keywords_enhanced(text: str) -> List[str]:
+    """
+    Enhanced keyword extraction using simple text analysis.
+    This is a fallback function when spaCy is not available.
+    """
+    if not text or not text.strip():
+        return []
+    
+    import re
+    from collections import Counter
+    
+    # Clean and normalize text
+    text = text.lower()
+    
+    # Remove common stop words
+    stop_words = {
+        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+        'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
+        'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
+        'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your',
+        'his', 'hers', 'its', 'our', 'their', 'myself', 'yourself', 'himself', 'herself', 'itself',
+        'ourselves', 'yourselves', 'themselves', 'what', 'which', 'who', 'whom', 'whose', 'where',
+        'when', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some',
+        'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just',
+        'now', 'here', 'there', 'then', 'up', 'down', 'out', 'off', 'over', 'under', 'again',
+        'further', 'once', 'during', 'before', 'after', 'above', 'below', 'between', 'through',
+        'into', 'from', 'about', 'against', 'within', 'without'
+    }
+    
+    # Extract words (alphanumeric sequences of 3+ characters)
+    words = re.findall(r'\b[a-zA-Z]{3,}\b', text)
+    
+    # Filter out stop words and get word frequencies
+    meaningful_words = [word for word in words if word not in stop_words]
+    word_freq = Counter(meaningful_words)
+    
+    # Look for technical terms, proper nouns (capitalized words in original text), and domain-specific keywords
+    technical_patterns = [
+        r'\b(?:api|database|server|client|service|system|process|function|method|class|object|data|model|algorithm|framework|library|module|component|interface|protocol|network|security|authentication|authorization|token|session|cache|memory|storage|disk|cpu|gpu|performance|optimization|configuration|deployment|environment|production|development|testing|debugging|logging|monitoring|analytics|metrics|dashboard|report|analysis|query|search|filter|sort|pagination|validation|error|exception|warning|info|debug|trace)\b',
+        r'\b(?:python|javascript|typescript|java|c\+\+|golang|rust|php|ruby|html|css|sql|json|xml|yaml|api|rest|graphql|http|https|tcp|udp|websocket|oauth|jwt|ssl|tls|aws|azure|gcp|docker|kubernetes|git|github|gitlab|jenkins|terraform|ansible|nginx|apache|postgresql|mysql|mongodb|redis|elasticsearch|kafka|rabbitmq|react|vue|angular|node|express|flask|django|fastapi|spring|laravel)\b',
+        r'\b(?:user|admin|client|customer|account|profile|settings|preferences|notification|email|password|login|logout|signup|registration|dashboard|home|page|view|screen|form|input|button|menu|navigation|header|footer|sidebar|modal|dialog|popup|tab|accordion|carousel|slider|chart|graph|table|list|grid|card|tile|widget|component)\b'
+    ]
+    
+    # Find technical terms
+    technical_words = set()
+    for pattern in technical_patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        technical_words.update(matches)
+    
+    # Combine high-frequency words with technical terms
+    # Get top words by frequency (minimum frequency of 2 or if text is short, frequency of 1)
+    min_freq = 2 if len(meaningful_words) > 20 else 1
+    frequent_words = [word for word, count in word_freq.most_common(10) if count >= min_freq]
+    
+    # Combine and deduplicate
+    keywords = list(set(frequent_words + list(technical_words)))
+    
+    # Sort by relevance (technical terms first, then by frequency)
+    def keyword_score(word):
+        tech_score = 10 if word.lower() in technical_words else 0
+        freq_score = word_freq.get(word, 0)
+        return tech_score + freq_score
+    
+    keywords.sort(key=keyword_score, reverse=True)
+    
+    # Return top 8 keywords
+    return keywords[:8]
+
+@router.post("/memory-blocks/bulk-apply-keywords", response_model=dict)
+def bulk_apply_keywords_endpoint(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Apply selected keywords to memory blocks.
+    Expects a list of memory block IDs with their selected keywords.
+    """
+    applications = request.get("applications", [])
+    
+    if not applications:
+        raise HTTPException(status_code=400, detail="No keyword applications provided")
+    
+    try:
+        successful_count = 0
+        failed_count = 0
+        results = []
+        
+        for application in applications:
+            memory_block_id = application.get("memory_block_id")
+            selected_keywords = application.get("selected_keywords", [])
+            
+            if not memory_block_id or not selected_keywords:
+                failed_count += 1
+                continue
+                
+            try:
+                memory_id = uuid.UUID(memory_block_id)
+                memory_block = crud.get_memory_block(db, memory_id=memory_id)
+                
+                if not memory_block:
+                    failed_count += 1
+                    continue
+                
+                added_keywords = []
+                skipped_keywords = []
+                
+                for keyword_text in selected_keywords:
+                    # Get or create keyword
+                    keyword = crud.get_keyword_by_text(db, keyword_text=keyword_text)
+                    if not keyword:
+                        keyword_create = schemas.KeywordCreate(keyword_text=keyword_text)
+                        keyword = crud.create_keyword(db=db, keyword=keyword_create)
+                    
+                    # Check if association already exists
+                    existing_association = db.query(models.MemoryBlockKeyword).filter(
+                        models.MemoryBlockKeyword.memory_id == memory_id,
+                        models.MemoryBlockKeyword.keyword_id == keyword.keyword_id
+                    ).first()
+                    
+                    if not existing_association:
+                        crud.create_memory_block_keyword(db, memory_id=memory_id, keyword_id=keyword.keyword_id)
+                        added_keywords.append(keyword_text)
+                    else:
+                        skipped_keywords.append(keyword_text)
+                
+                results.append({
+                    "memory_block_id": memory_block_id,
+                    "added_keywords": added_keywords,
+                    "skipped_keywords": skipped_keywords,
+                    "success": True
+                })
+                successful_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error applying keywords to memory block {memory_block_id}: {str(e)}")
+                results.append({
+                    "memory_block_id": memory_block_id,
+                    "error": str(e),
+                    "success": False
+                })
+                failed_count += 1
+        
+        return {
+            "results": results,
+            "successful_count": successful_count,
+            "failed_count": failed_count,
+            "message": f"Applied keywords to {successful_count} memory blocks"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in bulk keyword application: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error applying keywords: {str(e)}")
+
+@router.post("/memory-blocks/bulk-compact", response_model=dict)
+async def bulk_compact_memory_blocks_endpoint(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Bulk compact multiple memory blocks using AI compression.
+    This endpoint processes multiple memory blocks for compaction with optional concurrency.
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    
+    logger.info(f"Bulk compaction request received with {len(request.get('memory_block_ids', []))} blocks")
+    
+    memory_block_ids = request.get("memory_block_ids", [])
+    user_instructions = request.get("user_instructions", "")
+    max_concurrent = request.get("max_concurrent", 1)  # Default to 1 for safety
+    
+    # Validate max_concurrent parameter
+    if not isinstance(max_concurrent, int) or max_concurrent < 1:
+        max_concurrent = 1
+    if max_concurrent > 10:  # Reasonable upper limit to prevent abuse
+        max_concurrent = 10
+    
+    logger.info(f"Using max_concurrent: {max_concurrent}")
+    
+    if not memory_block_ids:
+        raise HTTPException(status_code=400, detail="No memory block IDs provided")
+    
+    # Retrieve LLM_API_KEY from environment variables
+    llm_api_key = os.getenv("LLM_API_KEY")
+    if not llm_api_key:
+        logger.warning("LLM_API_KEY is not set. Cannot perform bulk compaction.")
+        raise HTTPException(status_code=500, detail="LLM service not available for compaction")
+    
+    logger.info(f"Starting bulk compaction for {len(memory_block_ids)} blocks with {max_concurrent} concurrent processes")
+    
+    def process_single_block(memory_id_str: str):
+        """Process a single memory block in a separate thread."""
+        try:
+            memory_id = uuid.UUID(memory_id_str)
+            logger.info(f"Starting compression for block {memory_id_str}")
+            
+            # Get compression service instance (in the thread)
+            compression_service = get_compression_service(llm_api_key)
+            
+            # Create a new DB session for this thread
+            db_gen = get_db()
+            thread_db = next(db_gen)
+            
+            try:
+                # Compress the memory block
+                compression_result = compression_service.compress_memory_block(
+                    db=thread_db,
+                    memory_id=memory_id,
+                    user_instructions=user_instructions
+                )
+                logger.info(f"Compression completed for block {memory_id_str}")
+                
+                # Check if compression was successful
+                if "error" not in compression_result:
+                    # Auto-apply the compression if successful
+                    compressed_content = compression_result.get("compressed_content")
+                    compressed_lessons = compression_result.get("compressed_lessons_learned")
+                    
+                    if compressed_content:
+                        # Update the memory block with compressed content
+                        update_data = schemas.MemoryBlockUpdate(
+                            content=compressed_content,
+                            lessons_learned=compressed_lessons
+                        )
+                        
+                        updated_memory = crud.update_memory_block(
+                            db=thread_db,
+                            memory_id=memory_id,
+                            memory_block=update_data
+                        )
+                        
+                        if updated_memory:
+                            return {
+                                "memory_block_id": memory_id_str,
+                                "success": True,
+                                "original_length": len(compression_result.get("original_content", "")),
+                                "compressed_length": len(compressed_content),
+                                "compression_ratio": compression_result.get("compression_ratio", 0),
+                                "message": "Successfully compacted"
+                            }
+                        else:
+                            return {
+                                "memory_block_id": memory_id_str,
+                                "success": False,
+                                "error": "Failed to update memory block"
+                            }
+                    else:
+                        return {
+                            "memory_block_id": memory_id_str,
+                            "success": False,
+                            "error": "No compressed content returned"
+                        }
+                else:
+                    return {
+                        "memory_block_id": memory_id_str,
+                        "success": False,
+                        "error": compression_result.get("message", "Compression failed")
+                    }
+            finally:
+                thread_db.close()
+                    
+        except ValueError:
+            logger.error(f"Invalid UUID format: {memory_id_str}")
+            return {
+                "memory_block_id": memory_id_str,
+                "success": False,
+                "error": "Invalid UUID format"
+            }
+        except Exception as e:
+            logger.error(f"Error compacting memory block {memory_id_str}: {str(e)}")
+            return {
+                "memory_block_id": memory_id_str,
+                "success": False,
+                "error": str(e)
+            }
+    
+    try:
+        # Use ThreadPoolExecutor for concurrent processing
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+            # Create tasks for all memory blocks
+            tasks = [
+                loop.run_in_executor(executor, process_single_block, memory_id)
+                for memory_id in memory_block_ids
+            ]
+            
+            # Wait for all tasks to complete
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results and handle exceptions
+        processed_results = []
+        successful_count = 0
+        failed_count = 0
+        
+        for result in results:
+            if isinstance(result, Exception):
+                failed_count += 1
+                processed_results.append({
+                    "memory_block_id": "unknown",
+                    "success": False,
+                    "error": str(result)
+                })
+            else:
+                processed_results.append(result)
+                if result.get("success", False):
+                    successful_count += 1
+                else:
+                    failed_count += 1
+        
+        return {
+            "results": processed_results,
+            "successful_count": successful_count,
+            "failed_count": failed_count,
+            "total_processed": len(memory_block_ids),
+            "message": f"Successfully compacted {successful_count} out of {len(memory_block_ids)} memory blocks"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in bulk memory block compaction: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error compacting memory blocks: {str(e)}")
+
+# Enhanced Search Endpoints
+
+@router.get("/memory-blocks/search/fulltext", response_model=List[schemas.MemoryBlockWithScore])
+def search_memory_blocks_fulltext_endpoint(
+    query: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    min_score: float = 0.1,
+    include_archived: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Perform BM25-like full-text search on memory blocks using PostgreSQL's full-text search capabilities.
+    
+    Args:
+        query: Search query string
+        agent_id: Optional agent filter
+        conversation_id: Optional conversation filter
+        limit: Maximum number of results (default: 50)
+        min_score: Minimum relevance score threshold (default: 0.1)
+        include_archived: Whether to include archived memory blocks (default: False)
+    
+    Returns:
+        List of memory blocks with search scores, ranked by relevance
+    """
+    if not query or query.strip() == "":
+        raise HTTPException(status_code=400, detail="Search query cannot be empty")
+    
+    try:
+        results, metadata = crud.search_memory_blocks_fulltext(
+            db=db,
+            query=query.strip(),
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            min_score=min_score,
+            include_archived=include_archived
+        )
+        
+        logger.info(f"Full-text search for '{query}' returned {len(results)} results")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in full-text search: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
+@router.get("/memory-blocks/search/semantic", response_model=List[schemas.MemoryBlockWithScore])
+def search_memory_blocks_semantic_endpoint(
+    query: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    similarity_threshold: float = 0.7,
+    include_archived: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Perform semantic search on memory blocks using embeddings (placeholder implementation).
+    
+    Args:
+        query: Search query string
+        agent_id: Optional agent filter
+        conversation_id: Optional conversation filter
+        limit: Maximum number of results (default: 50)
+        similarity_threshold: Minimum similarity threshold (default: 0.7)
+        include_archived: Whether to include archived memory blocks (default: False)
+    
+    Returns:
+        List of memory blocks with similarity scores (currently empty - placeholder)
+    """
+    if not query or query.strip() == "":
+        raise HTTPException(status_code=400, detail="Search query cannot be empty")
+    
+    try:
+        results, metadata = crud.search_memory_blocks_semantic(
+            db=db,
+            query=query.strip(),
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            similarity_threshold=similarity_threshold,
+            include_archived=include_archived
+        )
+        
+        logger.info(f"Semantic search for '{query}' returned {len(results)} results (placeholder)")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in semantic search: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
+@router.get("/memory-blocks/search/hybrid", response_model=List[schemas.MemoryBlockWithScore])
+def search_memory_blocks_hybrid_endpoint(
+    query: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    fulltext_weight: float = 0.7,
+    semantic_weight: float = 0.3,
+    min_combined_score: float = 0.1,
+    include_archived: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Perform hybrid search combining full-text and semantic search with weighted scoring.
+    
+    Args:
+        query: Search query string
+        agent_id: Optional agent filter
+        conversation_id: Optional conversation filter
+        limit: Maximum number of results (default: 50)
+        fulltext_weight: Weight for full-text search results (default: 0.7)
+        semantic_weight: Weight for semantic search results (default: 0.3)
+        min_combined_score: Minimum combined score threshold (default: 0.1)
+        include_archived: Whether to include archived memory blocks (default: False)
+    
+    Returns:
+        List of memory blocks with combined scores from both search methods
+    """
+    if not query or query.strip() == "":
+        raise HTTPException(status_code=400, detail="Search query cannot be empty")
+    
+    # Validate weights
+    if abs(fulltext_weight + semantic_weight - 1.0) > 0.001:
+        raise HTTPException(status_code=400, detail="Fulltext and semantic weights must sum to 1.0")
+    
+    try:
+        results, metadata = crud.search_memory_blocks_hybrid(
+            db=db,
+            query=query.strip(),
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            fulltext_weight=fulltext_weight,
+            semantic_weight=semantic_weight,
+            min_combined_score=min_combined_score,
+            include_archived=include_archived
+        )
+        
+        logger.info(f"Hybrid search for '{query}' returned {len(results)} results")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in hybrid search: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
+# Include the main router
 app.include_router(router)
+
+# Include memory optimization router
+try:
+    from core.api.memory_optimization import router as memory_optimization_router
+    app.include_router(memory_optimization_router, prefix="/memory-optimization", tags=["memory-optimization"])
+    logger.info("Memory optimization endpoints loaded successfully")
+except ImportError as e:
+    logger.warning(f"Could not load memory optimization endpoints: {e}")
+
+# Health check endpoint (duplicate but keeping for compatibility)
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "service": "hindsight-service"}

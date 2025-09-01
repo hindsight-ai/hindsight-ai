@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import memoryService from '../api/memoryService';
 import agentService from '../api/agentService';
 import notificationService from '../services/notificationService';
-import './AddMemoryBlockModal.css';
 
 const AddMemoryBlockModal = ({ isOpen, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({

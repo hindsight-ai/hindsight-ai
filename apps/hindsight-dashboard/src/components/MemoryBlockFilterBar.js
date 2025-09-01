@@ -1,7 +1,6 @@
 import React from 'react';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import RangeSlider from './RangeSlider';
-import './MemoryBlockList.css'; // Assuming shared styles
 
 const MemoryBlockFilterBar = ({
   filters,
@@ -17,7 +16,12 @@ const MemoryBlockFilterBar = ({
   toggleFilters,
   resetFilters,
   areFiltersActive,
-  onApplyFilters // This will be used if we add an explicit apply button
+  onApplyFilters, // This will be used if we add an explicit apply button
+  // Advanced search props
+  onSearchTypeChange,
+  onAdvancedFilterChange,
+  showAdvancedSearch = false,
+  toggleAdvancedSearch
 }) => {
   return (
     <div className="search-and-filters-section">
@@ -33,6 +37,14 @@ const MemoryBlockFilterBar = ({
           className="search-input-large"
         />
         <div className="filter-actions-group">
+          {/* Advanced Search Toggle */}
+          <button
+            onClick={toggleAdvancedSearch}
+            className={`advanced-search-toggle ${showAdvancedSearch ? 'active' : ''}`}
+            title="Toggle advanced search options"
+          >
+            🔍 Advanced
+          </button>
           {areFiltersActive() && (
             <button onClick={resetFilters} className="clear-filters-button">
               Clear Filters
@@ -40,6 +52,120 @@ const MemoryBlockFilterBar = ({
           )}
         </div>
       </div>
+
+      {/* Advanced Search Controls */}
+      {showAdvancedSearch && (
+        <div className="advanced-search-container">
+          <div className="advanced-search-grid">
+            <div className="search-type-group">
+              <label htmlFor="search-type">Search Type</label>
+              <select
+                id="search-type"
+                name="search_type"
+                value={filters.search_type || 'fulltext'}
+                onChange={onFilterChange}
+                className="search-type-select"
+              >
+                <option value="fulltext">Full-text (BM25)</option>
+                <option value="semantic">Semantic</option>
+                <option value="hybrid">Hybrid (BM25 + Semantic)</option>
+              </select>
+              <small className="help-text">
+                Full-text finds exact matches, Semantic finds similar concepts, Hybrid combines both
+              </small>
+            </div>
+
+            <div className="search-params-group">
+              <label htmlFor="min-score">Minimum Score</label>
+              <input
+                type="number"
+                id="min-score"
+                name="min_score"
+                value={filters.min_score || ''}
+                onChange={onAdvancedFilterChange}
+                min="0"
+                max="1"
+                step="0.1"
+                placeholder="0.0"
+                className="score-input"
+              />
+              <small className="help-text">Minimum relevance score (0.0-1.0)</small>
+            </div>
+
+            {filters.search_type === 'semantic' && (
+              <div className="semantic-params-group">
+                <label htmlFor="similarity-threshold">Similarity Threshold</label>
+                <input
+                  type="number"
+                  id="similarity-threshold"
+                  name="similarity_threshold"
+                  value={filters.similarity_threshold || ''}
+                  onChange={onAdvancedFilterChange}
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  placeholder="0.7"
+                  className="score-input"
+                />
+                <small className="help-text">Semantic similarity threshold (0.0-1.0)</small>
+              </div>
+            )}
+
+            {filters.search_type === 'hybrid' && (
+              <>
+                <div className="weight-group">
+                  <label htmlFor="fulltext-weight">Full-text Weight</label>
+                  <input
+                    type="number"
+                    id="fulltext-weight"
+                    name="fulltext_weight"
+                    value={filters.fulltext_weight || ''}
+                    onChange={onAdvancedFilterChange}
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    placeholder="0.7"
+                    className="score-input"
+                  />
+                  <small className="help-text">Weight for full-text score (0.0-1.0)</small>
+                </div>
+                <div className="weight-group">
+                  <label htmlFor="semantic-weight">Semantic Weight</label>
+                  <input
+                    type="number"
+                    id="semantic-weight"
+                    name="semantic_weight"
+                    value={filters.semantic_weight || ''}
+                    onChange={onAdvancedFilterChange}
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    placeholder="0.3"
+                    className="score-input"
+                  />
+                  <small className="help-text">Weight for semantic score (0.0-1.0)</small>
+                </div>
+                <div className="combined-score-group">
+                  <label htmlFor="min-combined-score">Min Combined Score</label>
+                  <input
+                    type="number"
+                    id="min-combined-score"
+                    name="min_combined_score"
+                    value={filters.min_combined_score || ''}
+                    onChange={onAdvancedFilterChange}
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    placeholder="0.5"
+                    className="score-input"
+                  />
+                  <small className="help-text">Minimum combined score (0.0-1.0)</small>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Always show filters for better UX - no toggle needed */}
       <div id="filters-container" className="filters-container">

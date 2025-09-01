@@ -1,5 +1,4 @@
 import React from 'react';
-import './MemoryBlockList.css'; // Assuming shared styles
 
 const PaginationControls = ({
   pagination,

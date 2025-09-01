@@ -167,7 +167,10 @@ const MemoryBlockDetail = () => {
           <div className="detail-item">
             <span className="detail-label">Creation Date:</span>
             <span className="detail-value">
-              {memoryBlock.creation_date !== null && memoryBlock.creation_date !== undefined ? new Date(memoryBlock.creation_date).toLocaleString() : 'N/A'}
+              {(() => {
+                const date = memoryBlock.created_at || memoryBlock.timestamp;
+                return date ? new Date(date).toLocaleString() : 'N/A';
+              })()}
             </span>
           </div>
           <div className="detail-item">

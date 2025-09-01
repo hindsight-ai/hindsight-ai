@@ -5,7 +5,6 @@ import agentService from '../api/agentService'; // Import agentService
 import MemoryBlockFilterBar from './MemoryBlockFilterBar';
 import MemoryBlockTable from './MemoryBlockTable';
 import PaginationControls from './PaginationControls';
-import './MemoryBlockList.css'; // Reuse styles from MemoryBlockList
 
 const ArchivedMemoryBlockList = () => {
   const [memoryBlocks, setMemoryBlocks] = useState([]);
@@ -14,7 +13,7 @@ const ArchivedMemoryBlockList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [agentIdInput, setAgentIdInput] = useState(''); // Local state for agent ID input
   const [filters, setFilters] = useState({
-    search: '',
+    search_query: '',
     agent_id: '',
     conversation_id: '',
     feedback_score_range: [0, 100],
@@ -30,7 +29,7 @@ const ArchivedMemoryBlockList = () => {
     total_pages: 0,
   });
   const [sort, setSort] = useState({
-    field: 'creation_date',
+    field: 'created_at',
     order: 'desc',
   });
   const [availableKeywords, setAvailableKeywords] = useState([]);
@@ -143,7 +142,7 @@ const ArchivedMemoryBlockList = () => {
     debounceTimeoutRef.current = setTimeout(() => {
       setFilters((prevFilters) => ({
         ...prevFilters,
-        search: searchTerm,
+        search_query: searchTerm,
       }));
     }, 500);
 
@@ -292,7 +291,7 @@ const ArchivedMemoryBlockList = () => {
     setSearchTerm('');
     setAgentIdInput('');
     setFilters({
-      search: '',
+      search_query: '',
       agent_id: '',
       conversation_id: '',
       feedback_score_range: [0, 100],
@@ -359,6 +358,10 @@ const ArchivedMemoryBlockList = () => {
             toggleFilters={toggleFilters}
             resetFilters={resetFilters}
             areFiltersActive={areFiltersActive}
+            // Advanced search props (placeholders for archived view)
+            onAdvancedFilterChange={() => {}}
+            showAdvancedSearch={false}
+            toggleAdvancedSearch={() => {}}
           />
 
           {/* No BulkActionBar for archived blocks */}

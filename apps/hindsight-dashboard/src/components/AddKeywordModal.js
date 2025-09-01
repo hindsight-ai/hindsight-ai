@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import memoryService from '../api/memoryService';
-import './AddMemoryBlockModal.css';
 
 const AddKeywordModal = ({ isOpen, onClose, onSuccess }) => {
   const [keyword, setKeyword] = useState('');

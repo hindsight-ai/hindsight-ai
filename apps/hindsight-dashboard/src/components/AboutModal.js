@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { getBuildInfo } from '../api/memoryService';
-import './AboutModal.css';
 
 const AboutModal = ({ isOpen, onClose }) => {
   const [backendInfo, setBackendInfo] = useState(null);
@@ -50,79 +49,98 @@ const AboutModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>About AI Agent Memory Dashboard</h2>
-          <button className="close-button" onClick={onClose}>&times;</button>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-800">About AI Agent Memory Dashboard</h2>
+          <button
+            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            onClick={onClose}
+          >
+            &times;
+          </button>
         </div>
-        <div className="modal-body">
-          {loading && <div className="loading">Loading build information...</div>}
-          {error && <div className="error">{error}</div>}
-          
+        <div className="p-6">
+          {loading && (
+            <div className="text-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+              <p className="text-gray-600">Loading build information...</p>
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+              {error}
+            </div>
+          )}
+
           {backendInfo && (
-            <div className="build-info-section">
-              <h3>Backend Service</h3>
+            <div className="mb-6">
+              <h3 className="text-lg font-medium text-gray-800 mb-3">Backend Service</h3>
               {backendInfo.error && (
-                <div className="error" style={{ marginBottom: '15px' }}>
+                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-4">
                   ⚠️ {backendInfo.error}
                 </div>
               )}
-              <div className="build-info">
-                <div className="info-item">
-                  <label>Service:</label>
-                  <span>{backendInfo.service_name || 'unknown'}</span>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Service:</label>
+                  <span className="text-gray-800">{backendInfo.service_name || 'unknown'}</span>
                 </div>
-                <div className="info-item">
-                  <label>Version:</label>
-                  <span>{backendInfo.version || 'unknown'}</span>
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Version:</label>
+                  <span className="text-gray-800">{backendInfo.version || 'unknown'}</span>
                 </div>
-                <div className="info-item">
-                  <label>Build SHA:</label>
-                  <span className="mono">{backendInfo.build_sha || 'unknown'}</span>
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Build SHA:</label>
+                  <span className="font-mono text-sm text-gray-800">{backendInfo.build_sha || 'unknown'}</span>
                 </div>
-                <div className="info-item">
-                  <label>Build Timestamp:</label>
-                  <span>{backendInfo.build_timestamp || 'unknown'}</span>
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Build Timestamp:</label>
+                  <span className="text-gray-800">{backendInfo.build_timestamp || 'unknown'}</span>
                 </div>
-                <div className="info-item">
-                  <label>Image Tag:</label>
-                  <span className="mono">{backendInfo.image_tag || 'unknown'}</span>
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Image Tag:</label>
+                  <span className="font-mono text-sm text-gray-800">{backendInfo.image_tag || 'unknown'}</span>
                 </div>
               </div>
             </div>
           )}
-          
+
           {frontendInfo && (
-            <div className="build-info-section">
-              <h3>Frontend Dashboard</h3>
-              <div className="build-info">
-                <div className="info-item">
-                  <label>Service:</label>
-                  <span>{frontendInfo.service_name || 'unknown'}</span>
+            <div className="mb-6">
+              <h3 className="text-lg font-medium text-gray-800 mb-3">Frontend Dashboard</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Service:</label>
+                  <span className="text-gray-800">{frontendInfo.service_name || 'unknown'}</span>
                 </div>
-                <div className="info-item">
-                  <label>Version:</label>
-                  <span>{frontendInfo.version || 'unknown'}</span>
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Version:</label>
+                  <span className="text-gray-800">{frontendInfo.version || 'unknown'}</span>
                 </div>
-                <div className="info-item">
-                  <label>Build SHA:</label>
-                  <span className="mono">{frontendInfo.build_sha || 'unknown'}</span>
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Build SHA:</label>
+                  <span className="font-mono text-sm text-gray-800">{frontendInfo.build_sha || 'unknown'}</span>
                 </div>
-                <div className="info-item">
-                  <label>Build Timestamp:</label>
-                  <span>{frontendInfo.build_timestamp || 'unknown'}</span>
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Build Timestamp:</label>
+                  <span className="text-gray-800">{frontendInfo.build_timestamp || 'unknown'}</span>
                 </div>
-                <div className="info-item">
-                  <label>Image Tag:</label>
-                  <span className="mono">{frontendInfo.image_tag || 'unknown'}</span>
+                <div className="flex justify-between">
+                  <label className="font-medium text-gray-600">Image Tag:</label>
+                  <span className="font-mono text-sm text-gray-800">{frontendInfo.image_tag || 'unknown'}</span>
                 </div>
               </div>
             </div>
           )}
         </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        <div className="flex justify-end p-6 border-t border-gray-200">
+          <button
+            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition duration-200"
+            onClick={onClose}
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>

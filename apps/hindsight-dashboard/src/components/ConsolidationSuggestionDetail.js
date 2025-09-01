@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getConsolidationSuggestionById, validateConsolidationSuggestion, rejectConsolidationSuggestion } from '../api/memoryService';
 import memoryService from '../api/memoryService'; // To fetch original memory blocks
-import './MemoryBlockList.css'; // Reuse styles
 
 const ConsolidationSuggestionDetail = () => {
   const { id } = useParams();

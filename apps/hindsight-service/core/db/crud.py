@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session, joinedload # Import joinedload
 from . import models, schemas
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import or_, func # Import func
+from sqlalchemy import or_, func, Text # Import func and Text
 from typing import List, Optional
 
 # CRUD for Agent
@@ -209,15 +209,14 @@ def get_all_memory_blocks(
         search_pattern = f"%{search_query}%"
         query = query.filter(
             or_(
-                models.MemoryBlock.id.cast(str).ilike(search_pattern), # Search UUID as string
+                models.MemoryBlock.id.cast(Text).ilike(search_pattern), # Search UUID as string
                 models.MemoryBlock.content.ilike(search_pattern),
                 models.MemoryBlock.errors.ilike(search_pattern),
                 models.MemoryBlock.lessons_learned.ilike(search_pattern),
-                models.MemoryBlock.external_history_link.ilike(search_pattern),
                 # Searching JSON metadata requires casting to text
-                models.MemoryBlock.metadata_col.cast(str).ilike(search_pattern),
-                models.MemoryBlock.agent_id.cast(str).ilike(search_pattern), # Search agent_id as string
-                models.MemoryBlock.conversation_id.cast(str).ilike(search_pattern) # Search conversation_id as string
+                models.MemoryBlock.metadata_col.cast(Text).ilike(search_pattern),
+                models.MemoryBlock.agent_id.cast(Text).ilike(search_pattern), # Search agent_id as string
+                models.MemoryBlock.conversation_id.cast(Text).ilike(search_pattern) # Search conversation_id as string
             )
         )
 
@@ -430,6 +429,18 @@ def get_memory_block_keywords(db: Session, memory_id: uuid.UUID):
         models.MemoryBlockKeyword.memory_id == memory_id
     ).all()
 
+def get_keyword_memory_blocks(db: Session, keyword_id: uuid.UUID, skip: int = 0, limit: int = 50):
+    """Get all memory blocks associated with a specific keyword."""
+    return db.query(models.MemoryBlock).join(models.MemoryBlockKeyword).filter(
+        models.MemoryBlockKeyword.keyword_id == keyword_id
+    ).offset(skip).limit(limit).all()
+
+def get_keyword_memory_blocks_count(db: Session, keyword_id: uuid.UUID):
+    """Get the count of memory blocks associated with a specific keyword."""
+    return db.query(models.MemoryBlock).join(models.MemoryBlockKeyword).filter(
+        models.MemoryBlockKeyword.keyword_id == keyword_id
+    ).count()
+
 
 # CRUD for ConsolidationSuggestion
 def create_consolidation_suggestion(db: Session, suggestion: schemas.ConsolidationSuggestionCreate):
@@ -517,3 +528,127 @@ def apply_consolidation(db: Session, suggestion_id: uuid.UUID):
                 db.refresh(new_memory_block)
                 return new_memory_block
     return None
+
+# CRUD for Dashboard Stats
+def get_unique_conversation_count(db: Session):
+    """
+    Get the count of unique conversations from memory blocks.
+    This counts distinct conversation_id values in the MemoryBlock table.
+    """
+    return db.query(func.count(func.distinct(models.MemoryBlock.conversation_id))).filter(
+        models.MemoryBlock.archived == False  # Only count non-archived memory blocks
+    ).scalar()
+
+# Enhanced Search Functions
+def search_memory_blocks_enhanced(
+    db: Session,
+    search_type: str = "basic",
+    search_query: Optional[str] = None,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    include_archived: bool = False,
+    **search_params
+):
+    """
+    Enhanced search function that delegates to the search service.
+    This provides a CRUD-level interface to the new search capabilities.
+    """
+    from core.search import get_search_service
+    
+    search_service = get_search_service()
+    
+    results, metadata = search_service.enhanced_search_memory_blocks(
+        db=db,
+        search_type=search_type,
+        search_query=search_query,
+        agent_id=agent_id,
+        conversation_id=conversation_id,
+        limit=limit,
+        include_archived=include_archived,
+        **search_params
+    )
+    
+    return results, metadata
+
+def search_memory_blocks_fulltext(
+    db: Session,
+    query: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    min_score: float = 0.1,
+    include_archived: bool = False
+):
+    """
+    Full-text search using PostgreSQL's built-in capabilities.
+    """
+    from core.search import get_search_service
+    
+    search_service = get_search_service()
+    
+    return search_service.search_memory_blocks_fulltext(
+        db=db,
+        query=query,
+        agent_id=agent_id,
+        conversation_id=conversation_id,
+        limit=limit,
+        min_score=min_score,
+        include_archived=include_archived
+    )
+
+def search_memory_blocks_semantic(
+    db: Session,
+    query: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    similarity_threshold: float = 0.7,
+    include_archived: bool = False
+):
+    """
+    Semantic search using embeddings (placeholder implementation).
+    """
+    from core.search import get_search_service
+    
+    search_service = get_search_service()
+    
+    return search_service.search_memory_blocks_semantic(
+        db=db,
+        query=query,
+        agent_id=agent_id,
+        conversation_id=conversation_id,
+        limit=limit,
+        similarity_threshold=similarity_threshold,
+        include_archived=include_archived
+    )
+
+def search_memory_blocks_hybrid(
+    db: Session,
+    query: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    fulltext_weight: float = 0.7,
+    semantic_weight: float = 0.3,
+    min_combined_score: float = 0.1,
+    include_archived: bool = False
+):
+    """
+    Hybrid search combining full-text and semantic search.
+    """
+    from core.search import get_search_service
+    
+    search_service = get_search_service()
+    
+    return search_service.search_memory_blocks_hybrid(
+        db=db,
+        query=query,
+        agent_id=agent_id,
+        conversation_id=conversation_id,
+        limit=limit,
+        fulltext_weight=fulltext_weight,
+        semantic_weight=semantic_weight,
+        min_combined_score=min_combined_score,
+        include_archived=include_archived
+    )
