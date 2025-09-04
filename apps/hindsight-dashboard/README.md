@@ -2,61 +2,41 @@
 
 ![Hindsight Dashboard Screenshot](docs/2025-06-07_22-52-memory-dashboard.png)
 
-The Hindsight Dashboard serves as the intuitive frontend application for interacting with the Hindsight AI memory service. It provides a user-friendly interface to visualize, manage, and analyze the AI agent's memories.
+A clean UI to browse, search, filter, archive and curate your agent’s memory blocks. Includes validation flows for consolidation suggestions and a pruning workflow.
 
-## Key Features
+## Features
 
-*   **Memory Visualization:** Browse and view detailed information about individual memory blocks.
-*   **Search and Filtering:** Efficiently search for memories using keywords and apply various filters (e.g., by date, type, relevance).
-*   **Keyword Management:** View and manage keywords associated with memory blocks, aiding in better organization and retrieval.
-*   **Bulk Actions:** Perform operations on multiple memory blocks simultaneously.
-*   **Feedback Mechanism:** Provide feedback on memory blocks to improve the AI's learning process.
+- Memory browsing with rich filters (date, feedback score, retrieval count, keywords)
+- Full‑view memory detail and keyword management
+- Feedback actions (positive/negative/neutral)
+- Archived view and bulk operations
+- Consolidation suggestions review (validate/reject)
+- Pruning suggestions review and confirm
 
-## Available Scripts
+## Run (recommended via Docker)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+The root repository quickstart (`./start_hindsight.sh`) brings up the API, DB and dashboard. Then open http://localhost:3000.
 
-In the project directory, you can run:
+## Run locally (without Docker)
 
-### `npm start`
+Prereqs: Node 18+
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```bash
+cd apps/hindsight-dashboard
+npm install
+REACT_APP_HINDSIGHT_SERVICE_API_URL=http://localhost:8000 npm start
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Environment
 
-### `npm test`
+- `REACT_APP_HINDSIGHT_SERVICE_API_URL`: base URL of the backend API
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+In production, access is protected by OAuth2‑Proxy (Google). For local dev, the API can expose a mock `/user-info` response when `DEV_MODE=true` in the backend.
 
-### `npm run build`
+## Scripts
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- `npm start` — run dev server on port 3000
+- `npm run build` — build static assets
+- `npm test` — CRA test runner
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Further Documentation
-
-For more detailed information on UX/design considerations, mockups, and additional screenshots, please refer to the `docs/` directory within this project.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+Further screenshots and design notes are in `docs/`.

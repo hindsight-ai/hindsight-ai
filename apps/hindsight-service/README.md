@@ -1,67 +1,137 @@
-# Memory Service
+# Memory Service (FastAPI)
 
-This service is the core backend logic for managing the AI agent's memory. It handles database interactions, core memory operations like keyword extraction and feedback processing, and exposes an internal API for other services (like the MCP server) to consume.
+Core backend for Hindsight AI: stores and retrieves memory blocks, records feedback, proposes LLM‑based consolidation and pruning suggestions, and serves the dashboard + MCP server.
 
-## 🚀 Getting Started
+## Quick Start
 
-### Prerequisites
+Run everything via Docker (recommended): see the repository root README quickstart. To run just the API locally:
 
-- Python 3.10+
-- `uv` (or `pip` and `pip-tools`) for dependency management.
-- Docker and Docker Compose (for running the PostgreSQL database).
+Prereqs
+- Python 3.10+ and `uv` (or pip)
+- Local PostgreSQL or `docker compose` from `infra/postgres`
 
-### Setup
-
-1.  **Navigate to the `hindsight-service` directory:**
-    ```bash
-    cd apps/hindsight-service
-    ```
-
-2.  **Install dependencies:**
-    Using `uv` (recommended):
-    ```bash
-    uv sync
-    ```
-    Or using `pip` and `pip-tools`:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Database Setup:**
-    Ensure the PostgreSQL database is running and the schema is migrated. Refer to the `../infra/README.md` for detailed instructions on setting up the database.
-
-### Running the Service
-
-To start the memory service, run the following command from the `hindsight-service` directory:
-
+Install and run
 ```bash
-uv run uvicorn core.api.main:app --reload --host 0.0.0.0 --port 8000
+cd apps/hindsight-service
+uv sync
+export DATABASE_URL=postgresql://user:password@localhost:5432/hindsight_db
+uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-This will start the FastAPI application, typically accessible at `http://localhost:8000`.
 
-## 📂 Project Structure
+Open `http://localhost:8000/docs` for Swagger.
 
--   `core/api/`: Contains the FastAPI application entry point and API routes.
--   `core/db/`: Houses database models (SQLAlchemy ORM), database session management, and CRUD operations.
--   `core/core/`: Contains core business logic, such as keyword extraction and feedback processing.
+## Environment Variables
 
-## 🧪 Running Tests
+- `DATABASE_URL`: PostgreSQL URI (required)
+- `LLM_API_KEY`: API key for Gemini (optional; enables consolidation/pruning LLM paths)
+- `LLM_MODEL_NAME`: Gemini model name (default: `gemini-2.5-flash`)
+- `CONSOLIDATION_BATCH_SIZE`: Batch size for consolidation worker (default 100)
+- `FALLBACK_SIMILARITY_THRESHOLD`: TF‑IDF duplicate threshold (default 0.4)
+- `DEV_MODE`: If `true`, `/user-info` returns a mock user (local dev convenience)
 
-To run the tests for the memory service, navigate to the `hindsight-service` directory and execute:
+## API Quick Tour
+
+Create an agent
+```bash
+curl -s -X POST http://localhost:8000/agents/ \
+  -H 'Content-Type: application/json' \
+  -d '{"agent_name":"dev-agent"}'
+```
+
+Create a memory block
+```bash
+curl -s -X POST http://localhost:8000/memory-blocks/ \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "agent_id":"<agent-uuid>",
+    "conversation_id":"00000000-0000-0000-0000-000000000001",
+    "content":"Investigated intermittent 500 errors on POST /checkout.",
+    "lessons_learned":"Added backoff, fixed race condition.",
+    "errors":"Timeouts from payment gateway",
+    "metadata_col": {"service":"checkout","latency_ms":720}
+  }'
+```
+
+List memory blocks with filters and pagination
+```bash
+curl -s "http://localhost:8000/memory-blocks/?search_query=timeout&limit=25&sort_by=creation_date&sort_order=desc"
+```
+
+Report feedback (affects `feedback_score`)
+```bash
+curl -s -X POST http://localhost:8000/memory-blocks/<id>/feedback/ \
+  -H 'Content-Type: application/json' \
+  -d '{"memory_id":"<id>","feedback_type":"positive","feedback_details":"useful fix"}'
+```
+
+Archive a memory block
+```bash
+curl -s -X POST http://localhost:8000/memory-blocks/<id>/archive
+```
+
+List archived memory blocks
+```bash
+curl -s "http://localhost:8000/memory-blocks/archived/?limit=25"
+```
+
+Generate pruning suggestions (LLM or fallback)
+```bash
+curl -s -X POST http://localhost:8000/memory/prune/suggest -H 'Content-Type: application/json' -d '{"batch_size":20}'
+```
+
+Confirm pruning (archives the selected IDs)
+```bash
+curl -s -X POST http://localhost:8000/memory/prune/confirm \
+  -H 'Content-Type: application/json' \
+  -d '{"memory_block_ids":["<id1>","<id2>"]}'
+```
+
+Consolidation suggestions (LLM‑generated)
+```bash
+curl -s "http://localhost:8000/consolidation-suggestions/?status=pending&limit=50"
+```
+
+Validate or reject a suggestion
+```bash
+curl -s -X POST http://localhost:8000/consolidation-suggestions/<suggestion_id>/validate/
+curl -s -X POST http://localhost:8000/consolidation-suggestions/<suggestion_id>/reject/
+```
+
+## Project Structure
+
+- `core/api/`: FastAPI app, routes
+- `core/db/`: SQLAlchemy models, schemas, CRUD, session
+- `core/core/`: consolidation worker, (placeholder) keyword extraction
+- `core/pruning/`: LLM‑based pruning suggestions service
+- `migrations/`: Alembic configuration + versions
+
+## Tests
 
 ```bash
 uv run pytest
 ```
-(Ensure `pytest` is installed as a development dependency).
 
-## 📞 API Endpoints
+## Notes
 
-The service exposes a RESTful API. You can find the automatically generated OpenAPI documentation (Swagger UI) at `/docs` when the service is running (e.g., `http://localhost:8000/docs`).
+- Keyword extraction is currently stubbed; you can integrate spaCy or another NLP lib in `core/core/keyword_extraction.py`.
+- Consolidation uses Gemini when `LLM_API_KEY` is present; otherwise a TF‑IDF duplicate grouping fallback runs (no rewriting).
+- Pruning suggestions work in batches and degrade gracefully without an API key.
 
-Key endpoints include:
--   `/memory_blocks/`: For creating and retrieving memory blocks.
--   `/feedback_logs/`: For reporting feedback on memory blocks.
--   `/agents/`: For managing agent information.
--   `/keywords/`: For managing keywords.
+Request bodies may use either `metadata_col` or `metadata` — the API accepts `metadata` as an alias.
 
----
+### Important: Start from Backup (until migrations are fixed)
+
+On a fresh database, Alembic migrations may not apply cleanly. For now, the fastest path to a working setup is to restore the provided backup:
+
+```bash
+# 1) Ensure Docker is available and .env is set
+cp .env.example .env
+
+# 2) Restore the database from the included backup (interactive selector)
+./infra/scripts/restore_db.sh
+
+# 3) Start the stack
+./start_hindsight.sh
+```
+
+The restore script drops and recreates `hindsight_db`, restores from `hindsight_db_backups/data/…sql`, and attempts to align Alembic to the backup’s revision.

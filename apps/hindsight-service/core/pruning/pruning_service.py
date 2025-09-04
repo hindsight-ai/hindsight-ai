@@ -16,6 +16,7 @@ import logging
 import uuid
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import requests
 from datetime import datetime
 

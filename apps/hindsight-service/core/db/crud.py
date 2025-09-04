@@ -213,7 +213,7 @@ def get_all_memory_blocks(
                 models.MemoryBlock.content.ilike(search_pattern),
                 models.MemoryBlock.errors.ilike(search_pattern),
                 models.MemoryBlock.lessons_learned.ilike(search_pattern),
-                models.MemoryBlock.external_history_link.ilike(search_pattern),
+                # models.MemoryBlock.external_history_link.ilike(search_pattern),  # Removed: column does not exist
                 # Searching JSON metadata requires casting to text
                 models.MemoryBlock.metadata_col.cast(str).ilike(search_pattern),
                 models.MemoryBlock.agent_id.cast(str).ilike(search_pattern), # Search agent_id as string

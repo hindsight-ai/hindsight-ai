@@ -1,44 +1,40 @@
 # Infrastructure Setup and Migrations
 
-This directory contains all infrastructure-related components and configurations for the Hindsight AI project. It includes:
+Infra for local dev and prod: PostgreSQL, initial schema, migrations, and DB backup/restore.
 
-*   **`migrations/`**: SQL scripts for setting up the initial database schema.
-*   **`postgres/`**: Docker Compose setup for the PostgreSQL database service.
-*   **`scripts/`**: Contains utility scripts for database backup and restoration.
+Contents
+- `migrations/` — initial SQL schema; subsequent changes are Alembic migrations in `apps/hindsight-service/migrations/`
+- `postgres/` — standalone Docker Compose for DB only
+- `scripts/` — DB backup/restore helpers
 
-These components are designed to provide a robust and easily deployable database environment for the Hindsight AI project.
+Most users don’t need to touch this directly — running `./start_hindsight.sh` at repo root brings up everything for local development.
 
-## Database Backup and Restore
+## Database Only (optional)
 
-For detailed instructions on how to back up and restore the PostgreSQL database, including automated hourly backups and managing Alembic migrations, please refer to:
+Start Postgres alone if you want to run the API without Docker:
+```bash
+cd infra/postgres
+docker compose up -d
+```
 
-*   [PostgreSQL Database Persistence and Backup Guide](../../apps/hindsight-service/docs/DATABASE_BACKUP.md)
+## Initial Schema and Migrations
 
-## PostgreSQL Database Setup
+- First creation uses `infra/migrations/V1__initial_schema.sql`.
+- Ongoing changes are managed by Alembic from `apps/hindsight-service`.
 
-The PostgreSQL database is set up using Docker Compose.
+Apply initial SQL inside the DB container (if you’re bootstrapping manually):
+```bash
+CONTAINER_ID=$(docker ps --filter "name=db" --format "{{.ID}}")
+PGPASSWORD=password docker exec -i "$CONTAINER_ID" \
+  psql -U postgres -d hindsight_db < infra/migrations/V1__initial_schema.sql
+```
 
-### Initial Database Migration
+## Backup and Restore
 
-To set up the initial database schema, follow these steps:
+See the full guide: `apps/hindsight-service/docs/DATABASE_BACKUP.md` — covers timestamped dumps, restore flow, Alembic revision matching, and cron.
 
-1.  **Ensure Docker and Docker Compose are running.**
-2.  **Start the PostgreSQL container:**
-    Navigate to the `infra/postgres` directory and run:
-    ```bash
-    docker compose up -d
-    ```
-3.  **Apply the initial schema migration:**
-    The initial schema is defined in `infra/migrations/V1__initial_schema.sql`.
-    To apply this migration, you need the container ID of the running PostgreSQL service.
-    First, get the container ID:
-    ```bash
-    docker ps --filter "name=db" --format "{{.ID}}"
-    ```
-    (Replace `db` with the actual service name if it differs in `docker-compose.yml`).
-    
-    Then, execute the SQL script inside the container. Replace `[CONTAINER_ID]` with the ID obtained from the previous step:
-    ```bash
-    PGPASSWORD=password docker exec -i [CONTAINER_ID] psql -U postgres -d hindsight_db < infra/migrations/V1__initial_schema.sql
-    ```
-    This command will create all necessary tables and indexes as defined in the SQL file.
+Important: On a fresh database, current Alembic migrations may not apply cleanly. The recommended way to get a working environment is to run:
+```bash
+./infra/scripts/restore_db.sh
+```
+and select the provided backup in `hindsight_db_backups/data/…sql`.

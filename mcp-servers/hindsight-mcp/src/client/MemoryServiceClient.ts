@@ -11,14 +11,14 @@ export interface CreateMemoryBlockPayload {
 }
 
 export interface MemoryBlock {
-  memory_id: string; // UUID - Changed from 'id' to 'memory_id'
+  memory_id: string; // UUID (mapped from API field `id`)
   agent_id: string; // UUID
   conversation_id: string; // UUID
   timestamp: string; // TIMESTAMP
   content: string;
   errors: string | null;
   lessons_learned: string;
-  metadata: Record<string, any> | null;
+  metadata: Record<string, any> | null; // mapped from API `metadata_col`
   feedback_score: number;
   created_at: string; // TIMESTAMP
   updated_at: string; // TIMESTAMP
@@ -73,8 +73,21 @@ export class MemoryServiceClient {
    * @returns The memory block details.
    */
   async getMemoryDetails(memoryBlockId: string): Promise<MemoryBlock> {
-    const response = await this.client.get<MemoryBlock>(`/memory-blocks/${memoryBlockId}`);
-    return response.data;
+    const response = await this.client.get<any>(`/memory-blocks/${memoryBlockId}`);
+    const raw = response.data || {};
+    return {
+      memory_id: raw.id ?? raw.memory_id,
+      agent_id: raw.agent_id,
+      conversation_id: raw.conversation_id,
+      timestamp: raw.timestamp,
+      content: raw.content,
+      errors: raw.errors,
+      lessons_learned: raw.lessons_learned,
+      metadata: raw.metadata ?? raw.metadata_col ?? null,
+      feedback_score: raw.feedback_score,
+      created_at: raw.created_at,
+      updated_at: raw.updated_at,
+    };
   }
 
   /**
@@ -83,11 +96,9 @@ export class MemoryServiceClient {
    * @returns An object containing the created memory ID.
    */
   async createMemoryBlock(payload: CreateMemoryBlockPayload): Promise<{ memory_id: string }> {
-    const response = await this.client.post<{ memory_id: string }>(
-      '/memory-blocks',
-      payload
-    );
-    return response.data;
+    const response = await this.client.post<any>('/memory-blocks', payload);
+    const raw = response.data || {};
+    return { memory_id: raw.id ?? raw.memory_id };
   }
 
   /**
@@ -118,8 +129,21 @@ export class MemoryServiceClient {
     if (limit) {
       params.limit = limit;
     }
-    const response = await this.client.get<MemoryBlock[]>('/memory-blocks', { params });
-    return response.data;
+    const response = await this.client.get<any>('/memory-blocks', { params });
+    const items = (response.data?.items ?? response.data ?? []) as any[];
+    return items.map((raw: any) => ({
+      memory_id: raw.id ?? raw.memory_id,
+      agent_id: raw.agent_id,
+      conversation_id: raw.conversation_id,
+      timestamp: raw.timestamp,
+      content: raw.content,
+      errors: raw.errors,
+      lessons_learned: raw.lessons_learned,
+      metadata: raw.metadata ?? raw.metadata_col ?? null,
+      feedback_score: raw.feedback_score,
+      created_at: raw.created_at,
+      updated_at: raw.updated_at,
+    }));
   }
 
   /**
@@ -136,8 +160,26 @@ export class MemoryServiceClient {
     if (limit) {
       params.limit = limit;
     }
-    const response = await this.client.get<GetAllMemoryBlocksResponse>('/memory-blocks', { params });
-    return response.data;
+    const response = await this.client.get<any>('/memory-blocks', { params });
+    const items = (response.data?.items ?? []) as any[];
+    const mapped = items.map((raw: any) => ({
+      memory_id: raw.id ?? raw.memory_id,
+      agent_id: raw.agent_id,
+      conversation_id: raw.conversation_id,
+      timestamp: raw.timestamp,
+      content: raw.content,
+      errors: raw.errors,
+      lessons_learned: raw.lessons_learned,
+      metadata: raw.metadata ?? raw.metadata_col ?? null,
+      feedback_score: raw.feedback_score,
+      created_at: raw.created_at,
+      updated_at: raw.updated_at,
+    }));
+    return {
+      items: mapped,
+      total_items: response.data?.total_items ?? mapped.length,
+      total_pages: response.data?.total_pages ?? 1,
+    };
   }
 
   /**
@@ -146,8 +188,21 @@ export class MemoryServiceClient {
    * @returns An array of relevant memory blocks.
    */
   async retrieveRelevantMemories(payload: RetrieveMemoriesPayload): Promise<MemoryBlock[]> {
-    const response = await this.client.get<MemoryBlock[]>('/memory-blocks/search', { params: payload });
-    return response.data;
+    const response = await this.client.get<any>('/memory-blocks/search', { params: payload });
+    const items = response.data as any[];
+    return (items ?? []).map((raw: any) => ({
+      memory_id: raw.id ?? raw.memory_id,
+      agent_id: raw.agent_id,
+      conversation_id: raw.conversation_id,
+      timestamp: raw.timestamp,
+      content: raw.content,
+      errors: raw.errors,
+      lessons_learned: raw.lessons_learned,
+      metadata: raw.metadata ?? raw.metadata_col ?? null,
+      feedback_score: raw.feedback_score,
+      created_at: raw.created_at,
+      updated_at: raw.updated_at,
+    }));
   }
 
   /**
@@ -156,7 +211,13 @@ export class MemoryServiceClient {
    * @returns A success message.
    */
   async reportMemoryFeedback(payload: ReportFeedbackPayload): Promise<string> {
-    const response = await this.client.post<string>(`/memory-blocks/${payload.memory_block_id}/feedback`, payload);
-    return response.data;
+    // API expects memory_id and feedback_details; we send aliases it accepts
+    const body = {
+      memory_block_id: payload.memory_block_id,
+      feedback_type: payload.feedback_type,
+      comment: payload.comment,
+    };
+    const response = await this.client.post<string>(`/memory-blocks/${payload.memory_block_id}/feedback/`, body);
+    return response.data as any;
   }
 }

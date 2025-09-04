@@ -1,81 +1,27 @@
 # Hindsight MCP Server
 
-MCP server for interacting with the Hindsight AI Agent Memory Service.
+TypeScript MCP server exposing Hindsight AI tools so agents can write and read memories, and report feedback.
 
-This is a TypeScript-based MCP server that provides tools for managing memory blocks, retrieving relevant memories, and reporting feedback.
+## Try It Fast
 
-## Features
-
-### Tools
-
-- `create_memory_block`: To record new learnings, observed errors, and relevant context after an interaction or task completion.
-  - Required parameters: `content` (TEXT), `lessons_learned` (TEXT).
-  - Optional parameters: `errors` (TEXT, if applicable), `metadata` (JSON, for additional contextual info).
-  - Note: `agent_id` and `conversation_id` are automatically filled by environment variables.
-- `retrieve_relevant_memories`: To fetch memory blocks that are highly relevant to the agent's current task, query, or conversation.
-  - Required parameters: `query_text` (TEXT), `keywords` (ARRAY of TEXT).
-  - Optional parameters: `limit` (INT).
-  - Note: `agent_id` and `conversation_id` are automatically filled by environment variables.
-- `retrieve_all_memory_blocks`: To retrieve all memory blocks, filtered by agent_id.
-  - Required parameters: `agent_id` (UUID).
-  - Optional parameters: `limit` (INT).
-  - Note: `agent_id` is automatically filled by the `DEFAULT_AGENT_ID` environment variable if not provided in arguments. If neither is provided, an error will be thrown.
-- `retrieve_memory_blocks_by_conversation_id`: To retrieve memory blocks associated with a specific conversation.
-  - Required parameters: `conversation_id` (UUID).
-  - Optional parameters: `limit` (INT).
-  - Note: `agent_id` can be automatically filled by environment variables if not present.
-- `report_memory_feedback`: To provide explicit feedback on the utility or correctness of a previously retrieved `memory_block`.
-  - Required parameters: `memory_block_id` (UUID), `feedback_type` (enum: 'positive', 'negative', 'neutral').
-  - Optional parameters: `comment` (TEXT).
-- `get_memory_details`: To retrieve the full content and metadata of a specific `memory_block` by its ID.
-  - Required parameters: `memory_block_id` (UUID).
-
-## Development
-
-Install dependencies:
+1) Build
 ```bash
+cd mcp-servers/hindsight-mcp
 npm install
-```
-
-Build the server:
-```bash
 npm run build
 ```
 
-For development with auto-rebuild:
-```bash
-npm run watch
-```
-
-## Installation
-
-To use with Claude Desktop, add the following server configuration to your `claude_desktop_config.json` file.
-
-On MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
-
+2) Point your MCP client (e.g., Claude Desktop) to the built server:
 ```json
 {
   "mcpServers": {
     "hindsight-mcp": {
-      "autoApprove": [
-        "create_memory_block",
-        "retrieve_relevant_memories",
-        "report_memory_feedback",
-        "get_memory_details",
-        "retrieve_all_memory_blocks",
-        "retrieve_memory_blocks_by_conversation_id"
-      ],
-      "disabled": false,
-      "timeout": 60,
       "command": "node",
-      "args": [
-        "/path/to/hindsight-ai/mcp-servers/hindsight-mcp/build/index.js"
-      ],
+      "args": ["/path/to/hindsight-ai/mcp-servers/hindsight-mcp/build/index.js"],
       "env": {
         "MEMORY_SERVICE_BASE_URL": "http://localhost:8000",
-        "DEFAULT_AGENT_ID": "7a229550-d8ad-4726-a529-6380949e878c",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<your-agent-id>",
+        "DEFAULT_CONVERSATION_ID": "00000000-0000-0000-0000-000000000001"
       },
       "transportType": "stdio"
     }
@@ -83,12 +29,23 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
 }
 ```
 
-### Debugging
-
-Since MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:
-
+3) Optional: run the MCP Inspector for local testing
 ```bash
-npm run inspector
+npx @modelcontextprotocol/inspector --server "node build/index.js"
 ```
 
-The Inspector will provide a URL to access debugging tools in your browser.
+## Tools
+
+- `create_memory_block` — content, lessons_learned, optional errors/metadata (agent/conversation default via env)
+- `retrieve_relevant_memories` — basic keyword search with query + keywords
+- `retrieve_all_memory_blocks` — list with optional agent filter
+- `retrieve_memory_blocks_by_conversation_id` — scoped retrieval
+- `report_memory_feedback` — positive/negative/neutral with optional comment
+- `get_memory_details` — fetch content/errors/timestamp by ID
+
+## Development
+
+- `npm run build` — compile TypeScript
+- `npm run dev` — watch mode with ts-node + nodemon
+
+Handle errors gracefully: the server returns MCP‑formatted errors with HTTP status details from the API.

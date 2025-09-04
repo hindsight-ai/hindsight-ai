@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Base Schemas
 class AgentBase(BaseModel):
@@ -18,15 +18,18 @@ class MemoryBlockBase(BaseModel):
     content: str
     errors: Optional[str] = None
     lessons_learned: Optional[str] = None
-    metadata_col: Optional[Dict[str, Any]] = None
+    # Accept both `metadata_col` and alias `metadata` in requests
+    metadata_col: Optional[Dict[str, Any]] = Field(default=None, alias="metadata")
     feedback_score: Optional[int] = 0
     archived: Optional[bool] = False
     archived_at: Optional[datetime] = None
 
 class FeedbackLogBase(BaseModel):
-    id: uuid.UUID # Changed from memory_id to id
+    # Accept both `memory_id` and alias `memory_block_id`
+    memory_id: uuid.UUID = Field(alias="memory_block_id")
     feedback_type: str
-    feedback_details: Optional[str] = None
+    # Accept both `feedback_details` and alias `comment`
+    feedback_details: Optional[str] = Field(default=None, alias="comment")
 
 class KeywordBase(BaseModel):
     keyword_text: str
@@ -58,7 +61,8 @@ class MemoryBlockUpdate(BaseModel):
     content: Optional[str] = None
     errors: Optional[str] = None
     lessons_learned: Optional[str] = None
-    metadata_col: Optional[Dict[str, Any]] = None
+    # Accept both `metadata_col` and alias `metadata` in updates
+    metadata_col: Optional[Dict[str, Any]] = Field(default=None, alias="metadata")
     feedback_score: Optional[int] = None
 
 class FeedbackLogUpdate(BaseModel):
