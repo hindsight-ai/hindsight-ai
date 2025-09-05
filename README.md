@@ -88,6 +88,7 @@ LLM_MODEL_NAME=gemini-1.5-flash
 
 This will:
 - Start PostgreSQL database
+- Apply database migrations automatically
 - Launch backend service on http://localhost:8000
 - Launch frontend dashboard on http://localhost:3000
 - Keep frontend and backend same-origin via the dashboard's `/api` proxy
@@ -99,15 +100,17 @@ Note: Database schema/data is managed via the provided backup/restore scripts.
 ./stop_hindsight.sh
 ```
 
-## ⚠️ Important Database Setup Notice
+## Database Setup
 
-⚠️ **IMPORTANT: Alembic migrations are currently broken.** ⚠️
+Migrations are applied automatically by the backend container at startup.
 
-To initialize the database, please use the provided backup file and restore script:
+You have two options to initialize your database:
 
-1. **Restore from Backup:** Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, and restart the `db` container.
-
-**Note:** This is a temporary workaround while the alembic migration issues are being resolved. The provided backup contains sample data including memory blocks and consolidation suggestions to help you understand the system's capabilities.
+1. Fresh DB via migrations (default): Just start the stack with `./start_hindsight.sh`. The backend will run `alembic upgrade head` and create all tables.
+2. Load sample data (optional): Use the provided backup to prefill the DB with example data.
+   - Run: `./infra/scripts/restore_db.sh`
+   - The script stops the DB, drops and recreates `hindsight_db`, restores the selected backup, and restarts the DB.
+   - Useful for demos and exploring features.
 
 ## Local Development with Docker Compose
 
