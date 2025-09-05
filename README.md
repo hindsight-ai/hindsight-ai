@@ -1,4 +1,4 @@
-# Hindsight AI Monorepo
+# Hindsight AI
 
 Hindsight AI is a system designed to enhance AI agent memory and operational intelligence. Its primary purpose is to provide a robust and scalable solution for:
 - **Memory Management:** Storing, retrieving, and managing an AI agent's conversational and operational memories.
