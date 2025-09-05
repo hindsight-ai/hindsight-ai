@@ -5,6 +5,17 @@ set -e
 echo "Starting Hindsight AI services for local development..."
 echo "Using Docker Compose with development profile..."
 
+# Parse flags
+WATCH_MODE=0
+for arg in "$@"; do
+  case "$arg" in
+    -w|--watch)
+      WATCH_MODE=1
+      shift
+      ;;
+  esac
+done
+
 # Ensure .env exists for docker compose variable interpolation
 if [ ! -f .env ]; then
     echo ".env not found. Creating it from .env.example..."
@@ -91,10 +102,26 @@ if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps | grep -q "
     echo ""
     echo "To view logs: docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f"
     echo "To stop services: ./stop_hindsight.sh"
+    if [ $WATCH_MODE -eq 0 ]; then
+      echo "For auto-rebuild on code changes, rerun with: ./start_hindsight.sh --watch"
+    fi
 else
     echo "❌ Failed to start services. Check logs with:"
     echo "docker compose -f docker-compose.yml -f docker-compose.dev.yml logs"
     exit 1
+fi
+
+# If watch mode requested, start compose watch (blocks until interrupted)
+if [ $WATCH_MODE -eq 1 ]; then
+  if docker compose watch --help >/dev/null 2>&1; then
+    echo ""
+    echo "🔁 Starting Docker Compose watch for code changes..."
+    echo "Press Ctrl+C to stop watching; containers keep running."
+    exec docker compose -f docker-compose.yml -f docker-compose.dev.yml watch
+  else
+    echo "⚠️ Your Docker Compose does not support 'watch'. Please update Compose or run manually:"
+    echo "docker compose -f docker-compose.yml -f docker-compose.dev.yml watch"
+  fi
 fi
 
 exit 0
