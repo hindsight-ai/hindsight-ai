@@ -141,7 +141,7 @@ const memoryService = {
 
   // Keywords
   getKeywords: async () => {
-    const response = await fetch(`${base()}/keywords`, {
+    const response = await fetch(`${base()}/keywords/`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -156,7 +156,7 @@ const memoryService = {
 
   createKeyword: async (data) => {
     if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to create keywords.'); throw new Error('Guest mode read-only'); }
-    const response = await fetch(`${API_BASE_URL}/keywords`, {
+    const response = await fetch(`${API_BASE_URL}/keywords/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

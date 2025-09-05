@@ -9,8 +9,18 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
   const [scale, setScale] = useState(1);
   useEffect(() => {
     try {
-      const saved = parseFloat(localStorage.getItem('UI_SCALE') || '1');
-      if (saved && saved > 0.3 && saved <= 1) setScale(saved);
+      const savedStr = localStorage.getItem('UI_SCALE');
+      if (savedStr) {
+        const saved = parseFloat(savedStr);
+        if (saved && saved > 0.3 && saved <= 1) {
+          setScale(saved);
+          return;
+        }
+      }
+      // Default to 75% on small screens if not previously chosen
+      if (typeof window !== 'undefined' && window.innerWidth < 640) {
+        setScale(0.75);
+      }
     } catch {}
   }, []);
   const updateScale = (val) => {
@@ -23,49 +33,48 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
       sidebarCollapsed ? 'lg:p-4' : 'lg:p-4'
     }`}>
       {/* Header */}
-      <header className="p-4 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          {/* Mobile Hamburger */}
-          <button
-            className="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-100"
-            onClick={toggleSidebar}
-            aria-label="Open navigation"
-          >
-            <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
-            <p className="text-gray-500">
-              {title === 'Dashboard'
-                ? 'Overview of your AI memory management system'
-                : `Manage your ${title.toLowerCase()}`
-              }
-            </p>
+      <header className="p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Mobile Hamburger */}
+            <button
+              className="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-100"
+              onClick={toggleSidebar}
+              aria-label="Open navigation"
+            >
+              <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-800 truncate">{title}</h2>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Scale selector */}
-          <label className="flex items-center gap-2 text-sm text-gray-600">
-            <span className="hidden sm:inline">Display:</span>
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            {/* Scale selector (no label) */}
             <select
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm bg-white"
+              className="border border-gray-300 rounded-md px-2 py-1 text-xs sm:text-sm bg-white"
               value={String(scale)}
               onChange={(e) => updateScale(parseFloat(e.target.value))}
+              aria-label="Display scale"
+              title="Display scale"
             >
               <option value="1">100%</option>
               <option value="0.75">75%</option>
               <option value="0.5">50%</option>
             </select>
-          </label>
-          {guest && (
-            <span className="px-3 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
-              Guest Mode · Read-only
-            </span>
-          )}
-          <UserAccountButton />
+            {guest && (
+              <span className="px-2 py-0.5 text-[10px] sm:text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
+                Guest Mode · Read-only
+              </span>
+            )}
+            <UserAccountButton />
+          </div>
         </div>
+        <p className="mt-1 text-xs sm:text-sm text-gray-500 truncate">
+          {title === 'Dashboard'
+            ? 'Overview of your AI memory management system'
+            : `Manage your ${title.toLowerCase()}`
+          }
+        </p>
       </header>
 
       {/* Scaled content wrapper with horizontal scroll on small screens */}
