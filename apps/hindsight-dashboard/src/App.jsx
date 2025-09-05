@@ -29,27 +29,6 @@ function AppContent() {
     document.title = 'Hindsight-AI';
   }, []);
 
-  // Authentication check (commented out as in original)
-  // if (!user || !user.authenticated) {
-  //   return (
-  //     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-  //       <div className="text-center">
-  //         <h1 className="text-2xl font-bold text-gray-800 mb-4">AI Agent Memory Dashboard</h1>
-  //         <div className="bg-white p-8 rounded-lg shadow-md max-w-md">
-  //           <h2 className="text-xl font-semibold mb-4">Authentication Required</h2>
-  //           <p className="text-gray-600 mb-6">Please sign in to access the AI Agent Memory Dashboard.</p>
-  //           <button
-  //             className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition duration-200"
-  //             onClick={() => window.location.href = 'https://auth.hindsight-ai.com/oauth2/sign_in?rd=https%3A%2F%2Fapp.hindsight-ai.com'}
-  //           >
-  //             Sign In
-  //           </button>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
   // Get page title based on current route
   const getPageTitle = (pathname) => {
     const routeMap = {
