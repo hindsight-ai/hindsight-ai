@@ -791,7 +791,10 @@ def get_build_info():
 @router.get("/user-info")
 def get_user_info(
     x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None)
+    x_auth_request_email: Optional[str] = Header(default=None),
+    # In reverse-proxy mode, oauth2-proxy typically sets X-Forwarded-* headers to upstream
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
     """
     Returns the authenticated user information from OAuth2 proxy headers.
@@ -811,13 +814,16 @@ def get_user_info(
         }
 
     # Production mode: check OAuth2 proxy headers
-    if not x_auth_request_user and not x_auth_request_email:
+    user = x_auth_request_user or x_forwarded_user
+    email = x_auth_request_email or x_forwarded_email
+
+    if not user and not email:
         return {"authenticated": False, "message": "No authentication headers found"}
 
     return {
         "authenticated": True,
-        "user": x_auth_request_user,
-        "email": x_auth_request_email
+        "user": user,
+        "email": email,
     }
 
 # Dashboard Stats Endpoints
