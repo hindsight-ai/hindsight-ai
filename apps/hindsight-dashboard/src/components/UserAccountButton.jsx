@@ -1,25 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import authService from '../api/authService';
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 const UserAccountButton = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
-
-  useEffect(() => {
-    fetchUserInfo();
-  }, []);
-
-  const fetchUserInfo = async () => {
-    try {
-      const userInfo = await authService.getCurrentUser();
-      setUser(userInfo);
-    } catch (error) {
-      console.error('Error fetching user info:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogout = () => {
     // Redirect to logout URL or handle logout logic
