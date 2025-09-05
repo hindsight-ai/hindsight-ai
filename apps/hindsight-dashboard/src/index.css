@@ -1,14 +1,12 @@
 @import "tailwindcss";
 
 @layer base {
-  html {
-    font-family: 'Inter', sans-serif;
-    width: 50vw;
-    height: 50vh;
-    overflow: auto;
+  html, body, #root {
+    height: 100%;
+    width: 100%;
   }
 
-  body {
+  html, body {
     margin: 0;
     font-family: 'Inter', sans-serif;
     font-size: 16px;
@@ -16,15 +14,10 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background-color: #f3f4f6; /* bg-gray-100 */
-    transform: scale(2);
-    transform-origin: top left;
-    width: 50vw;
-    height: 50vh;
+    overflow: hidden; /* Page height equals viewport; internal panes handle scroll */
   }
 
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
 }
 
 /* Custom scrollbar for better aesthetics */
@@ -72,4 +65,15 @@ code {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   line-clamp: 3;
+}
+
+/* Utility to hide scrollbars while preserving scroll functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none !important; /* Safari and Chrome */
+  width: 0 !important;
+  background: transparent !important;
 }

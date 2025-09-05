@@ -30,9 +30,9 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
   // Scroll to top on route change
   useEffect(() => {
     if (scrollRef.current) {
-      try { scrollRef.current.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch { scrollRef.current.scrollTop = 0; }
+      try { scrollRef.current.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch { scrollRef.current.scrollTop = 0; }
     } else {
-      try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch { /* noop */ }
+      try { window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch { /* noop */ }
     }
   }, [location.pathname, location.search]);
   const updateScale = (val) => {
@@ -92,7 +92,7 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
       </header>
 
       {/* Scaled content wrapper with horizontal scroll on small screens */}
-      <div ref={scrollRef} className="flex-1 overflow-auto p-4">
+  <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4 hide-scrollbar">
         <div className="max-w-[1200px] w-full">
           <div
             className="transform-gpu origin-top-left"

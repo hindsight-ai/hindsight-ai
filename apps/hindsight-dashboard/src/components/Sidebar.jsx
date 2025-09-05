@@ -114,15 +114,14 @@ const Sidebar = ({ isOpen, onClose, onCollapseChange }) => {
         />
       )}
 
-      {/* Sidebar */}
-      <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50
-        ${isCollapsed ? 'w-16' : 'w-64'} flex-shrink-0
-        bg-[#0F172A] text-gray-300
-        flex flex-col
-        transform transition-all duration-300 ease-in-out
-        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
+      {/* Sidebar: fixed to viewport */}
+      <aside
+        className={`fixed top-0 left-0 h-screen z-50
+          ${isCollapsed ? 'w-16' : 'w-64'} flex-shrink-0
+          bg-[#0F172A] text-gray-300 flex flex-col overflow-y-auto
+          transition-transform duration-300 ease-in-out
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
+      >
         {/* Sidebar Header */}
         <div className="h-16 flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-700">
           <div className={`flex flex-col transition-all duration-200 ${

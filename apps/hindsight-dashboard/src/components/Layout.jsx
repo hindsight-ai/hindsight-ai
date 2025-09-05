@@ -19,22 +19,26 @@ const Layout = ({ children, title }) => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={closeSidebar}
-        onCollapseChange={handleSidebarCollapse}
-      />
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
+      {/* Fixed Sidebar */}
+      <div className="fixed left-0 top-0 h-full z-10">
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={closeSidebar}
+          onCollapseChange={handleSidebarCollapse}
+        />
+      </div>
 
-      {/* Main Content Area */}
-      <MainContent
-        title={title}
-        toggleSidebar={toggleSidebar}
-        sidebarCollapsed={sidebarCollapsed}
-      >
-        {children}
-      </MainContent>
+  {/* Main Content Area - accounts for fixed sidebar width */}
+  <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-16 ml-0' : 'lg:ml-64 ml-0'}`}>
+        <MainContent
+          title={title}
+          toggleSidebar={toggleSidebar}
+          sidebarCollapsed={sidebarCollapsed}
+        >
+          {children}
+        </MainContent>
+      </div>
     </div>
   );
 };

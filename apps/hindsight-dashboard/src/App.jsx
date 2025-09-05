@@ -30,6 +30,11 @@ function AppContent() {
     document.title = 'Hindsight-AI';
   }, []);
 
+  // Smooth scroll to top on route changes and after login/guest toggle
+  useEffect(() => {
+    try { window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch { /* noop */ }
+  }, [location.pathname, location.search, user?.authenticated, guest]);
+
   // Block UI until auth status known
   if (loading) {
     return (
