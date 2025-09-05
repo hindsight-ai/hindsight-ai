@@ -22,8 +22,8 @@ services:
       - "3000:80"
     build:
       args:
-        # Point the dashboard to the backend service in dev
-        VITE_HINDSIGHT_SERVICE_API_URL: http://hindsight-service:8000
+        # Point the dashboard to the backend via host (browser resolves localhost)
+        VITE_HINDSIGHT_SERVICE_API_URL: http://localhost:8000
 
   # Add hindsight-copilot-assistant service
   hindsight-copilot-assistant:
