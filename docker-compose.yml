@@ -118,10 +118,13 @@ services:
       context: ./apps/hindsight-dashboard
       dockerfile: Dockerfile
       args:
-        REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL:-http://localhost:8000}
+        # Ensure production builds target HTTPS API by default
+        REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL:-https://api.hindsight-ai.com}
     container_name: hindsight-dashboard
     environment:
-      REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL:-http://localhost:8000}
+      # Use HTTPS API URL by default to avoid mixed content in production;
+      # override to http://localhost:8000 for local development via .env
+      REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL:-https://api.hindsight-ai.com}
     depends_on:
       - hindsight-service
     networks:
@@ -131,7 +134,8 @@ services:
       - "traefik.http.routers.hindsight-dashboard-router.rule=Host(`dashboard.hindsight-ai.com`) && PathPrefix(`/`)"
       - "traefik.http.routers.hindsight-dashboard-router.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-service-router.middlewares=cors-headers@file"
+      # Protect the dashboard with OAuth2 forward auth
+      - "traefik.http.routers.hindsight-dashboard-router.middlewares=oauth-middleware@file"
       - "traefik.http.routers.hindsight-dashboard-router.service=hindsight-dashboard-svc@docker"
       - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
 
