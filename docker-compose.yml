@@ -100,7 +100,8 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.hindsight-service-router-public.rule=Host(`api.hindsight-ai.com`) && (PathPrefix(`/user-info`) || PathPrefix(`/build-info`))"
+      # Public only for build-info; user-info must be protected so auth headers are present
+      - "traefik.http.routers.hindsight-service-router-public.rule=Host(`api.hindsight-ai.com`) && PathPrefix(`/build-info`)"
       - "traefik.http.routers.hindsight-service-router-public.entrypoints=websecure"
       - "traefik.http.routers.hindsight-service-router-public.tls.certresolver=letsencrypt"
       - "traefik.http.routers.hindsight-service-router-public.middlewares=cors-headers@file"
@@ -143,6 +144,13 @@ services:
       - "traefik.http.routers.hindsight-dashboard-manifest.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-manifest.tls.certresolver=letsencrypt"
       - "traefik.http.routers.hindsight-dashboard-manifest.service=hindsight-dashboard-svc@docker"
+      - "traefik.http.routers.hindsight-dashboard-manifest.priority=1000"
+      # Also allow favicon without auth to prevent browser noise
+      - "traefik.http.routers.hindsight-dashboard-favicon.rule=Host(`dashboard.hindsight-ai.com`) && Path(`/favicon.ico`)"
+      - "traefik.http.routers.hindsight-dashboard-favicon.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-dashboard-favicon.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-dashboard-favicon.service=hindsight-dashboard-svc@docker"
+      - "traefik.http.routers.hindsight-dashboard-favicon.priority=1000"
 
   hindsight-copilot-assistant:
     profiles: ["copilot"]
