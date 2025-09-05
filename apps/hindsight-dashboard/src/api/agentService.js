@@ -22,12 +22,14 @@ try {
   // Ignore URL parsing errors and use the env value as-is
 }
 
+const base = () => (isGuest() ? '/guest-api' : API_BASE_URL);
+
 const agentService = {
   // Agents
   getAgents: async (filters = {}) => {
     const { per_page, ...rest } = filters;
     const params = new URLSearchParams({ ...rest, limit: per_page });
-    const response = await fetch(`${API_BASE_URL}/agents/?${params.toString()}`, {
+    const response = await fetch(`${base()}/agents/?${params.toString()}`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -54,7 +56,7 @@ const agentService = {
   },
 
   getAgentById: async (agentId) => {
-    const response = await fetch(`${API_BASE_URL}/agents/${agentId}`, {
+    const response = await fetch(`${base()}/agents/${agentId}`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -128,7 +130,7 @@ const agentService = {
 
   searchAgents: async (query) => {
     const params = new URLSearchParams({ query });
-    const response = await fetch(`${API_BASE_URL}/agents/search/?${params.toString()}`, {
+    const response = await fetch(`${base()}/agents/search/?${params.toString()}`, {
       credentials: 'include'
     });
     if (!response.ok) {

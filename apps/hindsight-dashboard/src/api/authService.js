@@ -1,6 +1,12 @@
 // Prefer relative proxy path to keep same-origin in all envs
 let API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
 
+const isGuest = () => {
+  try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; }
+};
+
+const base = () => (isGuest() ? '/guest-api' : API_BASE_URL);
+
 // Upgrade API scheme at runtime to avoid mixed content in prod
 try {
   if (typeof window !== 'undefined' && API_BASE_URL) {
@@ -20,7 +26,7 @@ try {
 const authService = {
   // Get current user info from OAuth2 proxy
   getCurrentUser: async () => {
-    const response = await fetch(`${API_BASE_URL}/user-info`, {
+    const response = await fetch(`${base()}/user-info`, {
       credentials: 'include', // Include cookies for authentication
     });
     

@@ -19,6 +19,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const info = await authService.getCurrentUser();
       setUser(info);
+      // If user is authenticated, automatically exit guest mode
+      if (info && info.authenticated) {
+        setGuest(false);
+        try { sessionStorage.removeItem('GUEST_MODE'); } catch {}
+      }
     } catch (err) {
       // In dev, unauthenticated is acceptable; keep user null
       console.error('Auth refresh error:', err);

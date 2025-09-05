@@ -40,7 +40,7 @@ function AppContent() {
   }
 
   // Enforce authentication unless guest mode is enabled
-  if (!guest && (!user || !user.authenticated))) {
+  if (!guest && (!user || !user.authenticated)) {
     const handleSignIn = () => {
       const rd = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
       window.location.href = `/oauth2/sign_in?rd=${rd}`;

@@ -3,6 +3,7 @@ import notificationService from '../services/notificationService';
 const isGuest = () => {
   try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; }
 };
+const base = () => (isGuest() ? '/guest-api' : API_BASE_URL);
 
 // Prefer relative proxy path to keep same-origin in all envs
 let API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
@@ -34,7 +35,7 @@ const memoryService = {
       params.append('limit', per_page.toString());
     }
 
-    const response = await fetch(`${API_BASE_URL}/memory-blocks/?${params.toString()}`, {
+    const response = await fetch(`${base()}/memory-blocks/?${params.toString()}`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -48,7 +49,7 @@ const memoryService = {
   },
 
   getMemoryBlockById: async (id) => {
-    const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}`, {
+    const response = await fetch(`${base()}/memory-blocks/${id}`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -125,7 +126,7 @@ const memoryService = {
       params.append('limit', per_page.toString());
     }
 
-    const response = await fetch(`${API_BASE_URL}/memory-blocks/archived/?${params.toString()}`, {
+    const response = await fetch(`${base()}/memory-blocks/archived/?${params.toString()}`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -140,7 +141,7 @@ const memoryService = {
 
   // Keywords
   getKeywords: async () => {
-    const response = await fetch(`${API_BASE_URL}/keywords`, {
+    const response = await fetch(`${base()}/keywords`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -214,7 +215,7 @@ const memoryService = {
       skip: skip.toString(),
       limit: limit.toString()
     });
-    const response = await fetch(`${API_BASE_URL}/keywords/${keywordId}/memory-blocks/?${params.toString()}`, {
+    const response = await fetch(`${base()}/keywords/${keywordId}/memory-blocks/?${params.toString()}`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -228,7 +229,7 @@ const memoryService = {
   },
 
   getKeywordMemoryBlocksCount: async (keywordId) => {
-    const response = await fetch(`${API_BASE_URL}/keywords/${keywordId}/memory-blocks/count`, {
+    const response = await fetch(`${base()}/keywords/${keywordId}/memory-blocks/count`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -287,7 +288,7 @@ const memoryService = {
       ...(sort_by && { sort_by }),
       ...(sort_order && { sort_order })
     });
-    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/?${params.toString()}`, { 
+    const response = await fetch(`${base()}/consolidation-suggestions/?${params.toString()}`, { 
       signal,
       credentials: 'include'
     });
@@ -302,7 +303,7 @@ const memoryService = {
   },
 
   getConsolidationSuggestionById: async (id) => {
-    const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`, {
+    const response = await fetch(`${base()}/consolidation-suggestions/${id}`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -431,7 +432,7 @@ const memoryService = {
 
   // Build Info
   getBuildInfo: async () => {
-    const response = await fetch(`${API_BASE_URL}/build-info`, {
+    const response = await fetch(`${base()}/build-info`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -446,7 +447,7 @@ const memoryService = {
 
   // Conversations Count
   getConversationsCount: async () => {
-    const response = await fetch(`${API_BASE_URL}/conversations/count`, {
+    const response = await fetch(`${base()}/conversations/count`, {
       credentials: 'include'
     });
     if (!response.ok) {
@@ -530,7 +531,7 @@ const memoryService = {
     if (filters.priority) params.append('priority', filters.priority);
     if (filters.dateRange) params.append('date_range', filters.dateRange);
     
-    const url = `${API_BASE_URL}/memory-optimization/suggestions${params.toString() ? `?${params.toString()}` : ''}`;
+    const url = `${base()}/memory-optimization/suggestions${params.toString() ? `?${params.toString()}` : ''}`;
     
     const response = await fetch(url, {
       credentials: 'include'
@@ -563,7 +564,7 @@ const memoryService = {
   },
 
   getSuggestionDetails: async (suggestionId) => {
-    const response = await fetch(`${API_BASE_URL}/memory-optimization/suggestions/${suggestionId}`, {
+    const response = await fetch(`${base()}/memory-optimization/suggestions/${suggestionId}`, {
       credentials: 'include'
     });
     if (!response.ok) {
