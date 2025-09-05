@@ -1,6 +1,20 @@
 import notificationService from '../services/notificationService';
 
-const API_BASE_URL = process.env.REACT_APP_HINDSIGHT_SERVICE_API_URL;
+let API_BASE_URL = process.env.REACT_APP_HINDSIGHT_SERVICE_API_URL;
+
+// Upgrade API scheme at runtime to avoid mixed content when app is served over HTTPS
+try {
+  if (typeof window !== 'undefined' && API_BASE_URL) {
+    const isHttps = window.location.protocol === 'https:';
+    const url = new URL(API_BASE_URL);
+    if (isHttps && url.protocol === 'http:') {
+      url.protocol = 'https:';
+      API_BASE_URL = url.toString().replace(/\/$/, '');
+    }
+  }
+} catch (_) {
+  // Ignore URL parsing errors and use the env value as-is
+}
 
 if (!API_BASE_URL) {
   throw new Error("Environment variable REACT_APP_HINDSIGHT_SERVICE_API_URL is not defined.");
