@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder }) => {
+const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder, 'data-testid': dataTestId }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const headerRef = useRef(null);
@@ -109,7 +109,7 @@ const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder })
   const dropdownOptionsId = `multi-select-dropdown-options-${Math.random().toString(36).substr(2, 9)}`; // Unique ID
 
   return (
-    <div className="multi-select-dropdown" ref={dropdownRef}>
+    <div className="multi-select-dropdown" ref={dropdownRef} data-testid={dataTestId}>
       <div
         className="dropdown-header"
         onClick={handleToggle}

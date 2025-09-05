@@ -24,7 +24,7 @@ const MemoryBlockDetail = () => {
         lessons_learned: data.lessons_learned || '',
         external_history_link: data.external_history_link || '',
         feedback_score: data.feedback_score || 0,
-        metadata: JSON.stringify(data.metadata, null, 2) || '{}',
+        metadata: data.metadata_col ? JSON.stringify(data.metadata_col, null, 2) : '{}',
       });
       setSelectedKeywords(data.keywords ? data.keywords.map(k => k.id) : []); // Ensure keywords is an array
     } catch (err) {
@@ -73,7 +73,7 @@ const MemoryBlockDetail = () => {
       const updatedData = {
         ...formData,
         feedback_score: parseInt(formData.feedback_score, 10),
-        metadata: JSON.parse(formData.metadata),
+        metadata_col: JSON.parse(formData.metadata),
       };
       await memoryService.updateMemoryBlock(id, updatedData);
 
@@ -166,15 +166,20 @@ const MemoryBlockDetail = () => {
           </div>
           <div className="detail-item">
             <span className="detail-label">Creation Date:</span>
-            <span className="detail-value">{new Date(memoryBlock.creation_date).toLocaleString()}</span>
+            <span className="detail-value">
+              {(() => {
+                const date = memoryBlock.created_at || memoryBlock.timestamp;
+                return date ? new Date(date).toLocaleString() : 'N/A';
+              })()}
+            </span>
           </div>
           <div className="detail-item">
             <span className="detail-label">Feedback Score:</span>
-            <span className="detail-value">{memoryBlock.feedback_score}</span>
+            <span className="detail-value">{memoryBlock.feedback_score !== null && memoryBlock.feedback_score !== undefined ? memoryBlock.feedback_score : 'N/A'}</span>
           </div>
           <div className="detail-item">
             <span className="detail-label">Retrieval Count:</span>
-            <span className="detail-value">{memoryBlock.retrieval_count}</span>
+            <span className="detail-value">{memoryBlock.retrieval_count !== null && memoryBlock.retrieval_count !== undefined ? memoryBlock.retrieval_count : 'N/A'}</span>
           </div>
           <div className="detail-item">
             <span className="detail-label">Errors:</span>
@@ -190,7 +195,11 @@ const MemoryBlockDetail = () => {
           </div>
           <div className="detail-item">
             <span className="detail-label">Metadata:</span>
-            <span className="detail-value"><pre>{JSON.stringify(memoryBlock.metadata, null, 2)}</pre></span>
+            <span className="detail-value">
+              <pre>
+                {memoryBlock.metadata_col && Object.keys(memoryBlock.metadata_col).length > 0 ? JSON.stringify(memoryBlock.metadata_col, null, 2) : 'N/A'}
+              </pre>
+            </span>
           </div>
           <div className="detail-item">
             <span className="detail-label">Keywords:</span>

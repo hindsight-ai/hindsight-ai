@@ -1,9 +1,21 @@
 import notificationService from '../services/notificationService';
 
-const API_BASE_URL = process.env.REACT_APP_HINDSIGHT_SERVICE_API_URL;
+// Prefer relative proxy path to keep same-origin in all envs
+let API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
 
-if (!API_BASE_URL) {
-  throw new Error("Environment variable REACT_APP_HINDSIGHT_SERVICE_API_URL is not defined.");
+// Upgrade API scheme at runtime to avoid mixed content when app is served over HTTPS
+try {
+  if (typeof window !== 'undefined' && API_BASE_URL) {
+    const isHttps = window.location.protocol === 'https:';
+    const url = new URL(API_BASE_URL, window.location.origin);
+    if (isHttps && url.protocol === 'http:') {
+      url.protocol = 'https:';
+      // Normalize and drop trailing slash
+      API_BASE_URL = url.toString().replace(/\/$/, '');
+    }
+  }
+} catch (_) {
+  // Ignore URL parsing errors and use the env value as-is
 }
 
 const agentService = {
@@ -35,6 +47,20 @@ const agentService = {
       console.error('Failed to parse JSON response for agents:', jsonError);
       return { items: [] }; // Return empty items on JSON parsing error
     }
+  },
+
+  getAgentById: async (agentId) => {
+    const response = await fetch(`${API_BASE_URL}/agents/${agentId}`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
   },
 
   createAgent: async (data) => {
@@ -70,6 +96,25 @@ const agentService = {
     }
     if (response.status === 204) {
       return;
+    }
+    return response.json();
+  },
+
+  updateAgent: async (agentId, data) => {
+    const response = await fetch(`${API_BASE_URL}/agents/${agentId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      if (response.status === 401) {
+        notificationService.show401Error();
+        throw new Error('Authentication required');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
   },

@@ -20,6 +20,7 @@ class MemoryBlockBase(BaseModel):
     lessons_learned: Optional[str] = None
     metadata_col: Optional[Dict[str, Any]] = None
     feedback_score: Optional[int] = 0
+    retrieval_count: Optional[int] = 0  # Added missing field
     archived: Optional[bool] = False
     archived_at: Optional[datetime] = None
 
@@ -150,3 +151,43 @@ class PaginatedMemoryBlocks(BaseModel):
     items: List[MemoryBlock]
     total_items: int
     total_pages: int
+
+# Search-related schemas
+class MemoryBlockWithScore(MemoryBlock):
+    search_score: float
+    search_type: str = "basic"
+    rank_explanation: Optional[str] = None
+
+class SearchMetadata(BaseModel):
+    total_search_time_ms: Optional[float] = None
+    fulltext_results_count: Optional[int] = None
+    semantic_results_count: Optional[int] = None
+    hybrid_weights: Optional[Dict[str, float]] = None
+    query_terms: Optional[List[str]] = None
+
+class PaginatedMemoryBlocksWithSearch(BaseModel):
+    items: List[MemoryBlockWithScore]
+    total_items: int
+    total_pages: int
+    search_metadata: Optional[SearchMetadata] = None
+
+# Enhanced search request schemas
+class FulltextSearchRequest(BaseModel):
+    query: str
+    agent_id: Optional[uuid.UUID] = None
+    limit: int = 50
+    min_score: float = 0.1
+
+class SemanticSearchRequest(BaseModel):
+    query: str
+    agent_id: Optional[uuid.UUID] = None
+    limit: int = 50
+    similarity_threshold: float = 0.7
+
+class HybridSearchRequest(BaseModel):
+    query: str
+    agent_id: Optional[uuid.UUID] = None
+    limit: int = 50
+    fulltext_weight: float = 0.7
+    semantic_weight: float = 0.3
+    min_combined_score: float = 0.1

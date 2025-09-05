@@ -49,6 +49,20 @@ export interface ReportFeedbackPayload {
   comment?: string;
 }
 
+export interface AdvancedSearchPayload {
+  search_query: string;
+  search_type?: 'basic' | 'fulltext' | 'semantic' | 'hybrid';
+  agent_id?: string;
+  conversation_id?: string;
+  limit?: number;
+  min_score?: number;
+  similarity_threshold?: number;
+  fulltext_weight?: number;
+  semantic_weight?: number;
+  min_combined_score?: number;
+  include_archived?: boolean;
+}
+
 export interface GetAllMemoryBlocksResponse {
   items: MemoryBlock[];
   total_items: number;
@@ -82,8 +96,8 @@ export class MemoryServiceClient {
    * @param payload The data to create the memory block with.
    * @returns An object containing the created memory ID.
    */
-  async createMemoryBlock(payload: CreateMemoryBlockPayload): Promise<{ memory_id: string }> {
-    const response = await this.client.post<{ memory_id: string }>(
+  async createMemoryBlock(payload: CreateMemoryBlockPayload): Promise<{ id: string }> {
+    const response = await this.client.post<{ id: string }>(
       '/memory-blocks',
       payload
     );
@@ -147,6 +161,32 @@ export class MemoryServiceClient {
    */
   async retrieveRelevantMemories(payload: RetrieveMemoriesPayload): Promise<MemoryBlock[]> {
     const response = await this.client.get<MemoryBlock[]>('/memory-blocks/search', { params: payload });
+    return response.data;
+  }
+
+  /**
+   * Performs advanced search on memory blocks with support for multiple search types.
+   * @param payload The advanced search parameters.
+   * @returns An object containing search results and pagination info.
+   */
+  async advancedSearch(payload: AdvancedSearchPayload): Promise<GetAllMemoryBlocksResponse> {
+    const params: any = {
+      search_query: payload.search_query,
+      search_type: payload.search_type || 'basic',
+    };
+    
+    // Add optional parameters only if they're provided
+    if (payload.agent_id) params.agent_id = payload.agent_id;
+    if (payload.conversation_id) params.conversation_id = payload.conversation_id;
+    if (payload.limit) params.limit = payload.limit;
+    if (payload.min_score !== undefined) params.min_score = payload.min_score;
+    if (payload.similarity_threshold !== undefined) params.similarity_threshold = payload.similarity_threshold;
+    if (payload.fulltext_weight !== undefined) params.fulltext_weight = payload.fulltext_weight;
+    if (payload.semantic_weight !== undefined) params.semantic_weight = payload.semantic_weight;
+    if (payload.min_combined_score !== undefined) params.min_combined_score = payload.min_combined_score;
+    if (payload.include_archived !== undefined) params.include_archived = payload.include_archived;
+    
+    const response = await this.client.get<GetAllMemoryBlocksResponse>('/memory-blocks/', { params });
     return response.data;
   }
 

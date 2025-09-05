@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getConsolidationSuggestionById, validateConsolidationSuggestion, rejectConsolidationSuggestion } from '../api/memoryService';
 import memoryService from '../api/memoryService'; // To fetch original memory blocks
-import './MemoryBlockList.css'; // Reuse styles
 
 const ConsolidationSuggestionDetail = () => {
   const { id } = useParams();
@@ -65,7 +64,7 @@ const ConsolidationSuggestionDetail = () => {
 
   return (
     <div className="memory-block-list-container"> {/* Reusing container style */}
-      <div className="memory-block-table-container"> {/* Reusing card style */}
+      <div className="data-table-container"> {/* Reusing card style */}
         <h2>Consolidation Suggestion Details</h2>
         <div className="detail-section">
           <h3>Suggested Content</h3>

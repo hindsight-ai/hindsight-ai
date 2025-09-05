@@ -28,15 +28,24 @@ const NotificationContainer = () => {
 
   return (
     <div className="notification-container">
-      {notifications.map(notification => (
-        <Notification
+      {notifications.slice().reverse().map((notification, index) => (
+        <div
           key={notification.id}
-          message={notification.message}
-          type={notification.type}
-          duration={notification.duration}
-          onRefresh={notification.onRefresh}
-          onClose={() => handleRemoveNotification(notification.id)}
-        />
+          className="notification-wrapper"
+          style={{
+            position: 'relative',
+            zIndex: 10000 - index, // Higher z-index for newer notifications
+            marginBottom: index < notifications.length - 1 ? '10px' : '0'
+          }}
+        >
+          <Notification
+            message={notification.message}
+            type={notification.type}
+            duration={notification.duration}
+            onRefresh={notification.onRefresh}
+            onClose={() => handleRemoveNotification(notification.id)}
+          />
+        </div>
       ))}
     </div>
   );

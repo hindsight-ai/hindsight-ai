@@ -4,19 +4,20 @@ import { BulkActionBar } from './BulkActionBar';
 import { useNavigate, useLocation } from 'react-router-dom'; // Import useLocation
 import memoryService from '../api/memoryService';
 import agentService from '../api/agentService'; // Import agentService
+import notificationService from '../services/notificationService'; // Import notification service
 import MemoryBlockFilterBar from './MemoryBlockFilterBar';
 import MemoryBlockTable from './MemoryBlockTable';
 import PaginationControls from './PaginationControls';
-import './MemoryBlockList.css'; // Import the new CSS file
 
 const MemoryBlockList = () => {
   const [memoryBlocks, setMemoryBlocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [searchTerm, setSearchTerm] = useState(''); // Separate state for the search input value
   const [agentIdInput, setAgentIdInput] = useState(''); // Local state for agent ID input
   const [filters, setFilters] = useState({
-    search: '', // This will be updated by the debounced searchTerm
+    search_query: '', // This will be updated by the debounced searchTerm
     agent_id: '', // This will be updated only on explicit apply/enter
     conversation_id: '',
     feedback_score_range: [0, 100], // Default range for feedback score
@@ -24,6 +25,13 @@ const MemoryBlockList = () => {
     start_date: '',
     end_date: '',
     keywords: [],
+    // Advanced search parameters
+    search_type: 'fulltext',
+    min_score: '',
+    similarity_threshold: '',
+    fulltext_weight: '',
+    semantic_weight: '',
+    min_combined_score: '',
   });
 
   const [pagination, setPagination] = useState({
@@ -32,14 +40,17 @@ const MemoryBlockList = () => {
     total_items: 0,
     total_pages: 0,
   });
+  const [pageInputValue, setPageInputValue] = useState('1'); // Separate state for page input
   const [sort, setSort] = useState({
-    field: 'creation_date',
+    field: 'created_at',
     order: 'desc',
   });
   const [availableKeywords, setAvailableKeywords] = useState([]);
   const [selectedMemoryBlocks, setSelectedMemoryBlocks] = useState([]);
-  const [showFilters, setShowFilters] = useState(true); // State for toggling filter visibility
+  const [showFilters, setShowFilters] = useState(true); // State for toggling filter visibility - always visible for better UX
   const [availableAgentIds, setAvailableAgentIds] = useState([]); // New state for agent IDs
+  const [lastUpdated, setLastUpdated] = useState(null); // Track when data was last updated
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false); // State for advanced search toggle
 
   // Debounce logic for search term
   const debounceTimeoutRef = useRef(null);
@@ -76,6 +87,8 @@ const MemoryBlockList = () => {
         total_items: response.total_items,
         total_pages: response.total_pages,
       }));
+      // Update last updated timestamp
+      setLastUpdated(new Date());
     } catch (err) {
       // The memoryService will already show the 401 notification, so we just need to set the error for display
       setError('Failed to fetch memory blocks: ' + err.message);
@@ -109,10 +122,15 @@ const MemoryBlockList = () => {
     }
   }, []);
 
+  // Clear selections when page changes (but not when memoryBlocks change due to other reasons)
   useEffect(() => {
-    // Clear selections when memory blocks change (e.g., after fetch or delete)
     setSelectedMemoryBlocks([]);
-  }, [memoryBlocks]);
+  }, [pagination.page]);
+
+  // Keep pageInputValue in sync with pagination.page
+  useEffect(() => {
+    setPageInputValue(pagination.page.toString());
+  }, [pagination.page]);
 
   // Effect to trigger fetch when filters (excluding search), pagination, or sort change
   const location = useLocation(); // Get location object
@@ -131,6 +149,16 @@ const MemoryBlockList = () => {
     }));
   }, [location.search]);
 
+  // Listen for memory block added events
+  useEffect(() => {
+    const handleMemoryBlockAdded = () => {
+      fetchMemoryBlocks(); // Refresh the list when a new memory block is added
+    };
+
+    window.addEventListener('memoryBlockAdded', handleMemoryBlockAdded);
+    return () => window.removeEventListener('memoryBlockAdded', handleMemoryBlockAdded);
+  }, []); // Remove fetchMemoryBlocks dependency to prevent unnecessary re-addition of listeners
+
   useEffect(() => {
     // Reset memory blocks and set loading state immediately on navigation/dependency change
     setMemoryBlocks([]);
@@ -138,7 +166,7 @@ const MemoryBlockList = () => {
     fetchMemoryBlocks();
     fetchKeywords();
     fetchAgentIds(); // Fetch agent IDs
-  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchMemoryBlocks, fetchKeywords, fetchAgentIds]); // Add location.pathname and memoized functions as dependencies
+  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchKeywords, fetchAgentIds]); // Remove fetchMemoryBlocks from dependencies to prevent infinite loop
 
   // Update URL parameters when pagination state changes
   useEffect(() => {
@@ -158,7 +186,7 @@ const MemoryBlockList = () => {
     }
   }, [pagination.page, pagination.per_page, location.pathname, location.search, navigate]);
 
-  // Effect to debounce search term and update filters.search
+  // Effect to debounce search term and update filters.search_query
   useEffect(() => {
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
@@ -167,7 +195,7 @@ const MemoryBlockList = () => {
     debounceTimeoutRef.current = setTimeout(() => {
       setFilters((prevFilters) => ({
         ...prevFilters,
-        search: searchTerm,
+        search_query: searchTerm,
       }));
     }, 500); // 500ms debounce delay
 
@@ -207,14 +235,16 @@ const MemoryBlockList = () => {
 
   const handleAgentIdApply = (agentId) => {
     if (agentId === '' || isValidUUID(agentId)) {
-      setError(null); // Clear error if input is valid or empty
       setFilters((prevFilters) => ({
         ...prevFilters,
         agent_id: agentId,
       }));
       setAgentIdInput(agentId); // Ensure agentIdInput reflects the applied filter
+      if (agentId !== '') {
+        notificationService.showInfo('Agent ID filter applied');
+      }
     } else {
-      setError('Invalid Agent ID format. Please enter a valid UUID or select from suggestions.');
+      notificationService.showWarning('Invalid Agent ID format. Please enter a valid UUID or select from suggestions.');
       setFilters((prevFilters) => ({
         ...prevFilters,
         agent_id: '', // Clear filter to prevent 422 errors
@@ -267,10 +297,29 @@ const MemoryBlockList = () => {
   };
 
   const handlePageInputChange = (e) => {
-    const page = parseInt(e.target.value);
-    if (!isNaN(page) && page >= 1 && page <= pagination.total_pages) {
+    // Only update the local input value, don't trigger fetch
+    setPageInputValue(e.target.value);
+  };
+
+  const handlePageInputSubmit = () => {
+    const page = parseInt(pageInputValue);
+    const totalPages = pagination.total_pages;
+    if (!isNaN(page) && page >= 1 && page <= totalPages) {
       handlePageChange(page);
+    } else {
+      // Reset to current page if invalid
+      setPageInputValue(pagination.page.toString());
     }
+  };
+
+  const handlePageInputKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handlePageInputSubmit();
+    }
+  };
+
+  const handlePageInputBlur = () => {
+    handlePageInputSubmit();
   };
 
   const handleSelectMemoryBlock = (id) => {
@@ -293,7 +342,7 @@ const MemoryBlockList = () => {
   const handleActionChange = async (e, id) => {
     const selectedAction = e.target.value;
     // Reset the select to "Actions" after selection
-    e.target.value = ""; 
+    e.target.value = "";
 
     if (selectedAction === 'view_edit') {
       navigate(`/memory-blocks/${id}`);
@@ -302,8 +351,9 @@ const MemoryBlockList = () => {
         try {
           await memoryService.archiveMemoryBlock(id); // Use archiveMemoryBlock
           fetchMemoryBlocks(); // Refresh the list after archiving
+          notificationService.showSuccess('Memory block archived successfully');
         } catch (err) {
-          setError('Failed to archive memory block: ' + err.message);
+          notificationService.showError('Failed to archive memory block: ' + err.message);
         }
       }
     }
@@ -315,8 +365,9 @@ const MemoryBlockList = () => {
         await Promise.all(selectedMemoryBlocks.map(id => memoryService.archiveMemoryBlock(id))); // Use archiveMemoryBlock
         fetchMemoryBlocks(); // Refresh the list after archiving
         setSelectedMemoryBlocks([]); // Clear selection
+        notificationService.showSuccess(`${selectedMemoryBlocks.length} memory blocks archived successfully`);
       } catch (err) {
-        setError('Failed to archive memory blocks: ' + err.message);
+        notificationService.showError('Failed to archive memory blocks: ' + err.message);
       }
     }
   };
@@ -331,11 +382,20 @@ const MemoryBlockList = () => {
     // Placeholder for bulk export logic
   };
 
+  const handleRefreshData = async () => {
+    try {
+      await fetchMemoryBlocks();
+      notificationService.showSuccess('Data refreshed successfully');
+    } catch (err) {
+      notificationService.showError('Failed to refresh data: ' + err.message);
+    }
+  };
+
   const resetFilters = () => {
     setSearchTerm(''); // Reset search term
     setAgentIdInput(''); // Reset agent ID input
     setFilters({
-      search: '',
+      search_query: '',
       agent_id: '',
       conversation_id: '',
       feedback_score_range: [0, 100],
@@ -343,6 +403,13 @@ const MemoryBlockList = () => {
       start_date: '',
       end_date: '',
       keywords: [],
+      // Reset advanced search parameters
+      search_type: 'fulltext',
+      min_score: '',
+      similarity_threshold: '',
+      fulltext_weight: '',
+      semantic_weight: '',
+      min_combined_score: '',
     });
 
     // No need to call fetchMemoryBlocks here, as the state change will trigger it via useEffect
@@ -357,16 +424,53 @@ const MemoryBlockList = () => {
         if (key === 'retrieval_count_range') return value[0] !== 0 || value[1] !== 1000;
         return value.length > 0; // For other arrays like keywords
       }
+      // For advanced search parameters, check if they're not at default values
+      if (key === 'search_type') return value !== 'fulltext';
       return value !== '';
     });
   };
 
-  if (loading) return <p className="loading-message">Loading memory blocks...</p>;
+  const handleAdvancedFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((prevFilters) => ({
+      ...prevFilters,
+      [name]: value,
+    }));
+  };
+
+  const toggleAdvancedSearch = () => {
+    setShowAdvancedSearch(!showAdvancedSearch);
+  };
+
+  if (loading) return (
+    <div className="loading-container" data-testid="loading-indicator">
+      <div className="loading-spinner">Loading memory blocks...</div>
+    </div>
+  );
+
   // Display error message if there is one
-  if (error) return <p className="error-message">Error: {error}</p>;
+  if (error) return (
+    <div className="error-message" data-testid="error-message">
+      <p>Error: {error}</p>
+      <button
+        className="error-dismiss-btn"
+        data-testid="dismiss-error"
+        onClick={() => setError(null)}
+      >
+        Dismiss
+      </button>
+    </div>
+  );
 
   return (
     <div className="memory-block-list-container">
+      {/* Success Message */}
+      {successMessage && (
+        <div className="success-message" data-testid="success-message">
+          <p>{successMessage}</p>
+        </div>
+      )}
+
       {/* Empty State Message */}
       {!loading && !error && memoryBlocks.length === 0 && !areFiltersActive() && (
         <div className="empty-state-message">
@@ -410,6 +514,10 @@ const MemoryBlockList = () => {
             toggleFilters={toggleFilters}
             resetFilters={resetFilters}
             areFiltersActive={areFiltersActive}
+            // Advanced search props
+            onAdvancedFilterChange={handleAdvancedFilterChange}
+            showAdvancedSearch={showAdvancedSearch}
+            toggleAdvancedSearch={toggleAdvancedSearch}
           />
 
           {selectedMemoryBlocks.length > 0 && (
@@ -423,6 +531,134 @@ const MemoryBlockList = () => {
             </div>
           )}
 
+          {/* Memory Blocks Header - positioned above the table */}
+          <div className="memory-blocks-header" style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '16px 25px',
+            borderBottom: '1px solid #e0e0e0',
+            marginBottom: '0',
+            marginLeft: 'var(--content-margin)',
+            marginRight: 'var(--content-margin)',
+            width: 'var(--content-max-width)',
+            boxSizing: 'border-box',
+            minWidth: '0' // Allow flex items to shrink below their content size
+          }}>
+            {/* Total Count - Left Side */}
+            <div className="total-count" style={{
+              fontSize: '0.9em',
+              color: '#666',
+              fontWeight: '500',
+              flexShrink: 0, // Prevent shrinking
+              whiteSpace: 'nowrap'
+            }}>
+              {pagination.total_items > 0 && (
+                <span>
+                  {pagination.total_items} memory block{pagination.total_items !== 1 ? 's' : ''} found
+                </span>
+              )}
+            </div>
+
+            {/* Last Updated and Refresh - Right Side */}
+            <div className="header-actions" style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              flexShrink: 0, // Prevent shrinking
+              marginLeft: 'auto' // Push to the right
+            }}>
+              {lastUpdated && (
+                <div className="last-updated" style={{
+                  fontSize: '0.85em',
+                  color: '#666',
+                  fontWeight: '500',
+                  whiteSpace: 'nowrap'
+                }}>
+                  Last updated: {lastUpdated.toLocaleString()}
+                </div>
+              )}
+
+              <button
+                className="refresh-button"
+                data-testid="refresh-data"
+                onClick={handleRefreshData}
+                disabled={loading}
+                style={{
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  padding: '6px 12px',
+                  borderRadius: '4px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  opacity: loading ? 0.6 : 1,
+                  transition: 'background-color 0.2s ease',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
+                {loading ? (
+                  <>
+                    <span data-testid="loading-indicator" style={{
+                      display: 'inline-block',
+                      animation: 'spin 1s linear infinite'
+                    }}>⟳</span>
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <span>🔄</span>
+                    Refresh
+                  </>
+                )}
+              </button>
+
+              {/* Test buttons for feedback system - kept for development */}
+              <button
+                className="test-save-button"
+                data-testid="save-button"
+                onClick={() => notificationService.showSuccess('Item saved successfully')}
+                style={{
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  padding: '6px 10px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
+                Test Save
+              </button>
+
+              <button
+                className="test-invalid-button"
+                data-testid="invalid-action"
+                onClick={() => notificationService.showError('Invalid action performed')}
+                style={{
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  padding: '6px 10px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
+                Test Error
+              </button>
+            </div>
+          </div>
+
           <MemoryBlockTable
             memoryBlocks={memoryBlocks}
             selectedMemoryBlocks={selectedMemoryBlocks}
@@ -433,6 +669,8 @@ const MemoryBlockList = () => {
             onActionChange={handleActionChange}
             onKeywordClick={handleKeywordChange}
             navigate={navigate}
+            searchType={filters.search_type}
+            showSearchScores={filters.search_type !== 'basic' && searchTerm.length > 0}
           />
 
           <PaginationControls
@@ -440,7 +678,9 @@ const MemoryBlockList = () => {
             onPageChange={handlePageChange}
             onPerPageChange={handlePerPageChange}
             onPageInputChange={handlePageInputChange}
-            fetchMemoryBlocks={fetchMemoryBlocks}
+            pageInputValue={pageInputValue}
+            onPageInputKeyPress={handlePageInputKeyPress}
+            onPageInputBlur={handlePageInputBlur}
           />
         </div>
       )}

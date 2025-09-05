@@ -9,7 +9,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import axios, { AxiosError } from 'axios';
-import { MemoryServiceClient, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload } from './client/MemoryServiceClient';
+import { MemoryServiceClient, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload, AdvancedSearchPayload } from './client/MemoryServiceClient';
 
 // --- Configuration ---
 const MEMORY_SERVICE_BASE_URL = process.env.MEMORY_SERVICE_BASE_URL || 'http://localhost:8000'; // Default to localhost:8000
@@ -80,6 +80,24 @@ const isValidSearchAgentsPayload = (payload: any): payload is { query: string } 
     typeof payload === 'object' &&
     payload !== null &&
     typeof payload.query === 'string'
+  );
+};
+
+const isValidAdvancedSearchPayload = (payload: any): payload is AdvancedSearchPayload => {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    typeof payload.search_query === 'string' &&
+    (payload.search_type === undefined || ['basic', 'fulltext', 'semantic', 'hybrid'].includes(payload.search_type)) &&
+    (payload.agent_id === undefined || typeof payload.agent_id === 'string') &&
+    (payload.conversation_id === undefined || typeof payload.conversation_id === 'string') &&
+    (payload.limit === undefined || typeof payload.limit === 'number') &&
+    (payload.min_score === undefined || typeof payload.min_score === 'number') &&
+    (payload.similarity_threshold === undefined || typeof payload.similarity_threshold === 'number') &&
+    (payload.fulltext_weight === undefined || typeof payload.fulltext_weight === 'number') &&
+    (payload.semantic_weight === undefined || typeof payload.semantic_weight === 'number') &&
+    (payload.min_combined_score === undefined || typeof payload.min_combined_score === 'number') &&
+    (payload.include_archived === undefined || typeof payload.include_archived === 'boolean')
   );
 };
 
@@ -281,6 +299,33 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["query"],
         },
       },
+      {
+        name: "advanced_search_memories",
+        description: "Perform intelligent search on memories using full-text, semantic, or hybrid search. Use 'fulltext' for keyword-based search, 'semantic' for meaning-based search, or 'hybrid' for best of both.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            search_query: {
+              type: "string",
+              description: "The search query string (required).",
+            },
+            search_type: {
+              type: "string",
+              description: "Search method: 'fulltext' for keyword search, 'semantic' for meaning-based search, 'hybrid' for combined approach (optional, defaults to 'fulltext').",
+              enum: ["fulltext", "semantic", "hybrid"],
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of memories to retrieve (optional, default: 10).",
+            },
+            min_score: {
+              type: "number",
+              description: "Minimum relevance score (0.0-1.0). Higher values return more relevant results (optional, default: 0.1).",
+            },
+          },
+          required: ["search_query"],
+        },
+      },
     ],
   };
 });
@@ -322,7 +367,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       const result = await memoryServiceClient.createMemoryBlock(payload);
       return {
-        content: [{ type: "text", text: `Successfully created memory block with ID: ${result.memory_id}` }]
+        content: [{ type: "text", text: `Successfully created memory block with ID: ${result.id}` }]
       };
     }
 
@@ -461,6 +506,58 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const response = await axios.get(`${MEMORY_SERVICE_BASE_URL}/agents/search/?query=${encodeURIComponent(query)}`);
         return {
           content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }]
+        };
+      }
+
+      // --- advanced_search_memories ---
+      else if (toolName === "advanced_search_memories") {
+        if (!typedArgs?.search_query || typeof typedArgs.search_query !== 'string') {
+          throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for advanced_search_memories. Requires 'search_query' (string).");
+        }
+        
+        // Fill in required IDs from environment
+        const agent_id = DEFAULT_AGENT_ID;
+        const conversation_id = DEFAULT_CONVERSATION_ID;
+        
+        if (!agent_id) {
+          throw new McpError(ErrorCode.InvalidParams, "Agent ID is required for advanced_search_memories and not provided via DEFAULT_AGENT_ID environment variable.");
+        }
+        
+        const payload: AdvancedSearchPayload = {
+          search_query: typedArgs.search_query,
+          search_type: typedArgs.search_type || 'fulltext',  // Default to fulltext for more predictable results
+          agent_id: agent_id,
+          conversation_id: conversation_id,
+          limit: typedArgs.limit || 10,
+          min_score: typedArgs.min_score || 0.1,
+          // Set sensible defaults for other parameters
+          similarity_threshold: 0.7,
+          fulltext_weight: 0.7,
+          semantic_weight: 0.3,
+          min_combined_score: 0.1,
+          include_archived: false
+        };
+        
+        const response = await memoryServiceClient.advancedSearch(payload);
+        
+        // Format response for the AI - show only the most relevant fields
+        const formattedResults = response.items.map(block => ({
+          content: block.content,
+          lessons_learned: block.lessons_learned,
+          timestamp: block.timestamp,
+          feedback_score: block.feedback_score
+        }));
+        
+        return {
+          content: [{ 
+            type: "text", 
+            text: JSON.stringify({
+              results: formattedResults,
+              total_found: response.total_items,
+              search_type: payload.search_type,
+              query: payload.search_query
+            }, null, 2) 
+          }]
         };
       }
 

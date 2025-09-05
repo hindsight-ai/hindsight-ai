@@ -98,58 +98,41 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      # Public only for build-info; user-info must be protected so auth headers are present
-      - "traefik.http.routers.hindsight-service-router-public.rule=Host(`api.hindsight-ai.com`) && PathPrefix(`/build-info`)"
-      - "traefik.http.routers.hindsight-service-router-public.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-service-router-public.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-service-router-public.middlewares=cors-headers@file"
-      - "traefik.http.routers.hindsight-service-router-public.service=hindsight-service-svc@docker"
-      - "traefik.http.routers.hindsight-service-router-protected.rule=Host(`api.hindsight-ai.com`)"
-      - "traefik.http.routers.hindsight-service-router-protected.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-service-router-protected.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-service-router-protected.middlewares=cors-headers@file,oauth-middleware@file"
-      - "traefik.http.routers.hindsight-service-router-protected.service=hindsight-service-svc@docker"
-      - "traefik.http.services.hindsight-service-svc.loadbalancer.server.port=8000"
+    # No Traefik exposure; API is accessed via dashboard /api proxy
 
   hindsight-dashboard:
     image: ${HINDSIGHT_DASHBOARD_IMAGE:-hindsight-dashboard:latest}
     build:
       context: ./apps/hindsight-dashboard
       dockerfile: Dockerfile
-      args:
-        # Ensure production builds target HTTPS API by default
-        REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL:-https://api.hindsight-ai.com}
     container_name: hindsight-dashboard
-    environment:
-      # Use HTTPS API URL by default to avoid mixed content in production;
-      # override to http://localhost:8000 for local development via .env
-      REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL:-https://api.hindsight-ai.com}
+    # Frontend will call relative "/api" and Nginx will proxy to backend
     depends_on:
       - hindsight-service
     networks:
       - hindsight-ai
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.hindsight-dashboard-router.rule=Host(`dashboard.hindsight-ai.com`) && PathPrefix(`/`)"
+      - "traefik.http.routers.hindsight-dashboard-router.rule=Host(`app.hindsight-ai.com`) && PathPrefix(`/`)"
       - "traefik.http.routers.hindsight-dashboard-router.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-router.tls.certresolver=letsencrypt"
       # Protect the dashboard with OAuth2 forward auth
-      - "traefik.http.routers.hindsight-dashboard-router.middlewares=oauth-middleware@file"
+      - "traefik.http.routers.hindsight-dashboard-router.middlewares=secure-headers@file,oauth-middleware@file"
       - "traefik.http.routers.hindsight-dashboard-router.service=hindsight-dashboard-svc@docker"
       - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
       # Public router for manifest.json to prevent 401 during browser prefetch
-      - "traefik.http.routers.hindsight-dashboard-manifest.rule=Host(`dashboard.hindsight-ai.com`) && Path(`/manifest.json`)"
+      - "traefik.http.routers.hindsight-dashboard-manifest.rule=Host(`app.hindsight-ai.com`) && Path(`/manifest.json`)"
       - "traefik.http.routers.hindsight-dashboard-manifest.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-manifest.tls.certresolver=letsencrypt"
       - "traefik.http.routers.hindsight-dashboard-manifest.service=hindsight-dashboard-svc@docker"
+      - "traefik.http.routers.hindsight-dashboard-manifest.middlewares=secure-headers@file"
       - "traefik.http.routers.hindsight-dashboard-manifest.priority=1000"
       # Also allow favicon without auth to prevent browser noise
-      - "traefik.http.routers.hindsight-dashboard-favicon.rule=Host(`dashboard.hindsight-ai.com`) && Path(`/favicon.ico`)"
+      - "traefik.http.routers.hindsight-dashboard-favicon.rule=Host(`app.hindsight-ai.com`) && Path(`/favicon.ico`)"
       - "traefik.http.routers.hindsight-dashboard-favicon.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-favicon.tls.certresolver=letsencrypt"
       - "traefik.http.routers.hindsight-dashboard-favicon.service=hindsight-dashboard-svc@docker"
+      - "traefik.http.routers.hindsight-dashboard-favicon.middlewares=secure-headers@file"
       - "traefik.http.routers.hindsight-dashboard-favicon.priority=1000"
 
   hindsight-copilot-assistant:

@@ -1,4 +1,5 @@
-let API_BASE_URL = process.env.REACT_APP_HINDSIGHT_SERVICE_API_URL;
+// Prefer relative proxy path to keep same-origin in all envs
+let API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
 
 // Upgrade API scheme at runtime to avoid mixed content in prod
 try {
@@ -14,9 +15,7 @@ try {
   // Ignore URL parsing issues; fall back to provided env value
 }
 
-if (!API_BASE_URL) {
-  throw new Error("Environment variable REACT_APP_HINDSIGHT_SERVICE_API_URL is not defined.");
-}
+// When using relative '/api', this remains same-origin via Nginx proxy
 
 const authService = {
   // Get current user info from OAuth2 proxy

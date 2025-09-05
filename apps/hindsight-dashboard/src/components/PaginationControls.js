@@ -1,12 +1,13 @@
 import React from 'react';
-import './MemoryBlockList.css'; // Assuming shared styles
 
 const PaginationControls = ({
   pagination,
   onPageChange,
   onPerPageChange,
   onPageInputChange,
-  fetchMemoryBlocks // Passed from parent for onBlur
+  pageInputValue,
+  onPageInputKeyPress,
+  onPageInputBlur
 }) => {
   return (
     <div className="pagination">
@@ -50,9 +51,10 @@ const PaginationControls = ({
           Page{' '}
           <input
             type="number"
-            value={pagination.page}
+            value={pageInputValue}
             onChange={onPageInputChange}
-            onBlur={fetchMemoryBlocks}
+            onKeyPress={onPageInputKeyPress}
+            onBlur={onPageInputBlur}
             className="page-input"
             min="1"
             max={pagination.total_pages}

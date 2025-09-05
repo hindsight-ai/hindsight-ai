@@ -34,9 +34,10 @@ until docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" pg_isready
 done
 echo "PostgreSQL is up and running."
 
-# Get current Alembic revision
+# Get current Alembic revision (run inside service container so local 'uv' isn't required)
 echo "Getting current Alembic revision..."
-ALEMBIC_REVISION=$(cd "$HINDSIGHT_SERVICE_DIR" && uv run alembic current | grep -oE '[0-9a-f]{12}' | head -n 1)
+ALEMBIC_REVISION=$(docker compose $DOCKER_COMPOSE_FILES run --rm hindsight-service \
+  sh -lc "cd /app && uv run alembic current" | grep -oE '[0-9a-f]{12}' | head -n 1)
 
 if [ -z "$ALEMBIC_REVISION" ]; then
   echo "Warning: Could not determine Alembic revision. Backup will proceed without revision in filename."

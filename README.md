@@ -82,28 +82,35 @@ LLM_MODEL_NAME=gemini-1.5-flash
 ### 3. Start Services
 ```bash
 ./start_hindsight.sh
+# or with auto-rebuild on code changes
+./start_hindsight.sh --watch
 ```
 
 This will:
 - Start PostgreSQL database
-- Apply database migrations
+- Apply database migrations automatically
 - Launch backend service on http://localhost:8000
 - Launch frontend dashboard on http://localhost:3000
+- Keep frontend and backend same-origin via the dashboard's `/api` proxy
+
+Note: Database schema/data is managed via the provided backup/restore scripts.
 
 ### 4. Stop Services
 ```bash
 ./stop_hindsight.sh
 ```
 
-## ⚠️ Important Database Setup Notice
+## Database Setup
 
-⚠️ **IMPORTANT: Alembic migrations are currently broken.** ⚠️
+Migrations are applied automatically by the backend container at startup.
 
-To initialize the database, please use the provided backup file and restore script:
+You have two options to initialize your database:
 
-1. **Restore from Backup:** Run `./infra/scripts/restore_db.sh` from the project root. The script will prompt you to select a backup file, then stop the `db` container, drop and recreate `hindsight_db`, restore the selected backup, and restart the `db` container.
-
-**Note:** This is a temporary workaround while the alembic migration issues are being resolved. The provided backup contains sample data including memory blocks and consolidation suggestions to help you understand the system's capabilities.
+1. Fresh DB via migrations (default): Just start the stack with `./start_hindsight.sh`. The backend will run `alembic upgrade head` and create all tables.
+2. Load sample data (optional): Use the provided backup to prefill the DB with example data.
+   - Run: `./infra/scripts/restore_db.sh`
+   - The script stops the DB, drops and recreates `hindsight_db`, restores the selected backup, and restarts the DB.
+   - Useful for demos and exploring features.
 
 ## Local Development with Docker Compose
 
@@ -175,6 +182,12 @@ For local development, you can use Docker Compose to build and run the services 
         *   **Frontend Dashboard**: http://localhost:3000
         *   **Backend API**: http://localhost:8000
         *   **Database**: localhost:5432 (if you need direct access)
+    *   For auto-rebuild on code changes (Compose v2.21+), use:
+        ```bash
+        ./start_hindsight.sh --watch
+        # or
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml watch
+        ```
 
 3.  **Stop Services:**
     *   Press `Ctrl+C` to stop the services, or run:
@@ -196,7 +209,13 @@ For production deployment, you can use the same Docker Compose setup but include
         docker compose --profile prod -f docker-compose.yml up -d --build
         ```
     *   This will build the Docker images and start all services including Traefik for reverse proxy and OAuth2 proxy for authentication.
-    *   Services will be accessible via your configured domain names (e.g., https://dashboard.hindsight-ai.com, https://api.hindsight-ai.com).
+    *   Services will be accessible via your configured domain names (e.g., https://app.hindsight-ai.com).
+    *   The backend API is not publicly exposed; the dashboard proxies `/api` to the backend.
+        To access the API directly on the server for debugging, use SSH port-forwarding:
+        ```bash
+        ssh -L 8000:localhost:8000 <your_server>
+        curl http://localhost:8000/build-info
+        ```
 
 ### Remote Deployment
 
@@ -245,8 +264,7 @@ To use Google as an OAuth2 provider, you need to create a project in the [Google
 3.  **Create OAuth 2.0 client IDs:**
     *   Select "Web application" for the application type.
     *   Add the following authorized redirect URIs:
-        *   `https://dashboard.hindsight-ai.com/oauth2/callback`
-        *   `https://api.hindsight-ai.com/oauth2/callback`
+        *   `https://app.hindsight-ai.com/oauth2/callback`
         *   `https://traefik.hindsight-ai.com/oauth2/callback`
     *   Copy the "Client ID" and "Client secret" and add them to your GitHub secrets as `OAUTH2_PROXY_CLIENT_ID` and `OAUTH2_PROXY_CLIENT_SECRET`.
 
@@ -321,12 +339,13 @@ To start services with direct log output and hot-reloading capabilities (useful 
     The `--reload` flag enables hot-reloading, meaning the server will automatically restart when code changes are detected. Logs will be visible directly in your terminal.
 
 *   **Hindsight Dashboard (Frontend)**:
-    To start the Hindsight Dashboard (frontend) for local development, navigate to the `apps/hindsight-dashboard` directory, install dependencies if not already done (`npm install`), and then start the development server:
+    If you prefer running the Vite dev server directly with HMR, set the API base and start:
     ```bash
     cd apps/hindsight-dashboard
-    npm start
+    npm install
+    VITE_HINDSIGHT_SERVICE_API_URL=http://localhost:8000 npm run dev
     ```
-    `npm start` typically includes hot-reloading by default for React applications, and logs will be displayed in your terminal.
+    Docker-based dev is recommended since it proxies `/api` automatically. When running Vite dev directly, the env override is required.
 
 ## More Detailed Documentation
 

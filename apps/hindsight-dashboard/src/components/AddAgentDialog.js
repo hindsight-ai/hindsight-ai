@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import './AddAgentDialog.css'; // Create this CSS file later
 
 const AddAgentDialog = ({ show, onClose, onCreate, loading, error }) => {
   const [agentName, setAgentName] = useState('');

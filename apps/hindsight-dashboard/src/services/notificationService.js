@@ -96,8 +96,44 @@ class NotificationService {
       message: 'Authentication error (401). Your session may have expired. Please refresh authentication to continue.',
       duration: 30000,
       onRefresh: () => {
-        window.location.href = 'https://auth.hindsight-ai.com/oauth2/sign_in?rd=https%3A%2F%2Fdashboard.hindsight-ai.com';
+        window.location.href = 'https://auth.hindsight-ai.com/oauth2/sign_in?rd=https%3A%2F%2Fapp.hindsight-ai.com';
       }
+    });
+  }
+
+  // Show success notification
+  showSuccess(message, duration = 5000) {
+    return this.addNotification({
+      type: 'success',
+      message: message,
+      duration: duration
+    });
+  }
+
+  // Show info notification
+  showInfo(message, duration = 5000) {
+    return this.addNotification({
+      type: 'info',
+      message: message,
+      duration: duration
+    });
+  }
+
+  // Show warning notification
+  showWarning(message, duration = 7000) {
+    return this.addNotification({
+      type: 'warning',
+      message: message,
+      duration: duration
+    });
+  }
+
+  // Show error notification
+  showError(message, duration = 10000) {
+    return this.addNotification({
+      type: 'error',
+      message: message,
+      duration: duration
     });
   }
 }

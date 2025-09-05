@@ -93,9 +93,10 @@ else
   TARGET_REVISION="$ALEMBIC_REVISION"
 fi
 
-# Ensure uv is used to run alembic commands within the correct environment
-cd "$HINDSIGHT_SERVICE_DIR" || exit
-uv run alembic upgrade "$TARGET_REVISION"
+# Run Alembic migrations inside the service container to avoid requiring local 'uv'
+# This uses the compose configuration so the container has the correct env (DATABASE_URL)
+docker compose $DOCKER_COMPOSE_FILES run --rm hindsight-service \
+  sh -lc "cd /app && uv run alembic upgrade \"$TARGET_REVISION\""
 
 if [ $? -eq 0 ]; then
   echo "Alembic migrations applied successfully."
