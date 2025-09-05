@@ -25,6 +25,7 @@ services:
 
   # Add hindsight-copilot-assistant service
   hindsight-copilot-assistant:
+    profiles: ["copilot"]
     build:
       context: ./apps/hindsight-copilot-assistant
       dockerfile: Dockerfile
