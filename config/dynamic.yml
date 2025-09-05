@@ -2,6 +2,12 @@
 
 http:
   middlewares:
+    secure-headers:
+      headers:
+        forceSTSHeader: true
+        stsSeconds: 2592000   # 30 days to start
+        stsIncludeSubdomains: false
+        stsPreload: false
     oauth-middleware:
       forwardAuth:
         address: "http://oauth2-proxy:4180/oauth2/auth"

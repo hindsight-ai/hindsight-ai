@@ -35,7 +35,6 @@ origins = [
     "http://localhost:3001", # Allow your frontend to access the API
     "http://localhost:8000", # FastAPI backend
     "https://app.hindsight-ai.com",
-    "https://api.hindsight-ai.com",
 ]
 
 app.add_middleware(

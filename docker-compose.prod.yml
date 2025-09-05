@@ -86,6 +86,9 @@ services:
     container_name: hindsight-service
     networks:
       - hindsight-ai
+    # Expose API only on loopback for SSH port-forward or local access on server
+    ports:
+      - "127.0.0.1:8000:8000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/hindsight_db
       LLM_API_KEY: ${LLM_API_KEY}
@@ -95,19 +98,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.hindsight-service-router-public.rule=Host(`api.hindsight-ai.com`) && (PathPrefix(`/user-info`) || PathPrefix(`/build-info`))"
-      - "traefik.http.routers.hindsight-service-router-public.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-service-router-public.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-service-router-public.middlewares=cors-headers@file"
-      - "traefik.http.routers.hindsight-service-router-public.service=hindsight-service-svc@docker"
-      - "traefik.http.routers.hindsight-service-router-protected.rule=Host(`api.hindsight-ai.com`)"
-      - "traefik.http.routers.hindsight-service-router-protected.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-service-router-protected.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-service-router-protected.middlewares=cors-headers@file,oauth-middleware@file"
-      - "traefik.http.routers.hindsight-service-router-protected.service=hindsight-service-svc@docker"
-      - "traefik.http.services.hindsight-service-svc.loadbalancer.server.port=8000"
+    # No Traefik exposure in prod; dashboard proxies /api
 
   hindsight-dashboard:
     image: ${HINDSIGHT_DASHBOARD_IMAGE}
