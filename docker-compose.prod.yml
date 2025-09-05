@@ -80,10 +80,15 @@ services:
       - "traefik.http.routers.oauth2-proxy.tls.certresolver=letsencrypt"
       - "traefik.http.routers.oauth2-proxy.service=oauth2-svc@docker"
       - "traefik.http.services.oauth2-svc.loadbalancer.server.port=4180"
-      - "traefik.http.routers.app-oauth.rule=Host(`app.hindsight-ai.com`)"
-      - "traefik.http.routers.app-oauth.entrypoints=websecure"
-      - "traefik.http.routers.app-oauth.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.app-oauth.service=oauth2-svc@docker"
+      # Route only /oauth2 and /api to oauth2-proxy on app domain
+      - "traefik.http.routers.oauth2-path.rule=Host(`app.hindsight-ai.com`) && PathPrefix(`/oauth2`)"
+      - "traefik.http.routers.oauth2-path.entrypoints=websecure"
+      - "traefik.http.routers.oauth2-path.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.oauth2-path.service=oauth2-svc@docker"
+      - "traefik.http.routers.api-oauth.rule=Host(`app.hindsight-ai.com`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.api-oauth.entrypoints=websecure"
+      - "traefik.http.routers.api-oauth.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-oauth.service=oauth2-svc@docker"
 
   hindsight-service:
     image: ${HINDSIGHT_SERVICE_IMAGE}
@@ -114,21 +119,12 @@ services:
     networks:
       - hindsight-ai
     labels:
-      - "traefik.enable=false"
-      # Public router for manifest.json to prevent 401 during browser prefetch
-      - "traefik.http.routers.hindsight-dashboard-manifest.rule=Host(`app.hindsight-ai.com`) && Path(`/manifest.json`)"
-      - "traefik.http.routers.hindsight-dashboard-manifest.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-dashboard-manifest.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-dashboard-manifest.service=hindsight-dashboard-svc@docker"
-      - "traefik.http.routers.hindsight-dashboard-manifest.middlewares=secure-headers@file"
-      - "traefik.http.routers.hindsight-dashboard-manifest.priority=1000"
-      # Also allow favicon without auth to prevent browser noise
-      - "traefik.http.routers.hindsight-dashboard-favicon.rule=Host(`app.hindsight-ai.com`) && Path(`/favicon.ico`)"
-      - "traefik.http.routers.hindsight-dashboard-favicon.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-dashboard-favicon.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-dashboard-favicon.service=hindsight-dashboard-svc@docker"
-      - "traefik.http.routers.hindsight-dashboard-favicon.middlewares=secure-headers@file"
-      - "traefik.http.routers.hindsight-dashboard-favicon.priority=1000"
+      - "traefik.enable=true"
+      - "traefik.http.routers.hindsight-dashboard.rule=Host(`app.hindsight-ai.com`)"
+      - "traefik.http.routers.hindsight-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-dashboard.service=hindsight-dashboard-svc@docker"
+      - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
 
 networks:
   hindsight-ai:
