@@ -6,6 +6,7 @@ services:
 
   # Override the hindsight-service to expose port 8000 directly
   hindsight-service:
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
@@ -15,11 +16,20 @@ services:
       BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}
       IMAGE_TAG: ${BACKEND_IMAGE_TAG}
       VERSION: ${BACKEND_VERSION}
+    develop:
+      watch:
+        - path: ./apps/hindsight-service
+          action: rebuild
 
   # Override the hindsight-dashboard to expose port 3000 directly
   hindsight-dashboard:
+    restart: unless-stopped
     ports:
       - "3000:80"
+    develop:
+      watch:
+        - path: ./apps/hindsight-dashboard
+          action: rebuild
 
   # Add hindsight-copilot-assistant service
   hindsight-copilot-assistant:
@@ -27,9 +37,14 @@ services:
     build:
       context: ./apps/hindsight-copilot-assistant
       dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
       - "3001:3000"
     environment:
       GOOGLE_API_KEY: ${LLM_API_KEY}
     networks:
       - hindsight-ai
+    develop:
+      watch:
+        - path: ./apps/hindsight-copilot-assistant
+          action: rebuild
