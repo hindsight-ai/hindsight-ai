@@ -7,7 +7,7 @@ http:
         status:
           - "401"
         service: oauth2-svc@docker
-        query: "/oauth2/sign_in?rd=https://app.hindsight-ai.com/"
+        query: "/oauth2/sign_in?rd=/"
     secure-headers:
       headers:
         forceSTSHeader: true
