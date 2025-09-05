@@ -50,7 +50,8 @@ services:
       OAUTH2_PROXY_PROVIDER: google
       OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
       OAUTH2_PROXY_REDIRECT_URL: https://auth.hindsight-ai.com/oauth2/callback
-      OAUTH2_PROXY_UPSTREAMS: static://204
+      # Reverse-proxy mode: send authenticated traffic to the dashboard service
+      OAUTH2_PROXY_UPSTREAMS: http://hindsight-dashboard:80
       OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: true
       OAUTH2_PROXY_COOKIE_SAMESITE: none
       OAUTH2_PROXY_COOKIE_SECURE: true
@@ -61,6 +62,8 @@ services:
       OAUTH2_PROXY_SET_XAUTHREQUEST: true
       OAUTH2_PROXY_PASS_ACCESS_TOKEN: true
       OAUTH2_PROXY_SET_AUTHORIZATION_HEADER: true
+      # Allow unauthenticated access to trivial assets to avoid noisy 401s
+      OAUTH2_PROXY_SKIP_AUTH_ROUTES: /manifest.json$,/favicon.ico$
       OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID}
       OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET}
       OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET}
@@ -80,6 +83,11 @@ services:
       - "traefik.http.routers.oauth2-proxy.tls.certresolver=letsencrypt"
       - "traefik.http.routers.oauth2-proxy.service=oauth2-svc@docker"
       - "traefik.http.services.oauth2-svc.loadbalancer.server.port=4180"
+      # Route the app domain through oauth2-proxy in reverse-proxy mode
+      - "traefik.http.routers.app-oauth.rule=Host(`app.hindsight-ai.com`)"
+      - "traefik.http.routers.app-oauth.entrypoints=websecure"
+      - "traefik.http.routers.app-oauth.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.app-oauth.service=oauth2-svc@docker"
 
   hindsight-service:
     image: ${HINDSIGHT_SERVICE_IMAGE:-hindsight-service:latest}
@@ -112,28 +120,7 @@ services:
     networks:
       - hindsight-ai
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.hindsight-dashboard-router.rule=Host(`app.hindsight-ai.com`) && PathPrefix(`/`)"
-      - "traefik.http.routers.hindsight-dashboard-router.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-dashboard-router.tls.certresolver=letsencrypt"
-      # Protect the dashboard with OAuth2 forward auth
-      - "traefik.http.routers.hindsight-dashboard-router.middlewares=secure-headers@file,oauth-middleware@file,auth-errors@file"
-      - "traefik.http.routers.hindsight-dashboard-router.service=hindsight-dashboard-svc@docker"
-      - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
-      # Public router for manifest.json to prevent 401 during browser prefetch
-      - "traefik.http.routers.hindsight-dashboard-manifest.rule=Host(`app.hindsight-ai.com`) && Path(`/manifest.json`)"
-      - "traefik.http.routers.hindsight-dashboard-manifest.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-dashboard-manifest.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-dashboard-manifest.service=hindsight-dashboard-svc@docker"
-      - "traefik.http.routers.hindsight-dashboard-manifest.middlewares=secure-headers@file"
-      - "traefik.http.routers.hindsight-dashboard-manifest.priority=1000"
-      # Also allow favicon without auth to prevent browser noise
-      - "traefik.http.routers.hindsight-dashboard-favicon.rule=Host(`app.hindsight-ai.com`) && Path(`/favicon.ico`)"
-      - "traefik.http.routers.hindsight-dashboard-favicon.entrypoints=websecure"
-      - "traefik.http.routers.hindsight-dashboard-favicon.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-dashboard-favicon.service=hindsight-dashboard-svc@docker"
-      - "traefik.http.routers.hindsight-dashboard-favicon.middlewares=secure-headers@file"
-      - "traefik.http.routers.hindsight-dashboard-favicon.priority=1000"
+      - "traefik.enable=false"
 
   hindsight-copilot-assistant:
     profiles: ["copilot"]
