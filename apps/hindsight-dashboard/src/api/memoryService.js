@@ -1,6 +1,7 @@
 import notificationService from '../services/notificationService';
 
-let API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL;
+// Prefer relative proxy path to keep same-origin in all envs
+let API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
 
 // Upgrade API scheme at runtime to avoid mixed content when app is served over HTTPS
 try {
@@ -16,9 +17,7 @@ try {
   // Ignore URL parsing errors and use the env value as-is
 }
 
-if (!API_BASE_URL) {
-  throw new Error("Environment variable VITE_HINDSIGHT_SERVICE_API_URL is not defined.");
-}
+// When using relative '/api', this remains same-origin via Nginx proxy
 
 const memoryService = {
   // Memory Blocks

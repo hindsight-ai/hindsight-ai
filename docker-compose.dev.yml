@@ -20,10 +20,6 @@ services:
   hindsight-dashboard:
     ports:
       - "3000:80"
-    build:
-      args:
-        # Point the dashboard to the backend via host (browser resolves localhost)
-        VITE_HINDSIGHT_SERVICE_API_URL: http://localhost:8000
 
   # Add hindsight-copilot-assistant service
   hindsight-copilot-assistant:

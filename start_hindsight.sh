@@ -54,8 +54,12 @@ export VITE_BUILD_SHA="$BUILD_SHA"
 export VITE_BUILD_TIMESTAMP="$BUILD_TIMESTAMP"
 export VITE_DASHBOARD_IMAGE_TAG="hindsight-dashboard:local"
 
-# Default API URL (can be overridden in .env)
-export VITE_HINDSIGHT_SERVICE_API_URL=${VITE_HINDSIGHT_SERVICE_API_URL:-http://localhost:8000}
+# Default to relative proxy (unset var so frontend uses '/api')
+if [ -n "${VITE_HINDSIGHT_SERVICE_API_URL}" ]; then
+  export VITE_HINDSIGHT_SERVICE_API_URL
+else
+  unset VITE_HINDSIGHT_SERVICE_API_URL
+fi
 
 # Start all services using Docker Compose with development profile
 echo "Building and starting services..."
