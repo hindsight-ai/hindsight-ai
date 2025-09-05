@@ -12,9 +12,20 @@ http:
           - "X-Auth-Request-Access-Token"
     cors-headers:
       headers:
-        customResponseHeaders:
-          Access-Control-Allow-Origin: "*"
-          Access-Control-Allow-Methods: "GET, POST, PUT, DELETE, OPTIONS"
-          Access-Control-Allow-Headers: "Content-Type, Authorization"
-          Access-Control-Allow-Credentials: "true"
-        addVaryHeader: true # Re-add addVaryHeader for good measure
+        # Use Traefik's built-in CORS fields instead of wildcard headers.
+        accessControlAllowOriginList:
+          - "https://dashboard.hindsight-ai.com"
+          - "http://localhost:3000"
+          - "http://localhost:3001"
+          - "http://localhost"
+        accessControlAllowMethods:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "DELETE"
+          - "OPTIONS"
+        accessControlAllowHeaders:
+          - "Content-Type"
+          - "Authorization"
+        accessControlAllowCredentials: true
+        addVaryHeader: true
