@@ -36,9 +36,6 @@ const UserAccountButton = () => {
         <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
           {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
         </div>
-        <span className="text-sm text-gray-700 hidden md:block">
-          {user.email || user.user}
-        </span>
         <svg
           className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`}
           fill="none"
