@@ -126,7 +126,7 @@ services:
       - hindsight-ai
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.hindsight-dashboard-router.rule=Host(`dashboard.hindsight-ai.com`) && PathPrefix(`/`)"
+      - "traefik.http.routers.hindsight-dashboard-router.rule=(Host(`hindsight-ai.com`) || Host(`dashboard.hindsight-ai.com`)) && PathPrefix(`/`)"
       - "traefik.http.routers.hindsight-dashboard-router.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-router.tls.certresolver=letsencrypt"
       # Protect the dashboard with OAuth2 forward auth
@@ -134,13 +134,13 @@ services:
       - "traefik.http.routers.hindsight-dashboard-router.service=hindsight-dashboard-svc@docker"
       - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
       # Public router for manifest.json to prevent 401 during browser prefetch
-      - "traefik.http.routers.hindsight-dashboard-manifest.rule=Host(`dashboard.hindsight-ai.com`) && Path(`/manifest.json`)"
+      - "traefik.http.routers.hindsight-dashboard-manifest.rule=(Host(`hindsight-ai.com`) || Host(`dashboard.hindsight-ai.com`)) && Path(`/manifest.json`)"
       - "traefik.http.routers.hindsight-dashboard-manifest.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-manifest.tls.certresolver=letsencrypt"
       - "traefik.http.routers.hindsight-dashboard-manifest.service=hindsight-dashboard-svc@docker"
       - "traefik.http.routers.hindsight-dashboard-manifest.priority=1000"
       # Also allow favicon without auth to prevent browser noise
-      - "traefik.http.routers.hindsight-dashboard-favicon.rule=Host(`dashboard.hindsight-ai.com`) && Path(`/favicon.ico`)"
+      - "traefik.http.routers.hindsight-dashboard-favicon.rule=(Host(`hindsight-ai.com`) || Host(`dashboard.hindsight-ai.com`)) && Path(`/favicon.ico`)"
       - "traefik.http.routers.hindsight-dashboard-favicon.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-favicon.tls.certresolver=letsencrypt"
       - "traefik.http.routers.hindsight-dashboard-favicon.service=hindsight-dashboard-svc@docker"
