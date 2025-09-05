@@ -18,44 +18,16 @@ import PruningSuggestions from './components/PruningSuggestions';
 import MemoryOptimizationCenter from './components/MemoryOptimizationCenter';
 import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
-
-// Services
-import authService from './api/authService';
+import { AuthProvider } from './context/AuthContext';
 
 function AppContent() {
   const location = useLocation();
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [showAboutModal, setShowAboutModal] = useState(false);
 
   useEffect(() => {
-    fetchUserInfo();
     // Set document title
     document.title = 'Hindsight-AI';
   }, []);
-
-  const fetchUserInfo = async () => {
-    try {
-      const userInfo = await authService.getCurrentUser();
-      setUser(userInfo);
-    } catch (error) {
-      console.error('Error fetching user info:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Authentication check (commented out as in original)
   // if (!user || !user.authenticated) {
@@ -126,7 +98,9 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </Router>
   );
 }
