@@ -136,6 +136,7 @@ services:
       - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
 
   hindsight-copilot-assistant:
+    profiles: ["copilot"]
     image: ${HINDSIGHT_COPILOT_ASSISTANT_IMAGE:-hindsight-copilot-assistant:latest}
     build:
       context: ./apps/hindsight-copilot-assistant

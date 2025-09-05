@@ -5,6 +5,18 @@ set -e
 echo "Starting Hindsight AI services for local development..."
 echo "Using Docker Compose with development profile..."
 
+# Ensure .env exists for docker compose variable interpolation
+if [ ! -f .env ]; then
+    echo ".env not found. Creating it from .env.example..."
+    if [ -f .env.example ]; then
+        cp .env.example .env
+        echo "Created .env from .env.example. Update values as needed (e.g., LLM_API_KEY)."
+    else
+        echo "ERROR: .env.example is missing. Cannot create .env."
+        exit 1
+    fi
+fi
+
 # Check if services are already running
 if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps | grep -q "Up"; then
     echo "Hindsight AI services are already running."
@@ -54,9 +66,15 @@ if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps | grep -q "
     echo ""
     echo "Services are accessible at:"
     echo "  🌐 Frontend Dashboard: http://localhost:3000"
-    echo "  🤖 Copilot Assistant: http://localhost:3001"
     echo "  🔧 Backend API: http://localhost:8000"
     echo "  🗄️  Database: localhost:5432"
+    echo ""
+    # Show Copilot Assistant URL only if service is running
+    if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps 2>/dev/null | grep -q "hindsight-copilot-assistant"; then
+        if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps | grep "hindsight-copilot-assistant" | grep -q "Up"; then
+            echo "  🤖 Copilot Assistant: http://localhost:3001"
+        fi
+    fi
     echo ""
     echo "To view logs: docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f"
     echo "To stop services: ./stop_hindsight.sh"
