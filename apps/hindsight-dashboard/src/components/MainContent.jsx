@@ -32,6 +32,7 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
     <main className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
       sidebarCollapsed ? 'lg:p-4' : 'lg:p-4'
     }`}>
+      <div className="max-w-screen-xl mx-auto w-full flex flex-col h-full">
       {/* Header */}
       <header className="p-4">
         <div className="flex items-center justify-between gap-3">
@@ -85,6 +86,7 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
         >
           {children}
         </div>
+      </div>
       </div>
     </main>
   );
