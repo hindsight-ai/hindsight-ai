@@ -78,7 +78,7 @@ services:
       - "traefik.http.routers.oauth2-proxy.rule=(Host(`auth.hindsight-ai.com`)) && PathPrefix(`/oauth2`)"
       - "traefik.http.routers.oauth2-proxy.entrypoints=websecure"
       - "traefik.http.routers.oauth2-proxy.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.oauth2-proxy-router.service=oauth2-svc@docker"
+      - "traefik.http.routers.oauth2-proxy.service=oauth2-svc@docker"
       - "traefik.http.services.oauth2-svc.loadbalancer.server.port=4180"
 
   hindsight-service:
@@ -114,9 +114,23 @@ services:
       - "traefik.http.routers.hindsight-dashboard-router.rule=Host(`app.hindsight-ai.com`) && PathPrefix(`/`)"
       - "traefik.http.routers.hindsight-dashboard-router.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-router.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.hindsight-dashboard-router.middlewares=cors-headers@file,oauth-middleware@file"
+      - "traefik.http.routers.hindsight-dashboard-router.middlewares=secure-headers@file,oauth-middleware@file,auth-errors@file"
       - "traefik.http.routers.hindsight-dashboard-router.service=hindsight-dashboard-svc@docker"
       - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
+      # Public router for manifest.json to prevent 401 during browser prefetch
+      - "traefik.http.routers.hindsight-dashboard-manifest.rule=Host(`app.hindsight-ai.com`) && Path(`/manifest.json`)"
+      - "traefik.http.routers.hindsight-dashboard-manifest.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-dashboard-manifest.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-dashboard-manifest.service=hindsight-dashboard-svc@docker"
+      - "traefik.http.routers.hindsight-dashboard-manifest.middlewares=secure-headers@file"
+      - "traefik.http.routers.hindsight-dashboard-manifest.priority=1000"
+      # Also allow favicon without auth to prevent browser noise
+      - "traefik.http.routers.hindsight-dashboard-favicon.rule=Host(`app.hindsight-ai.com`) && Path(`/favicon.ico`)"
+      - "traefik.http.routers.hindsight-dashboard-favicon.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-dashboard-favicon.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-dashboard-favicon.service=hindsight-dashboard-svc@docker"
+      - "traefik.http.routers.hindsight-dashboard-favicon.middlewares=secure-headers@file"
+      - "traefik.http.routers.hindsight-dashboard-favicon.priority=1000"
 
 networks:
   hindsight-ai:

@@ -2,6 +2,12 @@
 
 http:
   middlewares:
+    auth-errors:
+      errors:
+        status:
+          - "401"
+        service: oauth2-svc@docker
+        query: "/oauth2/sign_in?rd=https://app.hindsight-ai.com/"
     secure-headers:
       headers:
         forceSTSHeader: true
