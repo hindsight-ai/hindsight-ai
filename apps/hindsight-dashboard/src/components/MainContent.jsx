@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import UserAccountButton from './UserAccountButton';
 import { useAuth } from '../context/AuthContext';
+import { useLocation } from 'react-router-dom';
 
 const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
   const { guest } = useAuth();
+  const location = useLocation();
+  const scrollRef = useRef(null);
 
   // UI scale control
   const [scale, setScale] = useState(1);
@@ -23,6 +26,15 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
       }
     } catch {}
   }, []);
+
+  // Scroll to top on route change
+  useEffect(() => {
+    if (scrollRef.current) {
+      try { scrollRef.current.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch { scrollRef.current.scrollTop = 0; }
+    } else {
+      try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch { /* noop */ }
+    }
+  }, [location.pathname, location.search]);
   const updateScale = (val) => {
     setScale(val);
     try { localStorage.setItem('UI_SCALE', String(val)); } catch {}
@@ -80,7 +92,7 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
       </header>
 
       {/* Scaled content wrapper with horizontal scroll on small screens */}
-      <div className="flex-1 overflow-auto p-4">
+      <div ref={scrollRef} className="flex-1 overflow-auto p-4">
         <div className="max-w-[1200px] w-full">
           <div
             className="transform-gpu origin-top-left"

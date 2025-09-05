@@ -33,7 +33,7 @@ function AppContent() {
   // Block UI until auth status known
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8">
         <div className="text-gray-600">Loading…</div>
       </div>
     );
@@ -50,7 +50,7 @@ function AppContent() {
     };
 
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-800 mb-4">AI Agent Memory Dashboard</h1>
           <div className="bg-white p-8 rounded-lg shadow-md max-w-md space-y-4">
