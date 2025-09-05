@@ -119,13 +119,13 @@ services:
       context: ./apps/hindsight-dashboard
       dockerfile: Dockerfile
       args:
-        # Ensure production builds target HTTPS API by default
-        REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL:-https://api.hindsight-ai.com}
+        # Ensure production builds target HTTPS API by default (Vite env)
+        VITE_HINDSIGHT_SERVICE_API_URL: ${VITE_HINDSIGHT_SERVICE_API_URL:-https://api.hindsight-ai.com}
     container_name: hindsight-dashboard
     environment:
       # Use HTTPS API URL by default to avoid mixed content in production;
       # override to http://localhost:8000 for local development via .env
-      REACT_APP_HINDSIGHT_SERVICE_API_URL: ${REACT_APP_HINDSIGHT_SERVICE_API_URL:-https://api.hindsight-ai.com}
+      VITE_HINDSIGHT_SERVICE_API_URL: ${VITE_HINDSIGHT_SERVICE_API_URL:-https://api.hindsight-ai.com}
     depends_on:
       - hindsight-service
     networks:

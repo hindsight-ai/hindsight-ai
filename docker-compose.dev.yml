@@ -8,9 +8,7 @@ services:
   hindsight-service:
     ports:
       - "8000:8000"
-    # Ensure the API URL for the dashboard points to localhost:8000
     environment:
-      REACT_APP_HINDSIGHT_SERVICE_API_URL: http://hindsight-service:8000
       DATABASE_URL: postgresql://user:password@db:5432/hindsight_db
       DEV_MODE: "true"
       BUILD_SHA: ${BACKEND_BUILD_SHA}
@@ -22,6 +20,10 @@ services:
   hindsight-dashboard:
     ports:
       - "3000:80"
+    build:
+      args:
+        # Point the dashboard to the backend service in dev
+        VITE_HINDSIGHT_SERVICE_API_URL: http://hindsight-service:8000
 
   # Add hindsight-copilot-assistant service
   hindsight-copilot-assistant:

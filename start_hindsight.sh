@@ -43,10 +43,19 @@ export BUILD_TIMESTAMP
 export BACKEND_IMAGE_TAG="hindsight-service:local"
 export FRONTEND_IMAGE_TAG="hindsight-dashboard:local"
 export BACKEND_VERSION
+# Export both legacy CRA and Vite-style variables for compatibility
 export REACT_APP_VERSION="$FRONTEND_VERSION"
 export REACT_APP_BUILD_SHA="$BUILD_SHA"
 export REACT_APP_BUILD_TIMESTAMP="$BUILD_TIMESTAMP"
 export REACT_APP_DASHBOARD_IMAGE_TAG="hindsight-dashboard:local"
+
+export VITE_VERSION="$FRONTEND_VERSION"
+export VITE_BUILD_SHA="$BUILD_SHA"
+export VITE_BUILD_TIMESTAMP="$BUILD_TIMESTAMP"
+export VITE_DASHBOARD_IMAGE_TAG="hindsight-dashboard:local"
+
+# Default API URL (can be overridden in .env)
+export VITE_HINDSIGHT_SERVICE_API_URL=${VITE_HINDSIGHT_SERVICE_API_URL:-http://localhost:8000}
 
 # Start all services using Docker Compose with development profile
 echo "Building and starting services..."
