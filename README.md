@@ -196,7 +196,7 @@ For production deployment, you can use the same Docker Compose setup but include
         docker compose --profile prod -f docker-compose.yml up -d --build
         ```
     *   This will build the Docker images and start all services including Traefik for reverse proxy and OAuth2 proxy for authentication.
-    *   Services will be accessible via your configured domain names (e.g., https://dashboard.hindsight-ai.com, https://api.hindsight-ai.com).
+    *   Services will be accessible via your configured domain names (e.g., https://app.hindsight-ai.com, https://api.hindsight-ai.com).
 
 ### Remote Deployment
 
@@ -245,7 +245,7 @@ To use Google as an OAuth2 provider, you need to create a project in the [Google
 3.  **Create OAuth 2.0 client IDs:**
     *   Select "Web application" for the application type.
     *   Add the following authorized redirect URIs:
-        *   `https://dashboard.hindsight-ai.com/oauth2/callback`
+        *   `https://app.hindsight-ai.com/oauth2/callback`
         *   `https://api.hindsight-ai.com/oauth2/callback`
         *   `https://traefik.hindsight-ai.com/oauth2/callback`
     *   Copy the "Client ID" and "Client secret" and add them to your GitHub secrets as `OAUTH2_PROXY_CLIENT_ID` and `OAUTH2_PROXY_CLIENT_SECRET`.

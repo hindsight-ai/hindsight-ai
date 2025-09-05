@@ -120,7 +120,7 @@ services:
       - hindsight-ai
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.hindsight-dashboard-router.rule=Host(`dashboard.hindsight-ai.com`) && PathPrefix(`/`)"
+      - "traefik.http.routers.hindsight-dashboard-router.rule=Host(`app.hindsight-ai.com`) && PathPrefix(`/`)"
       - "traefik.http.routers.hindsight-dashboard-router.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard-router.tls.certresolver=letsencrypt"
       - "traefik.http.routers.hindsight-dashboard-router.middlewares=cors-headers@file,oauth-middleware@file"

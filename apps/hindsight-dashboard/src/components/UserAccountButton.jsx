@@ -23,7 +23,7 @@ const UserAccountButton = () => {
 
   const handleLogout = () => {
     // Redirect to logout URL or handle logout logic
-    window.location.href = 'https://auth.hindsight-ai.com/oauth2/sign_out?rd=https%3A%2F%2Fdashboard.hindsight-ai.com';
+    window.location.href = 'https://auth.hindsight-ai.com/oauth2/sign_out?rd=https%3A%2F%2Fapp.hindsight-ai.com';
   };
 
   if (loading) {
@@ -35,7 +35,7 @@ const UserAccountButton = () => {
   if (!user || !user.authenticated) {
     return (
       <button
-        onClick={() => window.location.href = 'https://auth.hindsight-ai.com/oauth2/sign_in?rd=https%3A%2F%2Fdashboard.hindsight-ai.com'}
+        onClick={() => window.location.href = 'https://auth.hindsight-ai.com/oauth2/sign_in?rd=https%3A%2F%2Fapp.hindsight-ai.com'}
         className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition duration-200"
       >
         Sign In

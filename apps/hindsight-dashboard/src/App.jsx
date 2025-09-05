@@ -68,7 +68,7 @@ function AppContent() {
   //           <p className="text-gray-600 mb-6">Please sign in to access the AI Agent Memory Dashboard.</p>
   //           <button
   //             className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition duration-200"
-  //             onClick={() => window.location.href = 'https://auth.hindsight-ai.com/oauth2/sign_in?rd=https%3A%2F%2Fdashboard.hindsight-ai.com'}
+  //             onClick={() => window.location.href = 'https://auth.hindsight-ai.com/oauth2/sign_in?rd=https%3A%2F%2Fapp.hindsight-ai.com'}
   //           >
   //             Sign In
   //           </button>
