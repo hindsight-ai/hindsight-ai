@@ -18,16 +18,52 @@ import PruningSuggestions from './components/PruningSuggestions';
 import MemoryOptimizationCenter from './components/MemoryOptimizationCenter';
 import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 function AppContent() {
   const location = useLocation();
+  const { user, loading } = useAuth();
   const [showAboutModal, setShowAboutModal] = useState(false);
 
   useEffect(() => {
     // Set document title
     document.title = 'Hindsight-AI';
   }, []);
+
+  // Block UI until auth status known
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-gray-600">Loading…</div>
+      </div>
+    );
+  }
+
+  // Enforce authentication: show only login page when unauthenticated
+  if (!user || !user.authenticated) {
+    const handleSignIn = () => {
+      const rd = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
+      window.location.href = `/oauth2/sign_in?rd=${rd}`;
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-800 mb-4">AI Agent Memory Dashboard</h1>
+          <div className="bg-white p-8 rounded-lg shadow-md max-w-md">
+            <h2 className="text-xl font-semibold mb-4">Authentication Required</h2>
+            <p className="text-gray-600 mb-6">Please sign in to access the AI Agent Memory Dashboard.</p>
+            <button
+              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition duration-200"
+              onClick={handleSignIn}
+            >
+              Sign In
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Get page title based on current route
   const getPageTitle = (pathname) => {
