@@ -29,12 +29,12 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
   };
 
   return (
-    <main className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
+    <main className={`flex-1 flex flex-col overflow-hidden bg-gray-50 transition-all duration-300 ease-in-out ${
       sidebarCollapsed ? 'lg:p-4' : 'lg:p-4'
     }`}>
-      <div className="max-w-screen-xl mx-auto w-full flex flex-col h-full">
       {/* Header */}
       <header className="p-4">
+        <div className="max-w-[1200px] w-full">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {/* Mobile Hamburger */}
@@ -76,17 +76,19 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
             : `Manage your ${title.toLowerCase()}`
           }
         </p>
+        </div>
       </header>
 
       {/* Scaled content wrapper with horizontal scroll on small screens */}
       <div className="flex-1 overflow-auto p-4">
-        <div
-          className="transform-gpu origin-top-left"
-          style={{ transform: `scale(${scale})`, width: `${100 / scale}%` }}
-        >
-          {children}
+        <div className="max-w-[1200px] w-full">
+          <div
+            className="transform-gpu origin-top-left"
+            style={{ transform: `scale(${scale})`, width: '100%' }}
+          >
+            {children}
+          </div>
         </div>
-      </div>
       </div>
     </main>
   );
