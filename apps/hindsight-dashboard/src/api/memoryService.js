@@ -1,5 +1,9 @@
 import notificationService from '../services/notificationService';
 
+const isGuest = () => {
+  try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; }
+};
+
 // Prefer relative proxy path to keep same-origin in all envs
 let API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
 
@@ -58,6 +62,7 @@ const memoryService = {
   },
 
   updateMemoryBlock: async (id, data) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to edit memory blocks.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}`, {
       method: 'PUT',
       headers: {
@@ -77,6 +82,7 @@ const memoryService = {
   },
 
   archiveMemoryBlock: async (id) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to archive memory blocks.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}/archive`, {
       method: 'POST',
       credentials: 'include'
@@ -92,6 +98,7 @@ const memoryService = {
   },
 
   deleteMemoryBlock: async (id) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to delete memory blocks.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${id}/hard-delete`, { // Assuming a new hard-delete endpoint
       method: 'DELETE',
       credentials: 'include'
@@ -147,6 +154,7 @@ const memoryService = {
   },
 
   createKeyword: async (data) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to create keywords.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/keywords`, {
       method: 'POST',
       headers: {
@@ -166,6 +174,7 @@ const memoryService = {
   },
 
   updateKeyword: async (id, data) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to update keywords.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/keywords/${id}`, {
       method: 'PUT',
       headers: {
@@ -185,6 +194,7 @@ const memoryService = {
   },
 
   deleteKeyword: async (id) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to delete keywords.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/keywords/${id}`, {
       method: 'DELETE',
       credentials: 'include'
@@ -233,6 +243,7 @@ const memoryService = {
 
   // Memory Block Keywords Association
   addKeywordToMemoryBlock: async (memoryBlockId, keywordId) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to add keywords.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/keywords/${keywordId}`, {
       method: 'POST',
       credentials: 'include'
@@ -248,6 +259,7 @@ const memoryService = {
   },
 
   removeKeywordFromMemoryBlock: async (memoryBlockId, keywordId) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to remove keywords.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/keywords/${keywordId}`, {
       method: 'DELETE',
       credentials: 'include'
@@ -304,6 +316,7 @@ const memoryService = {
   },
 
   validateConsolidationSuggestion: async (id) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to validate suggestions.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}/validate/`, {
       method: 'POST',
       headers: {
@@ -322,6 +335,7 @@ const memoryService = {
   },
 
   rejectConsolidationSuggestion: async (id) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to reject suggestions.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}/reject/`, {
       method: 'POST',
       headers: {
@@ -339,6 +353,7 @@ const memoryService = {
     return response.json();
   },
   triggerConsolidation: async () => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to trigger consolidation.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/consolidation/trigger/`, {
       method: 'POST',
       headers: {
@@ -357,6 +372,7 @@ const memoryService = {
   },
 
   deleteConsolidationSuggestion: async (id) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to delete suggestions.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`, {
       method: 'DELETE',
       credentials: 'include'
@@ -445,6 +461,7 @@ const memoryService = {
 
   // Suggest Keywords for Memory Block
   suggestKeywords: async (memoryBlockId) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to generate keyword suggestions.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/suggest-keywords`, {
       method: 'POST',
       headers: {
@@ -464,6 +481,7 @@ const memoryService = {
 
   // Compress Memory Block
   compressMemoryBlock: async (memoryBlockId, userInstructions = {}) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to compress memory blocks.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/compress`, {
       method: 'POST',
       headers: {
@@ -484,6 +502,7 @@ const memoryService = {
 
   // Apply Memory Compression
   applyMemoryCompression: async (memoryBlockId, compressionData) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to apply compression.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/compress/apply`, {
       method: 'POST',
       headers: {
@@ -527,6 +546,7 @@ const memoryService = {
   },
 
   executeOptimizationSuggestion: async (suggestionId, signal) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to execute optimization suggestions.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-optimization/suggestions/${suggestionId}/execute`, {
       method: 'POST',
       credentials: 'include',
@@ -557,6 +577,7 @@ const memoryService = {
   },
 
   bulkCompactMemoryBlocks: async (memoryBlockIds, userInstructions = '', maxConcurrent = 4, signal) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to bulk compact.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/bulk-compact`, {
       method: 'POST',
       headers: {
@@ -581,6 +602,7 @@ const memoryService = {
   },
 
   bulkGenerateKeywords: async (memoryBlockIds, signal) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to bulk generate keywords.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/bulk-generate-keywords`, {
       method: 'POST',
       headers: {
@@ -601,6 +623,7 @@ const memoryService = {
   },
 
   bulkApplyKeywords: async (applications, signal) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to bulk apply keywords.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/bulk-apply-keywords`, {
       method: 'POST',
       headers: {
@@ -621,6 +644,7 @@ const memoryService = {
   },
 
   mergeMemoryBlocks: async (memoryBlockIds, mergedContent) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to merge memory blocks.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/memory-blocks/merge`, {
       method: 'POST',
       headers: {

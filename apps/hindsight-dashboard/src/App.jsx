@@ -22,7 +22,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 function AppContent() {
   const location = useLocation();
-  const { user, loading } = useAuth();
+  const { user, loading, guest, enterGuestMode } = useAuth();
   const [showAboutModal, setShowAboutModal] = useState(false);
 
   useEffect(() => {
@@ -39,26 +39,37 @@ function AppContent() {
     );
   }
 
-  // Enforce authentication: show only login page when unauthenticated
-  if (!user || !user.authenticated) {
+  // Enforce authentication unless guest mode is enabled
+  if (!guest && (!user || !user.authenticated))) {
     const handleSignIn = () => {
       const rd = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
       window.location.href = `/oauth2/sign_in?rd=${rd}`;
+    };
+    const handleGuest = () => {
+      enterGuestMode();
     };
 
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-800 mb-4">AI Agent Memory Dashboard</h1>
-          <div className="bg-white p-8 rounded-lg shadow-md max-w-md">
-            <h2 className="text-xl font-semibold mb-4">Authentication Required</h2>
-            <p className="text-gray-600 mb-6">Please sign in to access the AI Agent Memory Dashboard.</p>
-            <button
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition duration-200"
-              onClick={handleSignIn}
-            >
-              Sign In
-            </button>
+          <div className="bg-white p-8 rounded-lg shadow-md max-w-md space-y-4">
+            <h2 className="text-xl font-semibold">Authentication Required</h2>
+            <p className="text-gray-600">Sign in to access your data, or explore a read-only guest tour.</p>
+            <div className="flex gap-3 justify-center">
+              <button
+                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition duration-200"
+                onClick={handleSignIn}
+              >
+                Sign In
+              </button>
+              <button
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-2 rounded-lg transition duration-200 border"
+                onClick={handleGuest}
+              >
+                Explore as Guest
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -1,5 +1,9 @@
 import notificationService from '../services/notificationService';
 
+const isGuest = () => {
+  try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; }
+};
+
 // Prefer relative proxy path to keep same-origin in all envs
 let API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
 
@@ -64,6 +68,7 @@ const agentService = {
   },
 
   createAgent: async (data) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to create agents.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/agents/`, {
       method: 'POST',
       headers: {
@@ -83,6 +88,7 @@ const agentService = {
   },
 
   deleteAgent: async (agentId) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to delete agents.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/agents/${agentId}`, {
       method: 'DELETE',
       credentials: 'include'
@@ -101,6 +107,7 @@ const agentService = {
   },
 
   updateAgent: async (agentId, data) => {
+    if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to update agents.'); throw new Error('Guest mode read-only'); }
     const response = await fetch(`${API_BASE_URL}/agents/${agentId}`, {
       method: 'PUT',
       headers: {

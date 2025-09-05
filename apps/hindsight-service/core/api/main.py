@@ -1,6 +1,8 @@
 import logging # Moved to top
 import os
 from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -44,6 +46,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global middleware: enforce read-only access for unauthenticated requests
+@app.middleware("http")
+async def enforce_readonly_for_guests(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        h = request.headers
+        user_present = (
+            h.get("x-auth-request-user")
+            or h.get("x-auth-request-email")
+            or h.get("x-forwarded-user")
+            or h.get("x-forwarded-email")
+        )
+        if not user_present:
+            return JSONResponse(
+                {"detail": "Guest mode is read-only. Sign in to perform changes."},
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+    return await call_next(request)
 
 router = APIRouter()
 
