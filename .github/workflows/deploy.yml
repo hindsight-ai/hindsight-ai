@@ -2,11 +2,11 @@ name: Deploy Hindsight AI with Docker Compose
 
 on:
   push:
-    branches: [ main, feat/docker-compose-deployment ]
+    branches: [ main, staging ]
   workflow_dispatch:
     inputs:
       recreate_acme_json:
-        description: 'Recreate acme.json for Let''s Encrypt'
+        description: "Recreate acme.json for Let's Encrypt"
         required: true
         type: boolean
         default: false
@@ -14,6 +14,8 @@ on:
 jobs:
   build-and-push-hindsight-service:
     runs-on: ubuntu-latest
+    # Select environment based on branch so we can use env-scoped secrets
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
     permissions:
       contents: read
       packages: write
@@ -49,7 +51,8 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/hindsight-service:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/hindsight-service:latest
+            ${{ github.ref == 'refs/heads/main' && format('ghcr.io/{0}/hindsight-service:latest', github.repository_owner) || '' }}
+            ${{ github.ref == 'refs/heads/staging' && format('ghcr.io/{0}/hindsight-service:staging-latest', github.repository_owner) || '' }}
           file: apps/hindsight-service/Dockerfile
           build-args: |
             BUILD_SHA=${{ github.sha }}
@@ -59,6 +62,8 @@ jobs:
 
   build-and-push-hindsight-dashboard:
     runs-on: ubuntu-latest
+    # Select environment based on branch so we can use env-scoped secrets
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
     permissions:
       contents: read
       packages: write
@@ -94,18 +99,30 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:latest
+            ${{ github.ref == 'refs/heads/main' && format('ghcr.io/{0}/hindsight-dashboard:latest', github.repository_owner) || '' }}
+            ${{ github.ref == 'refs/heads/staging' && format('ghcr.io/{0}/hindsight-dashboard:staging-latest', github.repository_owner) || '' }}
           file: apps/hindsight-dashboard/Dockerfile
           build-args: |
-            REACT_APP_HINDSIGHT_SERVICE_API_URL=https://api.hindsight-ai.com
-            REACT_APP_VERSION=${{ env.FRONTEND_VERSION }}
-            REACT_APP_BUILD_SHA=${{ github.sha }}
-            REACT_APP_BUILD_TIMESTAMP=${{ env.BUILD_TIMESTAMP }}
-            REACT_APP_DASHBOARD_IMAGE_TAG=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:${{ github.sha }}
+            VITE_VERSION=${{ env.FRONTEND_VERSION }}
+            VITE_BUILD_SHA=${{ github.sha }}
+            VITE_BUILD_TIMESTAMP=${{ env.BUILD_TIMESTAMP }}
+            VITE_DASHBOARD_IMAGE_TAG=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:${{ github.sha }}
 
   deploy:
     needs: [build-and-push-hindsight-service, build-and-push-hindsight-dashboard]
     runs-on: ubuntu-latest
+    # Run on both branches, pick the environment dynamically
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: true
+
+    env:
+      # Derived values based on selected environment
+      ENV_NAME: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+      SERVER_DIR: ${{ github.ref == 'refs/heads/main' && 'hindsight-ai-production' || 'hindsight-ai-staging' }}
+      COMPOSE_FILE: docker-compose.app.yml
 
     steps:
       - name: Checkout repository
@@ -118,8 +135,8 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: "docker-compose.prod.yml,config/,templates/,letsencrypt/"
-          target: "~/hindsight-ai-project"
+          source: "${{ env.COMPOSE_FILE }},config/,templates/,letsencrypt/"
+          target: "~/${{ env.SERVER_DIR }}"
 
       - name: Execute deployment commands on remote server
         uses: appleboy/ssh-action@master
@@ -129,13 +146,16 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            cd ~/hindsight-ai-project
+            set -euo pipefail
+            cd ~/${{ env.SERVER_DIR }}
 
             # Create .env file
-            echo "Creating .env file..."
+            echo "Creating .env file for ${{ env.ENV_NAME }}..."
             cat <<EOF > .env
             HINDSIGHT_SERVICE_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-service:${{ github.sha }}
             HINDSIGHT_DASHBOARD_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:${{ github.sha }}
+            APP_HOST=${{ secrets.APP_HOST }}
+            TRAEFIK_DASHBOARD_HOST=${{ secrets.TRAEFIK_DASHBOARD_HOST }}
             CLOUDFLARE_DNS_EMAIL=${{ secrets.CLOUDFLARE_DNS_EMAIL }}
             CLOUDFLARE_DNS_API_TOKEN=${{ secrets.CLOUDFLARE_DNS_API_TOKEN }}
             OAUTH2_PROXY_CLIENT_ID=${{ secrets.OAUTH2_PROXY_CLIENT_ID }}
@@ -147,7 +167,7 @@ jobs:
             FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            REACT_APP_HINDSIGHT_SERVICE_API_URL=https://api.hindsight-ai.com
+            HINDSIGHT_SERVICE_API_URL=${{ secrets.API_URL }}
             BACKEND_BUILD_SHA=${{ github.sha }}
             FRONTEND_BUILD_SHA=${{ github.sha }}
             BUILD_TIMESTAMP=${{ env.BUILD_TIMESTAMP }}
@@ -156,46 +176,52 @@ jobs:
             EOF
 
             # Create authorized_emails.txt
-            echo "Creating authorized_emails.txt..."
+            echo "Creating authorized_emails.txt for ${{ env.ENV_NAME }}..."
             echo "${{ secrets.AUTHORIZED_EMAILS_CONTENT }}" > authorized_emails.txt
 
-            # Replace email placeholder in Traefik config
-            echo "Replacing email placeholder..."
-            sed -i 's/<email_placeholder>/${{ secrets.CLOUDFLARE_API_EMAIL }}/g' ~/hindsight-ai-project/config/traefik.yml
+            # Replace email placeholder in Traefik config (use the same secret name in both envs)
+            echo "Replacing email placeholder in Traefik config..."
+            sed -i 's/<email_placeholder>/${{ secrets.ACME_EMAIL }}/g' ./config/traefik.yml
 
             # Conditionally recreate acme.json for Let's Encrypt
-            if [ "${{ github.event.inputs.recreate_acme_json }}" == "true" ]; then
-              echo "Recreating acme.json..."
-              mkdir -p ~/hindsight-ai-project/letsencrypt
-              rm -f ~/hindsight-ai-project/letsencrypt/acme.json
-              touch ~/hindsight-ai-project/letsencrypt/acme.json
-              chmod 600 ~/hindsight-ai-project/letsencrypt/acme.json
+            if [ "${{ github.event.inputs.recreate_acme_json }}" = "true" ]; then
+              echo "Recreating acme.json for ${{ env.ENV_NAME }}..."
+              mkdir -p ./letsencrypt
+              rm -f ./letsencrypt/acme.json
+              touch ./letsencrypt/acme.json
+              chmod 600 ./letsencrypt/acme.json
             else
-              echo "Skipping acme.json recreation."
+              echo "Skipping acme.json recreation for ${{ env.ENV_NAME }}."
             fi
 
             # Authenticate with GitHub Container Registry
             echo "Authenticating with GitHub Container Registry..."
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+            # Decide profile flag for production only
+            PROFILE_FLAG=""
+            if [ "${{ env.ENV_NAME }}" = "production" ]; then
+              PROFILE_FLAG="--profile prod"
+            fi
+
             # Pull new images and deploy
-            echo "Pulling new images and deploying..."
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml --profile prod up -d --force-recreate
-            
+            echo "Pulling new images and deploying to ${{ env.ENV_NAME }}..."
+            docker compose -f ${{ env.COMPOSE_FILE }} pull || true
+            docker compose -f ${{ env.COMPOSE_FILE }} ${PROFILE_FLAG} up -d --force-recreate
+
             # Simple health check: wait 10 seconds and verify containers are still running
             echo "Performing simple health check - waiting 10 seconds..."
             sleep 10
-            
-            # Check if all containers are still running
-            if docker compose -f docker-compose.prod.yml ps | grep -E "(hindsight-service|hindsight-dashboard|traefik|oauth2-proxy)" | grep -q "Up"; then
-              echo "✅ All containers are running and stable"
+
+            # Check if key containers are still running
+            if docker compose -f ${{ env.COMPOSE_FILE }} ps | grep -E "(hindsight-service|hindsight-dashboard|traefik|oauth2-proxy)" | grep -q "Up"; then
+              echo "✅ All ${{ env.ENV_NAME }} containers are running and stable"
               echo "🎉 Deployment successful!"
             else
-              echo "❌ Some containers crashed or stopped"
+              echo "❌ Some ${{ env.ENV_NAME }} containers crashed or stopped"
               echo "Container status:"
-              docker compose -f docker-compose.prod.yml ps
+              docker compose -f ${{ env.COMPOSE_FILE }} ps
               echo "Recent logs:"
-              docker compose -f docker-compose.prod.yml logs --tail 20
+              docker compose -f ${{ env.COMPOSE_FILE }} logs --tail 20
               exit 1
             fi

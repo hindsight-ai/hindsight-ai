@@ -1,5 +1,7 @@
-// Prefer relative proxy path to keep same-origin in all envs
-let API_BASE_URL = import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
+// Prefer runtime env first; fall back to build-time env or relative '/api'
+let API_BASE_URL = (
+  typeof window !== 'undefined' && window.__ENV__ && window.__ENV__.HINDSIGHT_SERVICE_API_URL
+) || import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
 
 const isGuest = () => {
   try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; }

@@ -27,9 +27,8 @@ http:
         # Use Traefik's built-in CORS fields instead of wildcard headers.
         accessControlAllowOriginList:
           - "https://app.hindsight-ai.com"
+          - "https://app.staging.hindsight-ai.com"
           - "http://localhost:3000"
-          - "http://localhost:3001"
-          - "http://localhost"
         accessControlAllowMethods:
           - "GET"
           - "POST"

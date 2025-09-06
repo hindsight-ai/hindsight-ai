@@ -36,10 +36,10 @@ const AboutModal = ({ isOpen, onClose }) => {
     // Get frontend build information from environment variables
     const frontendData = {
       service_name: "AI Agent Memory Dashboard",
-      version: process.env.REACT_APP_VERSION || "unknown",
-      build_sha: process.env.REACT_APP_BUILD_SHA || "unknown",
-      build_timestamp: process.env.REACT_APP_BUILD_TIMESTAMP || "unknown",
-      image_tag: process.env.REACT_APP_DASHBOARD_IMAGE_TAG || "unknown"
+      version: import.meta.env.VITE_VERSION || "unknown",
+      build_sha: import.meta.env.VITE_BUILD_SHA || "unknown",
+      build_timestamp: import.meta.env.VITE_BUILD_TIMESTAMP || "unknown",
+      image_tag: import.meta.env.VITE_DASHBOARD_IMAGE_TAG || "unknown"
     };
     setFrontendInfo(frontendData);
     

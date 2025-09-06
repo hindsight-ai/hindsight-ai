@@ -244,7 +244,12 @@ Remote deployment is automated via a GitHub Actions workflow. The workflow build
         *   `POSTGRES_PASSWORD`: The password for the PostgreSQL database.
         *   `POSTGRES_USER`: The username for the PostgreSQL database.
         *   `POSTGRES_PASSWORD`: The password for the PostgreSQL database.
-        *   `AUTHORIZED_EMAILS_CONTENT`: A comma-separated list of email addresses that are authorized to access the application.
+        *   `AUTHORIZED_EMAILS_CONTENT`: A newline-delimited list of email addresses (one per line) that are authorized to access the application.
+            Example:
+            
+            user1@example.com
+            partner.team@company.com
+            ibarz.jean@gmail.com
 
 3.  **Deployment:**
     *   Pushing to the `main` or `feat/docker-compose-deployment` branch will trigger the GitHub Actions workflow.
