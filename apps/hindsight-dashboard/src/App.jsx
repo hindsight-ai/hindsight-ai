@@ -54,6 +54,11 @@ function AppContent() {
       </div>
     );
   }
+
+  // Render a dedicated, full-screen login page without the dashboard layout
+  if (location.pathname === '/login') {
+    return <LoginPage />;
+  }
   if (!guest && (!user || !user.authenticated) && location.pathname !== '/login') {
     return (
       <div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8">
@@ -88,7 +93,6 @@ function AppContent() {
 
       <Layout title={getPageTitle(location.pathname)}>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="/memory-blocks" element={<MemoryBlocksPage key={location.pathname} />} />
           <Route path="/memory-blocks/:id" element={<MemoryBlockDetail />} />
