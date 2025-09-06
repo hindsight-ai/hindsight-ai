@@ -36,15 +36,6 @@ function AppContent() {
     try { window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch { /* noop */ }
   }, [location.pathname, location.search, user?.authenticated, guest]);
 
-  // Block UI until auth status known
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8">
-        <div className="text-gray-600">Loading…</div>
-      </div>
-    );
-  }
-
   // Enforce authentication unless guest mode is enabled: auto-redirect to /login
   useEffect(() => {
     if (!loading && !guest && (!user || !user.authenticated) && location.pathname !== '/login') {
@@ -54,6 +45,15 @@ function AppContent() {
       window.location.replace('/login');
     }
   }, [loading, guest, user, location.pathname]);
+
+  // Block UI until auth status known
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8">
+        <div className="text-gray-600">Loading…</div>
+      </div>
+    );
+  }
   if (!guest && (!user || !user.authenticated) && location.pathname !== '/login') {
     return (
       <div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8">
