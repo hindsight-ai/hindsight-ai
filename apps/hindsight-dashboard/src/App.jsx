@@ -46,6 +46,24 @@ function AppContent() {
     }
   }, [loading, guest, user, location.pathname]);
 
+  // If already authenticated and currently on /login, go to the main page
+  useEffect(() => {
+    if (!loading && user && user.authenticated && location.pathname === '/login') {
+      try { window.location.replace('/dashboard'); } catch { window.location.href = '/dashboard'; }
+    }
+  }, [loading, user, location.pathname]);
+
+  // Trampoline: if landing on '/', send to /dashboard (auth) or /login (unauth)
+  useEffect(() => {
+    if (!loading && location.pathname === '/') {
+      if (user && user.authenticated) {
+        try { window.location.replace('/dashboard'); } catch { window.location.href = '/dashboard'; }
+      } else if (!guest) {
+        try { window.location.replace('/login'); } catch { window.location.href = '/login'; }
+      }
+    }
+  }, [loading, user, guest, location.pathname]);
+
   // Block UI until auth status known
   if (loading) {
     return (
@@ -70,7 +88,7 @@ function AppContent() {
   // Get page title based on current route
   const getPageTitle = (pathname) => {
     const routeMap = {
-      '/': 'Dashboard',
+      '/dashboard': 'Dashboard',
       '/memory-blocks': 'Memory Blocks',
       '/keywords': 'Keywords',
       '/agents': 'Agents',
@@ -93,7 +111,7 @@ function AppContent() {
 
       <Layout title={getPageTitle(location.pathname)}>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/memory-blocks" element={<MemoryBlocksPage key={location.pathname} />} />
           <Route path="/memory-blocks/:id" element={<MemoryBlockDetail />} />
           <Route path="/keywords" element={<KeywordManager />} />

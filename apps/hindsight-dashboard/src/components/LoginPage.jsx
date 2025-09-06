@@ -1,17 +1,23 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const LoginPage = () => {
   const { enterGuestMode, exitGuestMode } = useAuth();
+  const location = useLocation();
 
   const handleSignIn = () => {
     try { exitGuestMode(); } catch {}
-    const rd = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
+    const current = window.location.pathname + window.location.search + window.location.hash;
+    const rdTarget = (location.pathname === '/login') ? '/dashboard' : current;
+    const rd = encodeURIComponent(rdTarget);
     window.location.href = `/oauth2/sign_in?rd=${rd}`;
   };
 
   const handleGuest = () => {
     enterGuestMode();
+    // Navigate to the dashboard so the app renders
+    try { window.location.replace('/dashboard'); } catch { window.location.href = '/dashboard'; }
   };
 
   return (
@@ -42,4 +48,3 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
-
