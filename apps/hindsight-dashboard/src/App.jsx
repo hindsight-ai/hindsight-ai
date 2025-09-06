@@ -38,7 +38,9 @@ function AppContent() {
 
   // Enforce authentication unless guest mode is enabled: auto-redirect to /login
   useEffect(() => {
-    if (!loading && !guest && (!user || !user.authenticated) && location.pathname !== '/login') {
+    // Do not interfere with oauth2-proxy endpoints
+    const isOAuthPath = location.pathname.startsWith('/oauth2');
+    if (!loading && !guest && !isOAuthPath && (!user || !user.authenticated) && location.pathname !== '/login') {
       try {
         window.history.replaceState(null, '', '/login');
       } catch {}
