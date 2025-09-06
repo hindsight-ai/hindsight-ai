@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 // Layout Components
 import Layout from './components/Layout';
@@ -23,7 +23,6 @@ import LoginPage from './components/LoginPage';
 
 function AppContent() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { user, loading, guest, enterGuestMode, exitGuestMode } = useAuth();
   const [showAboutModal, setShowAboutModal] = useState(false);
 
@@ -49,9 +48,12 @@ function AppContent() {
   // Enforce authentication unless guest mode is enabled: auto-redirect to /login
   useEffect(() => {
     if (!loading && !guest && (!user || !user.authenticated) && location.pathname !== '/login') {
-      navigate('/login', { replace: true });
+      try {
+        window.history.replaceState(null, '', '/login');
+      } catch {}
+      window.location.replace('/login');
     }
-  }, [loading, guest, user, location.pathname, navigate]);
+  }, [loading, guest, user, location.pathname]);
   if (!guest && (!user || !user.authenticated) && location.pathname !== '/login') {
     return (
       <div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8">
