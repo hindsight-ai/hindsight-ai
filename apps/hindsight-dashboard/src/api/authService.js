@@ -28,19 +28,26 @@ try {
 const authService = {
   // Get current user info from OAuth2 proxy
   getCurrentUser: async () => {
-    const response = await fetch(`${base()}/user-info`, {
-      credentials: 'include', // Include cookies for authentication
-    });
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        // User is not authenticated
+    try {
+      const response = await fetch(`${base()}/user-info`, {
+        credentials: 'include',
+        redirect: 'follow',
+      });
+      // If unauthenticated and behind oauth2-proxy reverse-proxy, some setups
+      // issue a 302 to the provider, which will fail CORS in fetch. We try to
+      // detect clean 401 here; otherwise, callers treat errors as unauthenticated.
+      if (!response.ok) {
+        if (response.status === 401) {
+          return { authenticated: false };
+        }
+        // For other statuses, treat as unauthenticated rather than throwing
         return { authenticated: false };
       }
-      throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (_) {
+      // On network/CORS/redirect issues, do not spam errors; just report not authenticated
+      return { authenticated: false };
     }
-    
-    return response.json();
   },
 
   // Check if user is authenticated

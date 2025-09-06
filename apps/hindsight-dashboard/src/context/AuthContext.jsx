@@ -16,20 +16,14 @@ export const AuthProvider = ({ children }) => {
   const [guest, setGuest] = useState(false);
 
   const refresh = async () => {
-    try {
-      const info = await authService.getCurrentUser();
-      setUser(info);
-      // If user is authenticated, automatically exit guest mode
-      if (info && info.authenticated) {
-        setGuest(false);
-        try { sessionStorage.removeItem('GUEST_MODE'); } catch {}
-      }
-    } catch (err) {
-      // In dev, unauthenticated is acceptable; keep user null
-      console.error('Auth refresh error:', err);
-    } finally {
-      setLoading(false);
+    const info = await authService.getCurrentUser();
+    setUser(info);
+    // If user is authenticated, automatically exit guest mode
+    if (info && info.authenticated) {
+      setGuest(false);
+      try { sessionStorage.removeItem('GUEST_MODE'); } catch {}
     }
+    setLoading(false);
   };
 
   useEffect(() => {

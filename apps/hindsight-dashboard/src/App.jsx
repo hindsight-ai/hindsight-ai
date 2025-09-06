@@ -22,7 +22,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 function AppContent() {
   const location = useLocation();
-  const { user, loading, guest, enterGuestMode } = useAuth();
+  const { user, loading, guest, enterGuestMode, exitGuestMode } = useAuth();
   const [showAboutModal, setShowAboutModal] = useState(false);
 
   useEffect(() => {
@@ -47,6 +47,8 @@ function AppContent() {
   // Enforce authentication unless guest mode is enabled
   if (!guest && (!user || !user.authenticated)) {
     const handleSignIn = () => {
+      // Ensure guest mode is cleared before redirecting to login
+      try { exitGuestMode(); } catch {}
       const rd = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
       window.location.href = `/oauth2/sign_in?rd=${rd}`;
     };
