@@ -3,11 +3,10 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const LoginPage = () => {
-  const { enterGuestMode, exitGuestMode } = useAuth();
+  const { enterGuestMode } = useAuth();
   const location = useLocation();
 
   const handleSignIn = () => {
-    try { exitGuestMode(); } catch {}
     const current = window.location.pathname + window.location.search + window.location.hash;
     const rdTarget = (location.pathname === '/login') ? '/dashboard' : current;
     const rd = encodeURIComponent(rdTarget);
