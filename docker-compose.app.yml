@@ -35,7 +35,7 @@ services:
       - hindsight-ai
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`$${TRAEFIK_DASHBOARD_HOST}`)"
+      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DASHBOARD_HOST}`)"
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.entrypoints=websecure"
       - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
@@ -48,7 +48,7 @@ services:
     environment:
       OAUTH2_PROXY_PROVIDER: google
       OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
-      OAUTH2_PROXY_REDIRECT_URL: https://$${APP_HOST}/oauth2/callback
+      OAUTH2_PROXY_REDIRECT_URL: https://${APP_HOST}/oauth2/callback
       OAUTH2_PROXY_UPSTREAMS: http://hindsight-dashboard:80
       OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: true
       OAUTH2_PROXY_COOKIE_SAMESITE: lax
@@ -79,11 +79,11 @@ services:
       - "traefik.http.routers.oauth2-proxy.tls.certresolver=letsencrypt"
       - "traefik.http.routers.oauth2-proxy.service=oauth2-svc@docker"
       - "traefik.http.services.oauth2-svc.loadbalancer.server.port=4180"
-      - "traefik.http.routers.oauth2-path.rule=Host(`$${APP_HOST}`) && PathPrefix(`/oauth2`)"
+      - "traefik.http.routers.oauth2-path.rule=Host(`${APP_HOST}`) && PathPrefix(`/oauth2`)"
       - "traefik.http.routers.oauth2-path.entrypoints=websecure"
       - "traefik.http.routers.oauth2-path.tls.certresolver=letsencrypt"
       - "traefik.http.routers.oauth2-path.service=oauth2-svc@docker"
-      - "traefik.http.routers.api-oauth.rule=Host(`$${APP_HOST}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.api-oauth.rule=Host(`${APP_HOST}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.api-oauth.entrypoints=websecure"
       - "traefik.http.routers.api-oauth.tls.certresolver=letsencrypt"
       - "traefik.http.routers.api-oauth.service=oauth2-svc@docker"
@@ -116,7 +116,7 @@ services:
       - hindsight-ai
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.hindsight-dashboard.rule=Host(`$${APP_HOST}`)"
+      - "traefik.http.routers.hindsight-dashboard.rule=Host(`${APP_HOST}`)"
       - "traefik.http.routers.hindsight-dashboard.entrypoints=websecure"
       - "traefik.http.routers.hindsight-dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.routers.hindsight-dashboard.service=hindsight-dashboard-svc@docker"
@@ -128,4 +128,3 @@ networks:
 
 volumes:
   db_data:
-
