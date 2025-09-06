@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 const UserAccountButton = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, exitGuestMode } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
 
   const handleLogout = () => {
@@ -21,6 +21,7 @@ const UserAccountButton = () => {
     return (
       <button
         onClick={() => {
+          try { exitGuestMode(); } catch {}
           const rd = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
           window.location.href = `/oauth2/sign_in?rd=${rd}`;
         }}

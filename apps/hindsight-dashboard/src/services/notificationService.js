@@ -96,6 +96,7 @@ class NotificationService {
       message: 'Authentication error (401). Your session may have expired. Please refresh authentication to continue.',
       duration: 30000,
       onRefresh: () => {
+        try { sessionStorage.removeItem('GUEST_MODE'); } catch {}
         const rd = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
         window.location.href = `/oauth2/sign_in?rd=${rd}`;
       }

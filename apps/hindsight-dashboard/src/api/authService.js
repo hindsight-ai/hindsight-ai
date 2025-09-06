@@ -29,7 +29,9 @@ const authService = {
   // Get current user info from OAuth2 proxy
   getCurrentUser: async () => {
     try {
-      const response = await fetch(`${base()}/user-info`, {
+      // Always hit the authenticated path to let oauth2-proxy set cookies/headers.
+      // Using '/api' avoids being trapped in guest mode due to sessionStorage.
+      const response = await fetch(`/api/user-info`, {
         credentials: 'include',
         redirect: 'follow',
       });

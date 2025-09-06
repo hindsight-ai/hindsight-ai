@@ -19,6 +19,7 @@ import MemoryOptimizationCenter from './components/MemoryOptimizationCenter';
 import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import LoginPage from './components/LoginPage';
 
 function AppContent() {
   const location = useLocation();
@@ -109,6 +110,7 @@ function AppContent() {
 
       <Layout title={getPageTitle(location.pathname)}>
         <Routes>
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="/memory-blocks" element={<MemoryBlocksPage key={location.pathname} />} />
           <Route path="/memory-blocks/:id" element={<MemoryBlockDetail />} />
