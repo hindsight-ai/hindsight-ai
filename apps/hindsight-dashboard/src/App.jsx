@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 // Layout Components
 import Layout from './components/Layout';
@@ -23,6 +23,7 @@ import LoginPage from './components/LoginPage';
 
 function AppContent() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, loading, guest, enterGuestMode, exitGuestMode } = useAuth();
   const [showAboutModal, setShowAboutModal] = useState(false);
 
@@ -45,41 +46,16 @@ function AppContent() {
     );
   }
 
-  // Enforce authentication unless guest mode is enabled
-  if (!guest && (!user || !user.authenticated)) {
-    const handleSignIn = () => {
-      // Ensure guest mode is cleared before redirecting to login
-      try { exitGuestMode(); } catch {}
-      const rd = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
-      window.location.href = `/oauth2/sign_in?rd=${rd}`;
-    };
-    const handleGuest = () => {
-      enterGuestMode();
-    };
-
+  // Enforce authentication unless guest mode is enabled: auto-redirect to /login
+  useEffect(() => {
+    if (!loading && !guest && (!user || !user.authenticated) && location.pathname !== '/login') {
+      navigate('/login', { replace: true });
+    }
+  }, [loading, guest, user, location.pathname, navigate]);
+  if (!guest && (!user || !user.authenticated) && location.pathname !== '/login') {
     return (
       <div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">AI Agent Memory Dashboard</h1>
-          <div className="bg-white p-8 rounded-lg shadow-md max-w-md space-y-4">
-            <h2 className="text-xl font-semibold">Authentication Required</h2>
-            <p className="text-gray-600">Sign in to access your data, or explore a read-only guest tour.</p>
-            <div className="flex gap-3 justify-center">
-              <button
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition duration-200"
-                onClick={handleSignIn}
-              >
-                Sign In
-              </button>
-              <button
-                className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-2 rounded-lg transition duration-200 border"
-                onClick={handleGuest}
-              >
-                Explore as Guest
-              </button>
-            </div>
-          </div>
-        </div>
+        <div className="text-gray-600">Redirecting to login…</div>
       </div>
     );
   }
