@@ -1,0 +1,29 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  status:
+    project:
+      default:
+        # Let Codecov set a target based on repository history and fail on >1% drop
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        # Ensure changed lines in PRs are well-tested
+        target: 90%
+
+flags:
+  dashboard:
+    paths:
+      - apps/hindsight-dashboard/
+  service:
+    paths:
+      - apps/hindsight-service/
+
+ignore:
+  - "**/node_modules/**"
+  - "**/.venv/**"
+  - "**/.pytest_cache/**"
+  - "**/.nyc_output/**"
+

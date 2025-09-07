@@ -5,10 +5,15 @@ const isGuest = () => {
 };
 const base = () => (isGuest() ? '/guest-api' : API_BASE_URL);
 
-// Prefer runtime env first; fall back to build-time env or relative '/api'
-let API_BASE_URL = (
-  typeof window !== 'undefined' && window.__ENV__ && window.__ENV__.HINDSIGHT_SERVICE_API_URL
-) || import.meta.env.VITE_HINDSIGHT_SERVICE_API_URL || '/api';
+// Prefer runtime env first; fall back to process env or relative '/api'
+let API_BASE_URL = '/api';
+try {
+  if (typeof window !== 'undefined' && window.__ENV__ && window.__ENV__.HINDSIGHT_SERVICE_API_URL) {
+    API_BASE_URL = window.__ENV__.HINDSIGHT_SERVICE_API_URL;
+  } else if (typeof process !== 'undefined' && process.env && process.env.VITE_HINDSIGHT_SERVICE_API_URL) {
+    API_BASE_URL = process.env.VITE_HINDSIGHT_SERVICE_API_URL;
+  }
+} catch {}
 
 // Upgrade API scheme at runtime to avoid mixed content when app is served over HTTPS
 try {

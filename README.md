@@ -1,5 +1,8 @@
 # Hindsight AI
 
+[![CI Tests](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/hindsight-ai/hindsight-ai/branch/main/graph/badge.svg)](https://codecov.io/gh/hindsight-ai/hindsight-ai)
+
 Hindsight AI is a system designed to enhance AI agent memory and operational intelligence. Its primary purpose is to provide a robust and scalable solution for:
 - **Memory Management:** Storing, retrieving, and managing an AI agent's conversational and operational memories.
 - **Knowledge Distillation:** Extracting actionable insights and lessons learned from raw interactions.
@@ -254,6 +257,30 @@ Remote deployment is automated via a GitHub Actions workflow. The workflow build
 3.  **Deployment:**
     *   Pushing to the `main` or `feat/docker-compose-deployment` branch will trigger the GitHub Actions workflow.
     *   The workflow will automatically build and push the Docker images, and then deploy the application to your remote server.
+
+## Continuous Integration & Coverage
+
+- CI Workflows:
+  - Tests: `.github/workflows/tests.yml` runs on PRs and pushes; executes backend `pytest` and dashboard `jest` suites.
+  - Deploy: `.github/workflows/deploy.yml` runs on pushes to `main`/`staging` and first runs both test jobs, then builds and deploys via Docker Compose.
+
+- Coverage:
+  - Dashboard unit tests generate HTML coverage at `apps/hindsight-dashboard/coverage/lcov-report/index.html`.
+  - Jest thresholds enforce: 100% lines & functions, ≥90% statements, ≥85% branches.
+  - Public Codecov dashboard: https://codecov.io/gh/hindsight-ai/hindsight-ai
+
+- Branch protection (recommended):
+  1. Go to GitHub → Repo Settings → Branches → “Add rule”.
+  2. Pattern: `main` (and `staging` if applicable).
+  3. Enable “Require a pull request before merging” with desired reviewers.
+  4. Enable “Require status checks to pass before merging”, then select:
+     - “Hindsight Service (pytest)”
+     - “Dashboard (Jest)”
+     - “codecov/project” (overall coverage)
+     - “codecov/patch” (diff/patch coverage)
+     Also enable “Require branches to be up to date before merging”.
+  5. Optionally restrict who can push to `main` and require linear history.
+  6. Under Settings → Environments, add `production` with required reviewers to approve deploys from `deploy.yml`.
 
 ### Google OAuth2 Provider Configuration
 

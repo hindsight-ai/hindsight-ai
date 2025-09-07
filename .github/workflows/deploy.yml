@@ -12,7 +12,52 @@ on:
         default: false
 
 jobs:
+  hindsight-service-tests:
+    name: Hindsight Service (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/hindsight-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Run tests
+        run: uv run pytest --maxfail=1 -q
+
+  dashboard-tests:
+    name: Dashboard (Jest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/hindsight-dashboard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/hindsight-dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Jest (coverage)
+        run: npm run test:coverage -- --ci
+
   build-and-push-hindsight-service:
+    needs: [hindsight-service-tests, dashboard-tests]
     runs-on: ubuntu-latest
     # Select environment based on branch so we can use env-scoped secrets
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
@@ -61,6 +106,7 @@ jobs:
             VERSION=${{ env.BACKEND_VERSION }}
 
   build-and-push-hindsight-dashboard:
+    needs: [hindsight-service-tests, dashboard-tests]
     runs-on: ubuntu-latest
     # Select environment based on branch so we can use env-scoped secrets
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
