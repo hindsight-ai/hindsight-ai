@@ -32,7 +32,7 @@ jobs:
 
       - name: Run tests with coverage (XML)
         run: >-
-          uv run --with pytest-cov \
+          uv run --with pytest --with pytest-cov \
           pytest --maxfail=1 \
           --cov=core --cov-report=term --cov-report=xml:coverage.xml
 

@@ -31,7 +31,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Run tests
-        run: uv run pytest --maxfail=1 -q
+        run: uv run --with pytest pytest --maxfail=1 -q
 
   dashboard-tests:
     name: Dashboard (Jest)
