@@ -1,113 +1,80 @@
 import pytest
 import uuid
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, MagicMock
-from core.pruning.pruning_service import PruningService, calculate_usefulness_score
-from core.db.models import MemoryBlock
+from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock, patch
+
+from core.pruning.pruning_service import PruningService
+
 
 class TestPruningService:
-    """Test cases for the PruningService class."""
+    """Test cases for the PruningService class aligned with current API."""
 
-    def test_calculate_usefulness_score_basic(self):
-        """Test basic usefulness score calculation."""
-        # Test memory block with high criticality and information value
-        memory_block = Mock()
-        memory_block.content = "Critical error encountered: Database connection failed"
-        memory_block.retrieval_count = 10
-        memory_block.created_at = datetime.now() - timedelta(days=30)
-        memory_block.archived = False
-        memory_block.consolidation_status = "none"
-        
-        # Mock LLM response
-        mock_llm_response = {
-            "criticality": 8,
-            "information_value": 7,
-            "redundancy": 2,
-            "temporal_relevance": 6
-        }
-        
-        with patch('core.pruning.pruning_service.call_llm_with_prompt', return_value=mock_llm_response):
-            score = calculate_usefulness_score(memory_block)
-            assert isinstance(score, (int, float))
-            assert 0 <= score <= 10
+    def test_evaluate_memory_blocks_fallback_scoring(self):
+        """When no LLM key is provided, fallback scoring is used."""
+        service = PruningService()  # no LLM key => fallback
 
-    def test_calculate_usefulness_score_archived_block(self):
-        """Test that archived blocks get score 0."""
-        memory_block = Mock()
-        memory_block.archived = True
-        
-        score = calculate_usefulness_score(memory_block)
-        assert score == 0
+        memory_blocks = [
+            {
+                "id": str(uuid.uuid4()),
+                "content": "Critical error encountered: Database connection failed",
+                "retrieval_count": 10,
+                "feedback_score": 0,
+                "created_at": (datetime.now(timezone.utc) - timedelta(days=30)).isoformat(),
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "content": "Everything worked fine, no issues encountered",
+                "retrieval_count": 0,
+                "feedback_score": 0,
+                "created_at": (datetime.now(timezone.utc) - timedelta(days=365)).isoformat(),
+            },
+        ]
 
-    def test_calculate_usefulness_score_trivial_content(self):
-        """Test scoring of trivial content."""
-        memory_block = Mock()
-        memory_block.content = "Everything worked fine, no issues encountered"
-        memory_block.retrieval_count = 0
-        memory_block.created_at = datetime.now() - timedelta(days=365)
-        memory_block.archived = False
-        memory_block.consolidation_status = "none"
-        
-        # Mock LLM response for trivial content
-        mock_llm_response = {
-            "criticality": 2,
-            "information_value": 1,
-            "redundancy": 8,
-            "temporal_relevance": 3
-        }
-        
-        with patch('core.pruning.pruning_service.call_llm_with_prompt', return_value=mock_llm_response):
-            score = calculate_usefulness_score(memory_block)
-            assert isinstance(score, (int, float))
-            assert 0 <= score <= 10
-            # Should be low score for trivial content
-            assert score < 5
+        evaluated = service.evaluate_memory_blocks_with_llm(memory_blocks)
+        assert isinstance(evaluated, list)
+        assert len(evaluated) == 2
+        for item in evaluated:
+            assert "pruning_score" in item
+            assert 1 <= item["pruning_score"] <= 100
+            assert "pruning_rationale" in item
 
     def test_pruning_service_initialization(self):
-        """Test PruningService initialization."""
-        mock_db = Mock()
-        service = PruningService(mock_db)
-        assert service.db == mock_db
+        """Service stores provided LLM API key."""
+        service = PruningService(llm_api_key="dummy-key")
+        assert service.llm_api_key == "dummy-key"
 
-    @patch('core.pruning.pruning_service.calculate_usefulness_score')
-    @patch('core.pruning.pruning_service.call_llm_with_prompt')
-    def test_generate_pruning_suggestions(self, mock_call_llm, mock_calculate_score):
-        """Test generation of pruning suggestions."""
-        # Mock database and LLM responses
+    def test_generate_pruning_suggestions(self):
+        """Generate pruning suggestions with mocked memory blocks and DB."""
         mock_db = Mock()
-        mock_call_llm.return_value = {
-            "criticality": 5,
-            "information_value": 3,
-            "redundancy": 7,
-            "temporal_relevance": 4
-        }
-        mock_calculate_score.return_value = 3.5
-        
-        # Mock memory blocks
+        service = PruningService()  # no LLM => fallback path
+
+        # Prepare mock blocks in the dict format expected by evaluate method
         mock_memory_blocks = []
         for i in range(5):
-            block = Mock()
-            block.id = str(uuid.uuid4())
-            block.content = f"Test memory block {i}"
-            block.created_at = datetime.now() - timedelta(days=i*30)
-            block.archived = False
-            block.retrieval_count = i
-            mock_memory_blocks.append(block)
-        
-        mock_db.query().filter().order_by().limit().all.return_value = mock_memory_blocks
-        
-        service = PruningService(mock_db)
-        
-        # Test with small batch size
-        suggestions = service.generate_pruning_suggestions(batch_size=3, target_count=2)
-        
-        assert isinstance(suggestions, list)
-        # Should return up to batch_size suggestions
-        assert len(suggestions) <= 3
-        if suggestions:
-            assert 'id' in suggestions[0]
-            assert 'score' in suggestions[0]
-            assert 'content' in suggestions[0]
+            mock_memory_blocks.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "content": f"Test memory block {i}",
+                    "created_at": (datetime.now(timezone.utc) - timedelta(days=i * 30)).isoformat(),
+                    "retrieval_count": i,
+                    "feedback_score": 0,
+                }
+            )
 
-if __name__ == '__main__':
-    pytest.main([__file__])
+        # Patch get_random_memory_blocks to avoid DB internals and SQL func calls
+        with patch.object(PruningService, "get_random_memory_blocks", return_value=mock_memory_blocks):
+            result = service.generate_pruning_suggestions(
+                db=mock_db, batch_size=3, target_count=2
+            )
+
+        assert isinstance(result, dict)
+        assert "suggestions" in result
+        suggestions = result["suggestions"]
+        assert isinstance(suggestions, list)
+        # Should be limited by target_count
+        assert len(suggestions) <= 2
+        if suggestions:
+            first = suggestions[0]
+            assert "memory_block_id" in first
+            assert "pruning_score" in first
+            assert "content_preview" in first

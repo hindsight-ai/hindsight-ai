@@ -16,8 +16,9 @@ import logging
 import uuid
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core.db.crud import get_all_memory_blocks
 from core.db.models import MemoryBlock
@@ -311,7 +312,7 @@ Do not include any other text in your response. Ensure each memory block is eval
         if created_at_str:
             try:
                 created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                age_days = (datetime.utcnow() - created_at).days
+                age_days = (datetime.now(timezone.utc) - created_at).days
                 # Older than 1 year gets penalty
                 if age_days > 365:
                     age_factor = 0.7

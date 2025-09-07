@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 # Base Schemas
 class AgentBase(BaseModel):
@@ -74,16 +74,12 @@ class Agent(AgentBase):
     agent_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AgentTranscript(AgentTranscriptBase):
     transcript_id: uuid.UUID
     created_at: datetime
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class MemoryBlock(MemoryBlockBase):
     id: uuid.UUID
@@ -91,10 +87,7 @@ class MemoryBlock(MemoryBlockBase):
     created_at: datetime
     updated_at: datetime
     keywords: List['Keyword'] = [] # Add this line
-
-    class Config:
-        from_attributes = True # Pydantic V2 equivalent of orm_mode
-        populate_by_name = True # Allow population by field name or alias
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 class MemoryBlockKeywordAssociation(BaseModel):
     memory_id: uuid.UUID # Changed from memory_block_id to memory_id
@@ -103,16 +96,12 @@ class MemoryBlockKeywordAssociation(BaseModel):
 class FeedbackLog(FeedbackLogBase):
     feedback_id: uuid.UUID
     created_at: datetime
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class Keyword(KeywordBase):
     keyword_id: uuid.UUID
     created_at: datetime
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Consolidation Suggestion Schemas
 class ConsolidationSuggestionBase(BaseModel):
@@ -137,10 +126,7 @@ class ConsolidationSuggestion(ConsolidationSuggestionBase):
     timestamp: datetime
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
-        populate_by_name = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 class PaginatedConsolidationSuggestions(BaseModel):
     items: List[ConsolidationSuggestion]

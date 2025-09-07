@@ -1,8 +1,7 @@
 import uuid
 from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, ForeignKey, Index, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
 
 Base = declarative_base()
