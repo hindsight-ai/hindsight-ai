@@ -101,16 +101,56 @@ Runtime env (set in server `.env` by the workflow):
   - The app checks `/api/user-info` (never the guest endpoint). If authenticated, guest mode is cleared and the app renders authenticated state in the same tab.
 - Unauthenticated fetch to `/api/user-info` may 302 to Google; the UI treats it as “not authenticated” and redirects to `/login` (no crash).
 
+### 10.3 Edge-Case Rules
+- Do not auto-redirect to `/login` on any `/oauth2/*` paths (allow direct navigation to oauth2-proxy).
+- In guest mode, clicking Sign In does not clear guest pre-redirect; guest is cleared automatically after a successful auth check.
+
 ### 10.2 CORS & Security Headers
 - Same‑origin allowed automatically by Nginx (origin equals `$scheme://$host`).
 - `/env.js` caching disabled.
 - OAuth2‑proxy headers forwarded to backend for identity (`X-Auth-Request-*` and `X-Forwarded-*`).
 
 ## 11. Backend API Expectations
-- Exposes `/user-info` to reflect authenticated user.
-- All read endpoints are accessible to guest (no auth headers required).
-- All write endpoints require auth and return 401 if unauthenticated.
-- Provides build info endpoint consumed by About dialog.
+The backend exposes a FastAPI application with the following expectations:
+
+- General
+  - Health: `GET /health` returns `{ status: "ok", service: "hindsight-service" }`.
+  - Auth reflection: `GET /user-info` returns `{ authenticated, user, email }` based on oauth2-proxy headers in production; returns a fake dev user locally.
+  - Conversations KPI: `GET /conversations/count` returns `{ count }` of unique conversations.
+- Agents
+  - `POST /agents/` create (unique `agent_name`).
+  - `GET /agents/` list (pagination via `skip`, `limit`).
+  - `GET /agents/{agent_id}` details.
+  - `GET /agents/search/?query=…` simple search.
+  - `DELETE /agents/{agent_id}` delete.
+- Memory Blocks
+  - `GET /memory-blocks/` list with filters:
+    - `agent_id`, `conversation_id`, `search_query`, `start_date`, `end_date`, `min/max_feedback_score`, `min/max_retrieval_count`, `keywords` (comma‑separated UUIDs), `sort_by`, `sort_order`, `skip`, `limit`, `include_archived`.
+  - `POST /memory-blocks/` create (requires existing agent).
+  - `GET /memory-blocks/{id}` details.
+  - `PUT /memory-blocks/{id}` update.
+  - `POST /memory-blocks/{id}/archive` soft-archive; `DELETE /memory-blocks/{id}/hard-delete` hard delete.
+  - Feedback: `POST /memory-blocks/{id}/feedback/` with `{ feedback_type, feedback_details }`.
+- Keywords
+  - `POST /keywords/`, `GET /keywords/`, `GET /keywords/{id}`, `PUT /keywords/{id}`, `DELETE /keywords/{id}`.
+  - Associations: `POST /memory-blocks/{id}/keywords/{keyword_id}` and `DELETE` for removal.
+- Pruning
+  - `POST /memory/prune/suggest` with `{ batch_size, target_count, max_iterations }` → suggestion payload.
+  - `POST /memory/prune/confirm` with `{ memory_block_ids: [...] }` → archive counts.
+- Compression (LLM)
+  - `POST /memory-blocks/{id}/compress` with optional `{ user_instructions }` → suggestion payload; requires `LLM_API_KEY`.
+  - `POST /memory-blocks/{id}/compress/apply` with `{ compressed_content, compressed_lessons_learned }` → updated memory block.
+- Keyword Generation (Bulk)
+  - `POST /memory-blocks/bulk-generate-keywords` with `{ memory_block_ids: [...] }` → suggestion set.
+  - `POST /memory-blocks/bulk-apply-keywords` with `{ applications: [...] }` → results.
+- Search
+  - Full-text: `GET /memory-blocks/search/fulltext` with `query`, `limit`, optional filters.
+  - Semantic (placeholder): `GET /memory-blocks/search/semantic` with `query`, `similarity_threshold`.
+  - Hybrid: `GET /memory-blocks/search/hybrid` with weighted params; validates weights sum to 1.0.
+
+Access control
+- Read-only enforcement for unauthenticated POST/PUT/PATCH/DELETE via ASGI middleware (checks oauth2-proxy headers).
+- Guest consumers must use `/guest-api` proxy in the dashboard, which strips auth headers.
 
 ## 12. Non‑Functional Requirements
 - Parity: same container images for staging and production (runtime config only).
@@ -124,6 +164,21 @@ Runtime env (set in server `.env` by the workflow):
   - Dashboard at `http://localhost:3000`, API at `http://localhost:8000`.
   - Vite dev proxy forwards `/api` and `/guest-api` to `http://localhost:8000`.
 - Standalone dev: `npm run dev` in dashboard, `uvicorn` for backend.
+
+### 13.1 Frontend Dev
+- Vite dev server: `npm run dev` in `apps/hindsight-dashboard`.
+- Runtime config: `public/env.js` provides defaults for dev; for custom API, set `VITE_HINDSIGHT_SERVICE_API_URL` in `.env.local`.
+- Dev proxy (vite.config.js): `/api` and `/guest-api` → `http://localhost:8000`.
+- Entry points: `src/main.jsx`, `src/App.jsx`.
+
+### 13.2 Backend Dev
+- Uvicorn: `uv run uvicorn core.api.main:app --host 0.0.0.0 --port 8000` from `apps/hindsight-service`.
+- Database: Postgres 13 via compose; migrations via Alembic (auto-run in container at startup per scripts).
+- Env vars: `DATABASE_URL`, `LLM_API_KEY`, `LLM_MODEL_NAME` minimal for full feature coverage.
+
+### 13.3 Docker Compose Dev
+- Override file `docker-compose.dev.yml` exposes DB (5432), API (8000), Dashboard (3000) and enables `develop.watch` for hot rebuild.
+- Use `./start_hindsight.sh --watch` for watch mode (Compose v2.21+).
 
 ## 14. Acceptance Criteria (Key Scenarios)
 1) First visit (unauthenticated) to `/` redirects to `/login`.
@@ -147,3 +202,169 @@ Runtime env (set in server `.env` by the workflow):
 ---
 Last updated: manual
 
+## 17. Frontend Application Shell & Layout
+- Layout structure:
+  - Fixed left sidebar that never scrolls with page content (positioned fixed; app content accounts for its width).
+  - Top header within main content contains page title, scale selector, guest badge (when applicable), and user account button.
+  - Main content area scrolls independently (internal scroll container), preserving the fixed sidebar and header positions.
+- Responsive behavior:
+  - Sidebar collapsible; collapsed width ~16 (Tailwind) vs expanded ~64.
+  - Mobile: hamburger button toggles sidebar visibility.
+  - Content scale control in header with presets 100%, 75%, 50%; persisted in `localStorage` (`UI_SCALE`).
+- Notifications:
+  - Global notification container overlays messages (success/info/warning/error).
+  - 401 helper shows a persistent prompt with a “refresh auth” action linking to `/oauth2/sign_in?rd=<current>`.
+- Guest badge:
+  - When in guest mode, header shows “Guest Mode · Read-only”.
+  - All mutating actions are blocked with a warning via the notification service.
+
+## 18. Routing Map & Navigation
+- Routes:
+  - `/login`: full-screen login page (standalone, no app layout).
+  - `/dashboard`: default authenticated landing page.
+  - `/`: trampoline → `/dashboard` (authenticated) or `/login` (unauthenticated and not guest).
+  - `/memory-blocks` (+ detail `/:id`), `/keywords`, `/agents`, `/analytics`, `/consolidation-suggestions`, `/archived-memory-blocks`, `/pruning-suggestions`, `/memory-optimization-center`.
+- Navigation:
+  - Left sidebar items link to each top-level route; active state highlights current section.
+  - Top-right account button: shows avatar initial; unauthenticated shows “Sign In” button.
+  - Sign In in header goes directly to `/oauth2/sign_in?rd=<current_path>` (bypasses `/login`).
+  - Sign Out redirects to `/oauth2/sign_out?rd=<origin>`.
+
+## 19. Login & Guest Page UX (/login)
+- Content:
+  - Title, short description, two buttons: “Sign In” (primary) and “Explore as Guest”.
+- Behavior:
+  - Sign In: navigates to `/oauth2/sign_in?rd=/dashboard`.
+  - Explore as Guest: sets session guest mode and navigates to `/dashboard`.
+  - No app layout chrome; page fills viewport.
+
+## 20. Dashboard Page (/dashboard)
+- KPI cards:
+  - Agents count, Memory Blocks count, Conversations count; click opens relevant pages.
+  - Loading skeletons while data loads.
+- Recent Memory Blocks:
+  - List of latest entries with preview, tags, and quick actions.
+  - Manual Refresh button updates lists and shows “Last updated”.
+- Data sources:
+  - Agents: GET `/agents/?limit=…`.
+  - Memory blocks count: GET `/memory-blocks/?limit=…` (reads `total_items`).
+  - Conversations: GET `/conversations/count`.
+
+## 21. Memory Blocks Page (/memory-blocks)
+- Filters & search:
+  - Search term, agent filter, conversation filter; synced to URL query (`search`, `agent`, `conversation`).
+  - Pagination: `page` query param; page size default 12.
+  - Sorting: by `created_at desc`.
+- Cards grid:
+  - Responsive grid (1/2/3 columns by breakpoint) of memory blocks.
+  - Actions per card: View (opens detail modal), Archive, Delete, Suggest Keywords, Compact Memory.
+  - Guest mode blocks all mutating actions with clear warnings.
+- Pagination controls:
+  - Previous/Next buttons; display of range and total.
+- Modals:
+  - Detail modal: fetches by ID; shows full content, metadata, actions.
+  - Compaction modal: runs LLM-driven compression (`POST /memory-blocks/{id}/compress`) and apply (`POST /memory-blocks/{id}/compress/apply`).
+- Empty/error states:
+  - Clear filters CTA when filters active; Create Memory Block CTA otherwise.
+
+## 22. Keywords Management (/keywords)
+- Capabilities:
+  - List keywords (GET `/keywords/`).
+  - Create, update, delete keywords (POST/PUT/DELETE routes).
+  - Associate/disassociate keywords with memory blocks (POST/DELETE `/memory-blocks/{id}/keywords/{keyword_id}`).
+  - Suggestions: bulk suggest and apply keywords for selected memory blocks.
+- UI:
+  - Table/list of keywords with counts/usage; modals for add/edit; bulk apply flows with progress feedback.
+
+## 23. Agents Management (/agents)
+- Capabilities:
+  - List agents, search, create, delete (GET/POST/DELETE).
+- UI:
+  - Table/list with search field and add agent modal.
+
+## 24. Consolidation Suggestions (/consolidation-suggestions)
+- Capabilities:
+  - List suggestions with statuses; view details; validate or reject.
+- API:
+  - GET `/consolidation-suggestions/` and `/{id}`; POST validate/reject endpoints.
+
+## 25. Pruning Suggestions (/pruning-suggestions)
+- Capabilities:
+  - Generate pruning suggestions (batched, LLM-assisted) and confirm pruning (archives selected blocks).
+- API:
+  - POST `/memory/prune/suggest` with `{ batch_size, target_count, max_iterations }`.
+  - POST `/memory/prune/confirm` with `{ memory_block_ids: [...] }`.
+
+## 26. Memory Optimization Center (/memory-optimization-center)
+- Capabilities:
+  - Fetch optimization suggestions, execute selected suggestions, view details.
+- API:
+  - Under `/memory-optimization/*` (router included in backend), including list, execute, details.
+
+## 27. Search
+- Full-text search:
+  - GET `/memory-blocks/search/fulltext?query=…&limit=…&include_archived=`.
+- Semantic search (placeholder):
+  - GET `/memory-blocks/search/semantic?query=…&similarity_threshold=…`.
+- Hybrid search:
+  - GET `/memory-blocks/search/hybrid?query=…&fulltext_weight=…&semantic_weight=…&min_combined_score=…`.
+
+## 28. Data Model (High-level)
+- Agent: `{ agent_id (UUID), agent_name, created_at, updated_at }`.
+- MemoryBlock: `{ id (UUID), agent_id, conversation_id, timestamp, content, errors, lessons_learned, metadata(JSON), feedback_score, retrieval_count, archived, archived_at, created_at, updated_at, search_vector, content_embedding }`.
+- FeedbackLog: `{ feedback_id, memory_id, feedback_type, feedback_details, created_at }`.
+- Keyword: `{ keyword_id, keyword_text, created_at }`.
+- MemoryBlockKeyword: join table `{ memory_id, keyword_id }`.
+- ConsolidationSuggestion: `{ suggestion_id, group_id, suggested_content, suggested_lessons_learned, suggested_keywords(JSON), original_memory_ids(JSON), status, timestamp, created_at, updated_at }`.
+
+## 29. Write-Access Enforcement & Headers
+- Backend enforces read-only for unauthenticated requests across POST/PUT/PATCH/DELETE via ASGI middleware.
+- oauth2-proxy passes identity headers and auth token to Nginx → backend:
+  - X-Auth-Request-User, X-Auth-Request-Email, X-Auth-Request-Access-Token, Authorization.
+- Backend accepts either `X-Auth-Request-*` or `X-Forwarded-*` identity headers on `/user-info`.
+
+## 30. OAuth & Cookies
+- oauth2-proxy configuration:
+  - Provider: Google; Redirect URL: `https://<APP_HOST>/oauth2/callback`.
+  - Upstream: dashboard container.
+  - Cookie domain: `.hindsight-ai.com`; Secure; SameSite=Lax; reverse-proxy mode.
+  - Skip auth: `/manifest.json`, `/favicon.ico`, `/guest-api/*`.
+- Session persistence: cookie available on both staging and production due to shared eTLD+1.
+
+## 31. Error Pages & Templates
+- Custom 403 page (templates/error.html) for unauthorized emails with admin contact and sign-out.
+
+## 32. Accessibility & UX Guidelines
+- Keyboard focus maintained across modal open/close; ESC closes modals.
+- Sufficient color contrast for critical elements; visible focus states on interactive elements.
+- Loading states with skeletons where applicable to avoid layout shift.
+
+## 33. Performance & Caching
+- SPA assets under `/assets/` are immutable and cached for 1 year.
+- `/env.js` is never cached and must be requested fresh at load.
+- Avoid blocking UI on cross-origin OAuth redirects; handle as unauthenticated state.
+
+## 34. Security & Privacy
+- No secrets in frontend bundles; runtime config exposes only public endpoints.
+- All cookies marked Secure and SameSite=Lax via oauth2-proxy.
+- Restrictive CSRF policy on Nginx for mutating methods; same-origin permitted.
+
+## 35. Operational Playbook (Staging/Production)
+- Staging and production use the same images; config differs via `.env`.
+- Concurrency ensures only one deploy per branch.
+- To rotate oauth2-proxy cookies or client secrets: update environment secrets and redeploy.
+- To reset Let’s Encrypt: set `recreate_acme_json` input to true on manual workflow dispatch.
+- oauth2-proxy parameters (compose env):
+  - `OAUTH2_PROXY_PROVIDER=google`
+  - `OAUTH2_PROXY_REDIRECT_URL=https://<APP_HOST>/oauth2/callback`
+  - `OAUTH2_PROXY_UPSTREAMS=http://hindsight-dashboard:80`
+  - `OAUTH2_PROXY_COOKIE_SAMESITE=lax`, `OAUTH2_PROXY_COOKIE_SECURE=true`, cookie domain `.hindsight-ai.com`
+  - `OAUTH2_PROXY_REVERSE_PROXY=true`, `OAUTH2_PROXY_SET_XAUTHREQUEST=true`, `OAUTH2_PROXY_PASS_ACCESS_TOKEN=true`, `OAUTH2_PROXY_SET_AUTHORIZATION_HEADER=true`
+  - `OAUTH2_PROXY_SKIP_AUTH_ROUTES=/manifest.json$,/favicon.ico$,^/guest-api/.*`
+  - `OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE=/etc/oauth2-proxy/authorized_emails.txt`
+  - `OAUTH2_PROXY_LOGOUT_REDIRECT_URL=https://accounts.google.com/Logout`
+
+Traefik labels:
+- Dashboard router: `Host(${TRAEFIK_DASHBOARD_HOST})` → `api@internal` over `websecure` with `letsencrypt` resolver.
+- OAuth routers: `Host(${APP_HOST}) && PathPrefix('/oauth2')` and `Host(${APP_HOST}) && PathPrefix('/api')` → `oauth2-proxy`.
+- App router: `Host(${APP_HOST})` → dashboard (port 80).
