@@ -37,6 +37,14 @@ const memoryService = {
     const { per_page, include_archived = false, ...rest } = filters; // Destructure include_archived with default false
     const params = new URLSearchParams({ ...rest, include_archived }); // Start with rest and include_archived
 
+    // Attach active scope selection
+    try {
+      const scope = sessionStorage.getItem('ACTIVE_SCOPE');
+      const orgId = sessionStorage.getItem('ACTIVE_ORG_ID');
+      if (scope) params.set('scope', scope);
+      if (scope === 'organization' && orgId) params.set('organization_id', orgId);
+    } catch {}
+
     // Only add limit if per_page is defined and not null/undefined
     if (per_page !== undefined && per_page !== null) {
       params.append('limit', per_page.toString());
@@ -128,6 +136,14 @@ const memoryService = {
     const { per_page, ...rest } = filters;
     const params = new URLSearchParams(rest); // Start with rest parameters
 
+    // Attach active scope selection
+    try {
+      const scope = sessionStorage.getItem('ACTIVE_SCOPE');
+      const orgId = sessionStorage.getItem('ACTIVE_ORG_ID');
+      if (scope) params.set('scope', scope);
+      if (scope === 'organization' && orgId) params.set('organization_id', orgId);
+    } catch {}
+
     // Only add limit if per_page is defined and not null/undefined
     if (per_page !== undefined && per_page !== null) {
       params.append('limit', per_page.toString());
@@ -147,8 +163,16 @@ const memoryService = {
   },
 
   // Keywords
-  getKeywords: async () => {
-    const response = await fetch(`${base()}/keywords/`, {
+  getKeywords: async (filters = {}) => {
+    const params = new URLSearchParams(filters || {});
+    try {
+      const scope = sessionStorage.getItem('ACTIVE_SCOPE');
+      const orgId = sessionStorage.getItem('ACTIVE_ORG_ID');
+      if (scope) params.set('scope', scope);
+      if (scope === 'organization' && orgId) params.set('organization_id', orgId);
+    } catch {}
+    const url = `${base()}/keywords/${params.toString() ? `?${params.toString()}` : ''}`;
+    const response = await fetch(url, {
       credentials: 'include'
     });
     if (!response.ok) {

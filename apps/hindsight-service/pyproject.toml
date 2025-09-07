@@ -30,3 +30,6 @@ test = [
 addopts = "-q"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "e2e: end-to-end tests requiring external services",
+]

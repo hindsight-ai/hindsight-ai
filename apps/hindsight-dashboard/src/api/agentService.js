@@ -36,6 +36,13 @@ const agentService = {
   getAgents: async (filters = {}) => {
     const { per_page, ...rest } = filters;
     const params = new URLSearchParams({ ...rest, limit: per_page });
+    // Attach active scope selection
+    try {
+      const scope = sessionStorage.getItem('ACTIVE_SCOPE');
+      const orgId = sessionStorage.getItem('ACTIVE_ORG_ID');
+      if (scope) params.set('scope', scope);
+      if (scope === 'organization' && orgId) params.set('organization_id', orgId);
+    } catch {}
     const response = await fetch(`${base()}/agents/?${params.toString()}`, {
       credentials: 'include'
     });
@@ -137,6 +144,12 @@ const agentService = {
 
   searchAgents: async (query) => {
     const params = new URLSearchParams({ query });
+    try {
+      const scope = sessionStorage.getItem('ACTIVE_SCOPE');
+      const orgId = sessionStorage.getItem('ACTIVE_ORG_ID');
+      if (scope) params.set('scope', scope);
+      if (scope === 'organization' && orgId) params.set('organization_id', orgId);
+    } catch {}
     const response = await fetch(`${base()}/agents/search/?${params.toString()}`, {
       credentials: 'include'
     });

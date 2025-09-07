@@ -21,6 +21,9 @@ from core.db import models, schemas, crud
 from core.db.database import engine, get_db
 from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
+from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
+from core.api.orgs import router as orgs_router
+from core.api.permissions import can_read, can_write, can_manage_org
 from core.search.search_service import SearchService
 
 # models.Base.metadata.create_all(bind=engine) # Removed: Database schema is now managed by Alembic migrations.
@@ -68,35 +71,293 @@ async def enforce_readonly_for_guests(request: Request, call_next):
 router = APIRouter()
 
 @router.post("/agents/", response_model=schemas.Agent, status_code=status.HTTP_201_CREATED)
-def create_agent_endpoint(agent: schemas.AgentCreate, db: Session = Depends(get_db)):
-    db_agent = crud.get_agent_by_name(db, agent_name=agent.agent_name)
-    if db_agent:
-        raise HTTPException(status_code=400, detail="Agent with this name already exists")
-    return crud.create_agent(db=db, agent=agent)
+def create_agent_endpoint(
+    agent: schemas.AgentCreate,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if not email:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    u = get_or_create_user(db, email=email, display_name=name)
+
+    scope = getattr(agent, 'visibility_scope', 'personal') or 'personal'
+    owner_user_id = u.id if scope == 'personal' else None
+    org_id = getattr(agent, 'organization_id', None)
+    if scope == 'organization':
+        # Must have write permission in org
+        memberships = get_user_memberships(db, u.id)
+        by_org = {m['organization_id']: m for m in memberships}
+        key = str(org_id) if org_id else None
+        m = by_org.get(key) if key else None
+        role = (m or {}).get('role') if m else None
+        can_write = bool((m or {}).get('can_write'))
+        if not m or not (can_write or role in ('owner', 'admin', 'editor')):
+            raise HTTPException(status_code=403, detail="No write permission in target organization")
+    if scope == 'public' and not u.is_superadmin:
+        raise HTTPException(status_code=403, detail="Only superadmin can create public agents")
+
+    # Check uniqueness within scope preemptively
+    existing = crud.get_agent_by_name(
+        db,
+        agent_name=agent.agent_name,
+        visibility_scope=scope,
+        owner_user_id=owner_user_id,
+        organization_id=org_id,
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Agent with this name already exists in the selected scope")
+
+    agent_for_create = agent.copy(update={
+        'visibility_scope': scope,
+        'owner_user_id': owner_user_id,
+        'organization_id': org_id if scope == 'organization' else None,
+    })
+    return crud.create_agent(db=db, agent=agent_for_create)
 
 @router.get("/agents/", response_model=List[schemas.Agent])
-def get_all_agents_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    agents = crud.get_agents(db, skip=skip, limit=limit)
+def get_all_agents_endpoint(
+    skip: int = 0,
+    limit: int = 100,
+    scope: Optional[str] = None,
+    organization_id: Optional[uuid.UUID] = None,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    agents = crud.get_agents(
+        db,
+        skip=skip,
+        limit=limit,
+        current_user=current_user,
+        scope=scope,
+        organization_id=organization_id,
+    )
     return agents
 
 @router.get("/agents/{agent_id}", response_model=schemas.Agent)
-def get_agent_endpoint(agent_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_agent_endpoint(
+    agent_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
     db_agent = crud.get_agent(db, agent_id=agent_id)
     if not db_agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_read(db_agent, current_user):
+        # Mask existence if not readable
         raise HTTPException(status_code=404, detail="Agent not found")
     return db_agent
 
 @router.get("/agents/search/", response_model=List[schemas.Agent])
-def search_agents_endpoint(query: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    agents = crud.search_agents(db, query=query, skip=skip, limit=limit)
+def search_agents_endpoint(
+    query: str,
+    skip: int = 0,
+    limit: int = 100,
+    scope: Optional[str] = None,
+    organization_id: Optional[uuid.UUID] = None,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    agents = crud.search_agents(
+        db,
+        query=query,
+        skip=skip,
+        limit=limit,
+        current_user=current_user,
+        scope=scope,
+        organization_id=organization_id,
+    )
     return agents
 
 @router.delete("/agents/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_agent_endpoint(agent_id: uuid.UUID, db: Session = Depends(get_db)):
-    success = crud.delete_agent(db, agent_id=agent_id)
-    if not success:
+def delete_agent_endpoint(
+    agent_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    agent = crud.get_agent(db, agent_id=agent_id)
+    if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(agent, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    success = crud.delete_agent(db, agent_id=agent_id)
     return {"message": "Agent deleted successfully"}
+
+@router.post("/agents/{agent_id}/change-scope", response_model=schemas.Agent)
+def change_agent_scope(
+    agent_id: uuid.UUID,
+    payload: dict,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    agent = crud.get_agent(db, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if not email:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    u = get_or_create_user(db, email=email, display_name=name)
+    memberships = get_user_memberships(db, u.id)
+    current_user = {
+        "id": u.id,
+        "is_superadmin": bool(u.is_superadmin),
+        "memberships": memberships,
+        "memberships_by_org": {m["organization_id"]: m for m in memberships},
+    }
+
+    target_scope = (payload.get("visibility_scope") or '').lower()
+    if target_scope not in ("personal", "organization", "public"):
+        raise HTTPException(status_code=422, detail="Invalid target visibility_scope")
+    target_org_id = payload.get("organization_id")
+    new_owner_user_id = payload.get("new_owner_user_id")
+
+    # Permission to move
+    from core.api.permissions import can_move_scope
+    if target_scope == 'organization':
+        if not target_org_id:
+            raise HTTPException(status_code=422, detail="organization_id required for organization scope")
+        try:
+            target_org_uuid = uuid.UUID(str(target_org_id))
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid organization_id")
+        # Consent: if moving from personal -> organization, require personal owner unless superadmin
+        if agent.visibility_scope == 'personal' and not (current_user.get('is_superadmin') or agent.owner_user_id == current_user.get('id')):
+            raise HTTPException(status_code=409, detail="Owner consent required to move personal agent to organization")
+        if not can_move_scope(agent, 'organization', target_org_uuid, current_user):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == 'personal':
+        if not can_move_scope(agent, 'personal', None, current_user):
+            if not current_user.get("is_superadmin"):
+                raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == 'public':
+        if not current_user.get("is_superadmin"):
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+
+    # Uniqueness check in target scope
+    owner_id = None
+    org_uuid = None
+    if target_scope == 'organization':
+        org_uuid = target_org_uuid
+    elif target_scope == 'personal':
+        owner_id = u.id
+        if new_owner_user_id:
+            try:
+                owner_uuid = uuid.UUID(str(new_owner_user_id))
+            except Exception:
+                raise HTTPException(status_code=422, detail="Invalid new_owner_user_id")
+            if not current_user.get("is_superadmin"):
+                raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
+            owner_id = owner_uuid
+
+    existing = crud.get_agent_by_name(
+        db,
+        agent_name=agent.agent_name,
+        visibility_scope=target_scope,
+        owner_user_id=owner_id,
+        organization_id=org_uuid,
+    )
+    if existing and existing.agent_id != agent.agent_id:
+        raise HTTPException(status_code=409, detail="Agent with this name already exists in the target scope")
+
+    # Apply
+    agent.visibility_scope = target_scope
+    agent.owner_user_id = owner_id
+    agent.organization_id = org_uuid
+    db.commit()
+    db.refresh(agent)
+    return agent
 
 @router.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks)
 def get_all_memory_blocks_endpoint(
@@ -122,7 +383,13 @@ def get_all_memory_blocks_endpoint(
     fulltext_weight: Optional[float] = None,  # For hybrid search
     semantic_weight: Optional[float] = None,  # For hybrid search
     min_combined_score: Optional[float] = None,  # For hybrid search
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+    scope: Optional[str] = None,
+    organization_id: Optional[str] = None,
 ):
     """
     Retrieve all memory blocks with advanced filtering, searching, and sorting capabilities.
@@ -218,6 +485,26 @@ def get_all_memory_blocks_endpoint(
     sort_by = sort_by if sort_by else None
     sort_order = sort_order if sort_order else "asc"
 
+    # Build current_user context (optional for guests)
+    current_user = None
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "email": u.email,
+            "display_name": u.display_name,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+
     # Handle different search types
     if search_query and search_type in ["fulltext", "semantic", "hybrid"]:
         # Use advanced search service
@@ -235,7 +522,8 @@ def get_all_memory_blocks_endpoint(
                     conversation_id=processed_conversation_id,
                     limit=skip + limit,  # Get extra to handle pagination
                     min_score=min_score_val,
-                    include_archived=include_archived or False
+                    include_archived=include_archived or False,
+                    current_user=current_user,
                 )
                 
                 # Apply pagination manually since search doesn't support skip
@@ -253,7 +541,8 @@ def get_all_memory_blocks_endpoint(
                     conversation_id=processed_conversation_id,
                     limit=skip + limit,
                     similarity_threshold=similarity_threshold_val,
-                    include_archived=include_archived or False
+                    include_archived=include_archived or False,
+                    current_user=current_user,
                 )
                 
                 paginated_results = results[skip:skip + limit]
@@ -274,7 +563,8 @@ def get_all_memory_blocks_endpoint(
                     fulltext_weight=fulltext_weight_val,
                     semantic_weight=semantic_weight_val,
                     min_combined_score=min_combined_score_val,
-                    include_archived=include_archived or False
+                    include_archived=include_archived or False,
+                    current_user=current_user,
                 )
                 
                 paginated_results = results[skip:skip + limit]
@@ -292,6 +582,17 @@ def get_all_memory_blocks_endpoint(
             
     else:
         # Use basic CRUD search with filtering
+        # Optional explicit narrowing
+        filter_scope = None
+        filter_org_uuid = None
+        if scope in ("personal", "organization", "public"):
+            filter_scope = scope
+        if organization_id:
+            try:
+                filter_org_uuid = uuid.UUID(organization_id)
+            except Exception:
+                raise HTTPException(status_code=422, detail="Invalid organization_id")
+
         memories, total_items = crud.get_all_memory_blocks(
             db=db,
             agent_id=processed_agent_id,
@@ -309,7 +610,10 @@ def get_all_memory_blocks_endpoint(
             skip=skip,
             limit=limit,
             get_total=True,
-            include_archived=include_archived or False
+            include_archived=include_archived or False,
+            current_user=current_user,
+            filter_scope=filter_scope,
+            filter_organization_id=filter_org_uuid,
         )
 
     total_pages = math.ceil(total_items / limit) if limit > 0 else 0
@@ -336,7 +640,9 @@ def get_archived_memory_blocks_endpoint(
     sort_order: Optional[str] = "asc",
     skip: int = 0,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    scope: Optional[str] = None,
+    organization_id: Optional[str] = None,
 ):
     """
     Retrieve all archived memory blocks with advanced filtering, searching, and sorting capabilities.
@@ -419,6 +725,17 @@ def get_archived_memory_blocks_endpoint(
     processed_skip = skip
     processed_limit = limit
 
+    # Optional explicit narrowing
+    filter_scope = None
+    filter_org_uuid = None
+    if scope in ("personal", "organization", "public"):
+        filter_scope = scope
+    if organization_id:
+        try:
+            filter_org_uuid = uuid.UUID(organization_id)
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid organization_id")
+
     memories, total_items = crud.get_all_memory_blocks(
         db=db,
         agent_id=processed_agent_id,
@@ -436,7 +753,9 @@ def get_archived_memory_blocks_endpoint(
         limit=processed_limit,
         get_total=True,
         include_archived=True, # Explicitly include archived blocks
-        is_archived=True # Filter for only archived blocks
+        is_archived=True, # Filter for only archived blocks
+        filter_scope=filter_scope,
+        filter_organization_id=filter_org_uuid,
     )
 
     total_pages = math.ceil(total_items / processed_limit) if processed_limit > 0 else 0
@@ -448,48 +767,189 @@ def get_archived_memory_blocks_endpoint(
     }
 
 @router.post("/memory-blocks/", response_model=schemas.MemoryBlock, status_code=status.HTTP_201_CREATED)
-def create_memory_block_endpoint(memory_block: schemas.MemoryBlockCreate, db: Session = Depends(get_db)):
+def create_memory_block_endpoint(
+    memory_block: schemas.MemoryBlockCreate,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
     # Ensure agent exists
     agent = crud.get_agent(db, agent_id=memory_block.agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    db_memory_block = crud.create_memory_block(db=db, memory_block=memory_block)
+    # Resolve current user
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if not email:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    u = get_or_create_user(db, email=email, display_name=name)
+    memberships = get_user_memberships(db, u.id)
+    memberships_by_org = {m["organization_id"]: m for m in memberships}
+
+    scope = memory_block.visibility_scope or 'personal'
+    org_id = str(memory_block.organization_id) if getattr(memory_block, 'organization_id', None) else None
+    if scope == 'public' and not u.is_superadmin:
+        raise HTTPException(status_code=403, detail="Only superadmin can create public data")
+    if scope == 'organization':
+        if not org_id or org_id not in memberships_by_org:
+            raise HTTPException(status_code=403, detail="Not a member of target organization")
+        m = memberships_by_org[org_id]
+        if not (m.get('can_write') or m.get('role') in ('owner','admin','editor')):
+            raise HTTPException(status_code=403, detail="No write permission in target organization")
+
+    mb = memory_block.copy(update={
+        'visibility_scope': scope,
+        'owner_user_id': u.id if scope == 'personal' else None,
+        'organization_id': memory_block.organization_id if scope == 'organization' else None,
+    })
+
+    db_memory_block = crud.create_memory_block(db=db, memory_block=mb)
     print(f"Created memory block ID: {db_memory_block.id}") # Use .id as per schema change
     return db_memory_block
 
 @router.get("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
-def get_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_memory_block_endpoint(
+    memory_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
         raise HTTPException(status_code=404, detail="Memory block not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_read(db_memory_block, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
     return db_memory_block
 
 @router.put("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
 def update_memory_block_endpoint(
     memory_id: uuid.UUID,
     memory_block: schemas.MemoryBlockUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    db_memory_block = crud.update_memory_block(db, memory_id=memory_id, memory_block=memory_block)
-    if not db_memory_block:
+    current = crud.get_memory_block(db, memory_id)
+    if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    return db_memory_block
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(current, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    updated = crud.update_memory_block(db, memory_id=memory_id, memory_block=memory_block)
+    return updated
 
 @router.post("/memory-blocks/{memory_id}/archive", response_model=schemas.MemoryBlock)
-def archive_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
+def archive_memory_block_endpoint(
+    memory_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
     """
     Archives a memory block by setting its 'archived' flag to True.
     """
+    current = crud.get_memory_block(db, memory_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(current, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
     db_memory_block = crud.archive_memory_block(db, memory_id=memory_id)
     if db_memory_block is None: # Check for None explicitly
         raise HTTPException(status_code=404, detail="Memory block not found")
     return db_memory_block
 
 @router.delete("/memory-blocks/{memory_id}/hard-delete", status_code=status.HTTP_204_NO_CONTENT)
-def hard_delete_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
+def hard_delete_memory_block_endpoint(
+    memory_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
     """
     Performs a hard delete of a memory block from the database.
     """
+    current = crud.get_memory_block(db, memory_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(current, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
     success = crud.delete_memory_block(db, memory_id=memory_id)
     if not success:
         raise HTTPException(status_code=404, detail="Memory block not found")
@@ -499,7 +959,11 @@ def hard_delete_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depend
 def report_memory_feedback_endpoint(
     memory_id: uuid.UUID,
     feedback: schemas.FeedbackLogCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
@@ -509,6 +973,26 @@ def report_memory_feedback_endpoint(
     if feedback.memory_id != memory_id:
         raise HTTPException(status_code=400, detail="Memory ID in path and request body do not match.")
 
+    # Permission: require write access to modify feedback score
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(db_memory_block, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     updated_memory = crud.report_memory_feedback(
         db=db,
         memory_id=memory_id,
@@ -517,23 +1001,231 @@ def report_memory_feedback_endpoint(
     )
     return updated_memory
 
+@router.post("/memory-blocks/{memory_id}/change-scope", response_model=schemas.MemoryBlock)
+def change_memory_block_scope(
+    memory_id: uuid.UUID,
+    payload: dict,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    mb = crud.get_memory_block(db, memory_id)
+    if not mb:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if not email:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    u = get_or_create_user(db, email=email, display_name=name)
+    memberships = get_user_memberships(db, u.id)
+    current_user = {
+        "id": u.id,
+        "is_superadmin": bool(u.is_superadmin),
+        "memberships": memberships,
+        "memberships_by_org": {m["organization_id"]: m for m in memberships},
+    }
+
+    target_scope = (payload.get("visibility_scope") or '').lower()
+    if target_scope not in ("personal", "organization", "public"):
+        raise HTTPException(status_code=422, detail="Invalid target visibility_scope")
+
+    target_org_id = payload.get("organization_id")
+    new_owner_user_id = payload.get("new_owner_user_id")
+
+    # Permission to move
+    from core.api.permissions import can_move_scope
+    if target_scope == 'organization':
+        if not target_org_id:
+            raise HTTPException(status_code=422, detail="organization_id required for organization scope")
+        try:
+            target_org_uuid = uuid.UUID(str(target_org_id))
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid organization_id")
+        # Consent check: moving personal -> organization requires owner consent unless superadmin
+        if mb.visibility_scope == 'personal' and not (current_user.get('is_superadmin') or mb.owner_user_id == current_user.get('id')):
+            raise HTTPException(status_code=409, detail="Owner consent required to move personal data to organization")
+        if not can_move_scope(mb, 'organization', target_org_uuid, current_user):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == 'personal':
+        if not can_move_scope(mb, 'personal', None, current_user):
+            # Superadmin override allowed
+            if not current_user.get("is_superadmin"):
+                raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == 'public':
+        if not current_user.get("is_superadmin"):
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+
+    # Determine new ownership fields
+    if target_scope == 'organization':
+        mb.visibility_scope = 'organization'
+        mb.organization_id = target_org_uuid
+        mb.owner_user_id = None
+    elif target_scope == 'personal':
+        owner_id = u.id
+        if new_owner_user_id:
+            try:
+                owner_uuid = uuid.UUID(str(new_owner_user_id))
+            except Exception:
+                raise HTTPException(status_code=422, detail="Invalid new_owner_user_id")
+            if not current_user.get("is_superadmin"):
+                raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
+            owner_id = owner_uuid
+        mb.visibility_scope = 'personal'
+        mb.owner_user_id = owner_id
+        mb.organization_id = None
+    else:  # public
+        mb.visibility_scope = 'public'
+        mb.owner_user_id = None
+        # Keep organization_id None
+        mb.organization_id = None
+
+    # Rescope keywords to match target
+    # Re-query keywords since relationship may not be loaded
+    current_keywords = mb.keywords
+    new_keyword_ids = []
+    for kw in current_keywords:
+        target_kw = crud._get_or_create_keyword(
+            db,
+            kw.keyword_text,
+            visibility_scope=mb.visibility_scope,
+            owner_user_id=mb.owner_user_id,
+            organization_id=mb.organization_id,
+        )
+        new_keyword_ids.append(target_kw.keyword_id)
+
+    # Update associations to point to target-scope keywords
+    # Delete existing associations and recreate to the new keyword ids
+    db.query(models.MemoryBlockKeyword).filter(models.MemoryBlockKeyword.memory_id == mb.id).delete(synchronize_session=False)
+    for kid in new_keyword_ids:
+        db.add(models.MemoryBlockKeyword(memory_id=mb.id, keyword_id=kid))
+
+    db.commit()
+    db.refresh(mb)
+    return mb
+
 # Keyword Endpoints
 @router.post("/keywords/", response_model=schemas.Keyword, status_code=status.HTTP_201_CREATED)
-def create_keyword_endpoint(keyword: schemas.KeywordCreate, db: Session = Depends(get_db)):
-    db_keyword = crud.get_keyword_by_text(db, keyword_text=keyword.keyword_text)
-    if db_keyword:
-        raise HTTPException(status_code=400, detail="Keyword with this text already exists")
-    return crud.create_keyword(db=db, keyword=keyword)
+def create_keyword_endpoint(
+    keyword: schemas.KeywordCreate,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if not email:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    u = get_or_create_user(db, email=email, display_name=name)
+    scope = (keyword.visibility_scope or 'personal')
+    org_id = getattr(keyword, 'organization_id', None)
+    if scope == 'organization':
+        memberships = get_user_memberships(db, u.id)
+        by_org = {m['organization_id']: m for m in memberships}
+        key = str(org_id) if org_id else None
+        m = by_org.get(key) if key else None
+        role = (m or {}).get('role') if m else None
+        can_write = bool((m or {}).get('can_write'))
+        if not m or not (can_write or role in ('owner', 'admin', 'editor')):
+            raise HTTPException(status_code=403, detail="No write permission in target organization")
+    if scope == 'public' and not u.is_superadmin:
+        raise HTTPException(status_code=403, detail="Only superadmin can create public keywords")
+
+    # Pre-check uniqueness per scope
+    existing = crud.get_scoped_keyword_by_text(
+        db,
+        keyword_text=keyword.keyword_text,
+        visibility_scope=scope,
+        owner_user_id=u.id if scope == 'personal' else None,
+        organization_id=org_id if scope == 'organization' else None,
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Keyword already exists in this scope")
+
+    kw_for_create = keyword.copy(update={
+        'owner_user_id': u.id if scope == 'personal' else getattr(keyword, 'owner_user_id', None),
+    })
+    return crud.create_keyword(db=db, keyword=kw_for_create)
 
 @router.get("/keywords/", response_model=List[schemas.Keyword])
-def get_all_keywords_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    keywords = crud.get_keywords(db, skip=skip, limit=limit)
+def get_all_keywords_endpoint(
+    skip: int = 0,
+    limit: int = 100,
+    scope: Optional[str] = None,
+    organization_id: Optional[uuid.UUID] = None,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    keywords = crud.get_keywords(
+        db,
+        skip=skip,
+        limit=limit,
+        current_user=current_user,
+        scope=scope,
+        organization_id=organization_id,
+    )
     return keywords
 
 @router.get("/keywords/{keyword_id}", response_model=schemas.Keyword)
-def get_keyword_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_keyword_endpoint(
+    keyword_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
     db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
     if not db_keyword:
+        raise HTTPException(status_code=404, detail="Keyword not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_read(db_keyword, current_user):
         raise HTTPException(status_code=404, detail="Keyword not found")
     return db_keyword
 
@@ -541,18 +1233,67 @@ def get_keyword_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
 def update_keyword_endpoint(
     keyword_id: uuid.UUID,
     keyword: schemas.KeywordUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    db_keyword = crud.update_keyword(db, keyword_id=keyword_id, keyword=keyword)
-    if not db_keyword:
+    existing = crud.get_keyword(db, keyword_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Keyword not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(existing, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    db_keyword = crud.update_keyword(db, keyword_id=keyword_id, keyword=keyword)
     return db_keyword
 
 @router.delete("/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_keyword_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
-    success = crud.delete_keyword(db, keyword_id=keyword_id)
-    if not success:
+def delete_keyword_endpoint(
+    keyword_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    existing = crud.get_keyword(db, keyword_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Keyword not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(existing, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    success = crud.delete_keyword(db, keyword_id=keyword_id)
     return {"message": "Keyword deleted successfully"}
 
 # MemoryBlockKeyword Association Endpoints
@@ -560,7 +1301,11 @@ def delete_keyword_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)
 def associate_keyword_with_memory_block_endpoint(
     memory_id: uuid.UUID,
     keyword_id: uuid.UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
@@ -578,6 +1323,30 @@ def associate_keyword_with_memory_block_endpoint(
     if existing_association:
         raise HTTPException(status_code=409, detail="Association already exists")
 
+    # Permission: must be able to write the memory block
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(db_memory_block, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Enforce same-scope linkage
+    if db_memory_block.visibility_scope != db_keyword.visibility_scope:
+        raise HTTPException(status_code=409, detail="Keyword scope mismatch with memory block")
+
     association = crud.create_memory_block_keyword(db, memory_id=memory_id, keyword_id=keyword_id)
     return association
 
@@ -585,7 +1354,11 @@ def associate_keyword_with_memory_block_endpoint(
 def disassociate_keyword_from_memory_block_endpoint(
     memory_id: uuid.UUID,
     keyword_id: uuid.UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
@@ -594,6 +1367,26 @@ def disassociate_keyword_from_memory_block_endpoint(
     db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
+
+    # Permission: must be able to write the memory block
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(db_memory_block, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     success = crud.delete_memory_block_keyword(db, memory_id=memory_id, keyword_id=keyword_id)
     if not success:
@@ -807,43 +1600,57 @@ def get_build_info():
         "version": version
     }
 
-# User info endpoint for OAuth2 authentication
 @router.get("/user-info")
 def get_user_info(
     x_auth_request_user: Optional[str] = Header(default=None),
     x_auth_request_email: Optional[str] = Header(default=None),
-    # In reverse-proxy mode, oauth2-proxy typically sets X-Forwarded-* headers to upstream
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
 ):
     """
-    Returns the authenticated user information from OAuth2 proxy headers.
-    These headers are set by the OAuth2 proxy when authentication is successful.
-
-    For local development, bypasses authentication and returns mock user info.
+    Return authenticated user info and memberships.
+    - Dev mode (DEV_MODE=true): returns a stable dev user and ensures it exists.
+    - Normal mode: reads headers set by oauth2-proxy, upserts user, and returns memberships.
     """
-    # Check if we're in development mode
     is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
 
     if is_dev_mode:
-        # Development mode: bypass authentication
+        email = "dev@localhost"
+        user = get_or_create_user(db, email=email, display_name="dev_user")
+        memberships = get_user_memberships(db, user.id)
         return {
             "authenticated": True,
-            "user": "dev_user",
-            "email": "dev@localhost"
+            "user_id": str(user.id),
+            "email": user.email,
+            "display_name": user.display_name,
+            "is_superadmin": bool(user.is_superadmin),
+            "memberships": memberships,
         }
 
-    # Production mode: check OAuth2 proxy headers
-    user = x_auth_request_user or x_forwarded_user
-    email = x_auth_request_email or x_forwarded_email
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if not name and not email:
+        # Signal unauthenticated for dashboard guest-mode handling
+        return JSONResponse({"authenticated": False}, status_code=status.HTTP_401_UNAUTHORIZED)
 
-    if not user and not email:
-        return {"authenticated": False, "message": "No authentication headers found"}
+    if not email:
+        # Without an email, we cannot upsert; return minimal info
+        return {"authenticated": True, "user": name or None, "email": None}
 
+    user = get_or_create_user(db, email=email, display_name=name)
+    memberships = get_user_memberships(db, user.id)
     return {
         "authenticated": True,
-        "user": user,
-        "email": email,
+        "user_id": str(user.id),
+        "email": user.email,
+        "display_name": user.display_name,
+        "is_superadmin": bool(user.is_superadmin),
+        "memberships": memberships,
     }
 
 # Dashboard Stats Endpoints
@@ -1574,6 +2381,7 @@ def search_memory_blocks_hybrid_endpoint(
 
 # Include the main router
 app.include_router(router)
+app.include_router(orgs_router, prefix="/organizations")
 
 # Include memory optimization router
 try:

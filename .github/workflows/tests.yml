@@ -85,4 +85,30 @@ jobs:
           name: dashboard-coverage
           path: apps/hindsight-dashboard/coverage
 
+  migrations-e2e:
+    name: Migrations E2E (isolated Postgres)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/hindsight-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Verify Docker
+        run: |
+          docker --version
+
+      - name: Run isolated migration E2E
+        run: |
+          bash tests/e2e/run_migrations_e2e_ci.sh
+
   # No deploy in this workflow; deployment lives in deploy.yml and includes its own test gates.

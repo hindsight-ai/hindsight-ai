@@ -6,6 +6,10 @@ from pydantic import BaseModel, ConfigDict
 # Base Schemas
 class AgentBase(BaseModel):
     agent_name: str
+    # Governance scoping (optional on input for now)
+    visibility_scope: Optional[str] = 'personal'
+    owner_user_id: Optional[uuid.UUID] = None
+    organization_id: Optional[uuid.UUID] = None
 
 class AgentTranscriptBase(BaseModel):
     agent_id: uuid.UUID
@@ -23,6 +27,10 @@ class MemoryBlockBase(BaseModel):
     retrieval_count: Optional[int] = 0  # Added missing field
     archived: Optional[bool] = False
     archived_at: Optional[datetime] = None
+    # Governance scoping (optional on input for now)
+    visibility_scope: Optional[str] = 'personal'
+    owner_user_id: Optional[uuid.UUID] = None
+    organization_id: Optional[uuid.UUID] = None
 
 class FeedbackLogBase(BaseModel):
     id: uuid.UUID # Changed from memory_id to id
@@ -31,6 +39,10 @@ class FeedbackLogBase(BaseModel):
 
 class KeywordBase(BaseModel):
     keyword_text: str
+    # Governance scoping (optional on input for now)
+    visibility_scope: Optional[str] = 'personal'
+    owner_user_id: Optional[uuid.UUID] = None
+    organization_id: Optional[uuid.UUID] = None
 
 # Create Schemas (for POST requests)
 class AgentCreate(AgentBase):

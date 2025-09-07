@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import UserAccountButton from './UserAccountButton';
+import OrgSwitcher from './OrgSwitcher';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom';
 
@@ -62,6 +63,7 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
             <h2 className="text-lg sm:text-2xl font-bold text-gray-800 truncate">{title}</h2>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <OrgSwitcher />
             {/* Scale selector (no label) */}
             <select
               className="border border-gray-300 rounded-md px-2 py-1 text-xs sm:text-sm bg-white"

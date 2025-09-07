@@ -71,7 +71,8 @@ class SearchService:
         conversation_id: Optional[uuid.UUID] = None,
         limit: int = 50,
         min_score: float = 0.1,
-        include_archived: bool = False
+        include_archived: bool = False,
+        current_user: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[schemas.MemoryBlockWithScore], Dict[str, Any]]:
         """
         Perform BM25-like full-text search using PostgreSQL's built-in capabilities.
@@ -114,6 +115,27 @@ class SearchService:
             ).filter(
                 rank_expression >= min_score
             )
+
+            # Scope filters
+            if current_user is None:
+                base_query = base_query.filter(models.MemoryBlock.visibility_scope == 'public')
+            else:
+                org_ids: List[uuid.UUID] = []
+                for m in (current_user.get('memberships') or []):
+                    try:
+                        org_ids.append(uuid.UUID(m.get('organization_id')))
+                    except Exception:
+                        pass
+                base_query = base_query.filter(
+                    or_(
+                        models.MemoryBlock.visibility_scope == 'public',
+                        models.MemoryBlock.owner_user_id == current_user.get('id'),
+                        and_(
+                            models.MemoryBlock.visibility_scope == 'organization',
+                            models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
+                        ),
+                    )
+                )
             
             # Apply filters
             if agent_id:
@@ -174,7 +196,8 @@ class SearchService:
         conversation_id: Optional[uuid.UUID] = None,
         limit: int = 50,
         similarity_threshold: float = 0.7,
-        include_archived: bool = False
+        include_archived: bool = False,
+        current_user: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[schemas.MemoryBlockWithScore], Dict[str, Any]]:
         """
         Placeholder for semantic search using embeddings.
@@ -216,7 +239,8 @@ class SearchService:
         fulltext_weight: float = 0.7,
         semantic_weight: float = 0.3,
         min_combined_score: float = 0.1,
-        include_archived: bool = False
+        include_archived: bool = False,
+        current_user: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[schemas.MemoryBlockWithScore], Dict[str, Any]]:
         """
         Combine full-text and semantic search with weighted scoring.
@@ -228,12 +252,12 @@ class SearchService:
         # Get results from both search methods
         fulltext_results, fulltext_metadata = self.search_memory_blocks_fulltext(
             db, query, agent_id, conversation_id, limit * 2,  # Get more for reranking
-            min_score=0.01, include_archived=include_archived  # Lower threshold for hybrid
+            min_score=0.01, include_archived=include_archived, current_user=current_user  # Lower threshold for hybrid
         )
         
         semantic_results, semantic_metadata = self.search_memory_blocks_semantic(
             db, query, agent_id, conversation_id, limit * 2,
-            similarity_threshold=0.5, include_archived=include_archived
+            similarity_threshold=0.5, include_archived=include_archived, current_user=current_user
         )
         
         # Combine and rerank results

@@ -2,12 +2,17 @@ from sqlalchemy.orm import Session, joinedload # Import joinedload
 from . import models, schemas
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import or_, func, Text # Import func and Text
+from sqlalchemy import or_, and_, func, Text # Import func, and_, and Text
 from typing import List, Optional
 
 # CRUD for Agent
 def create_agent(db: Session, agent: schemas.AgentCreate):
-    db_agent = models.Agent(agent_name=agent.agent_name)
+    db_agent = models.Agent(
+        agent_name=agent.agent_name,
+        visibility_scope=getattr(agent, 'visibility_scope', 'personal') or 'personal',
+        owner_user_id=getattr(agent, 'owner_user_id', None),
+        organization_id=getattr(agent, 'organization_id', None),
+    )
     db.add(db_agent)
     db.commit()
     db.refresh(db_agent)
@@ -16,20 +21,113 @@ def create_agent(db: Session, agent: schemas.AgentCreate):
 def get_agent(db: Session, agent_id: uuid.UUID):
     return db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
 
-def get_agent_by_name(db: Session, agent_name: str):
-    return db.query(models.Agent).filter(models.Agent.agent_name == agent_name).first()
+def get_agent_by_name(db: Session, agent_name: str, *, visibility_scope: str = None, owner_user_id=None, organization_id=None):
+    q = db.query(models.Agent).filter(func.lower(models.Agent.agent_name) == func.lower(agent_name))
+    if visibility_scope == 'organization' and organization_id is not None:
+        q = q.filter(models.Agent.visibility_scope == 'organization', models.Agent.organization_id == organization_id)
+    elif visibility_scope == 'personal' and owner_user_id is not None:
+        q = q.filter(models.Agent.visibility_scope == 'personal', models.Agent.owner_user_id == owner_user_id)
+    elif visibility_scope == 'public':
+        q = q.filter(models.Agent.visibility_scope == 'public')
+    return q.first()
 
-def get_agents(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Agent).offset(skip).limit(limit).all()
+def get_agents(
+    db: Session,
+    skip: int = 0,
+    limit: int = 100,
+    *,
+    current_user: Optional[dict] = None,
+    scope: Optional[str] = None,
+    organization_id: Optional[uuid.UUID] = None,
+):
+    """List agents with scope filtering.
 
-def search_agents(db: Session, query: str, skip: int = 0, limit: int = 100):
+    - Guests: only public
+    - Authenticated: public OR personal(owner) OR member orgs
+    - Optional explicit scope/org filters narrow results
+    """
+    q = db.query(models.Agent)
+    if current_user is None:
+        q = q.filter(models.Agent.visibility_scope == 'public')
+    else:
+        org_ids = []
+        try:
+            for m in current_user.get('memberships', []):
+                mid = m.get('organization_id')
+                if mid:
+                    try:
+                        org_ids.append(uuid.UUID(mid))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        q = q.filter(
+            or_(
+                models.Agent.visibility_scope == 'public',
+                models.Agent.owner_user_id == current_user.get('id'),
+                and_(
+                    models.Agent.visibility_scope == 'organization',
+                    models.Agent.organization_id.in_(org_ids) if org_ids else False,
+                ),
+            )
+        )
+
+    # Optional narrowing filters
+    if scope in ('personal', 'organization', 'public'):
+        q = q.filter(models.Agent.visibility_scope == scope)
+    if organization_id is not None:
+        q = q.filter(models.Agent.organization_id == organization_id)
+
+    return q.offset(skip).limit(limit).all()
+
+def search_agents(
+    db: Session,
+    query: str,
+    skip: int = 0,
+    limit: int = 100,
+    *,
+    current_user: Optional[dict] = None,
+    scope: Optional[str] = None,
+    organization_id: Optional[uuid.UUID] = None,
+):
     # Use pg_trgm's similarity for fuzzy matching
     # A similarity threshold of 0.3 is a common starting point, adjust as needed
     SIMILARITY_THRESHOLD = 0.3
-    return db.query(models.Agent).filter(
+    q = db.query(models.Agent).filter(
         func.similarity(models.Agent.agent_name, query) >= SIMILARITY_THRESHOLD
-    ).order_by(
-        func.similarity(models.Agent.agent_name, query).desc() # Order by similarity score
+    )
+    # Apply same scope rules as list
+    if current_user is None:
+        q = q.filter(models.Agent.visibility_scope == 'public')
+    else:
+        org_ids = []
+        try:
+            for m in current_user.get('memberships', []):
+                mid = m.get('organization_id')
+                if mid:
+                    try:
+                        org_ids.append(uuid.UUID(mid))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        q = q.filter(
+            or_(
+                models.Agent.visibility_scope == 'public',
+                models.Agent.owner_user_id == current_user.get('id'),
+                and_(
+                    models.Agent.visibility_scope == 'organization',
+                    models.Agent.organization_id.in_(org_ids) if org_ids else False,
+                ),
+            )
+        )
+    if scope in ('personal', 'organization', 'public'):
+        q = q.filter(models.Agent.visibility_scope == scope)
+    if organization_id is not None:
+        q = q.filter(models.Agent.organization_id == organization_id)
+
+    return q.order_by(
+        func.similarity(models.Agent.agent_name, query).desc()
     ).offset(skip).limit(limit).all()
 
 def update_agent(db: Session, agent_id: uuid.UUID, agent: schemas.AgentUpdate):
@@ -95,7 +193,12 @@ def delete_agent_transcript(db: Session, transcript_id: uuid.UUID):
 
 # CRUD for Keyword
 def create_keyword(db: Session, keyword: schemas.KeywordCreate):
-    db_keyword = models.Keyword(keyword_text=keyword.keyword_text)
+    db_keyword = models.Keyword(
+        keyword_text=keyword.keyword_text,
+        visibility_scope=getattr(keyword, 'visibility_scope', 'personal') or 'personal',
+        owner_user_id=getattr(keyword, 'owner_user_id', None),
+        organization_id=getattr(keyword, 'organization_id', None),
+    )
     db.add(db_keyword)
     db.commit()
     db.refresh(db_keyword)
@@ -105,10 +208,66 @@ def get_keyword(db: Session, keyword_id: uuid.UUID):
     return db.query(models.Keyword).filter(models.Keyword.keyword_id == keyword_id).first()
 
 def get_keyword_by_text(db: Session, keyword_text: str):
+    # Global lookup (legacy); prefer scoped variant below
     return db.query(models.Keyword).filter(models.Keyword.keyword_text == keyword_text).first()
 
-def get_keywords(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Keyword).offset(skip).limit(limit).all()
+def get_scoped_keyword_by_text(
+    db: Session,
+    keyword_text: str,
+    *,
+    visibility_scope: str,
+    owner_user_id: Optional[uuid.UUID] = None,
+    organization_id: Optional[uuid.UUID] = None,
+):
+    q = db.query(models.Keyword).filter(
+        models.Keyword.visibility_scope == visibility_scope,
+        func.lower(models.Keyword.keyword_text) == func.lower(keyword_text),
+    )
+    if visibility_scope == 'organization' and organization_id is not None:
+        q = q.filter(models.Keyword.organization_id == organization_id)
+    elif visibility_scope == 'personal' and owner_user_id is not None:
+        q = q.filter(models.Keyword.owner_user_id == owner_user_id)
+    return q.first()
+
+def get_keywords(
+    db: Session,
+    skip: int = 0,
+    limit: int = 100,
+    *,
+    current_user: Optional[dict] = None,
+    scope: Optional[str] = None,
+    organization_id: Optional[uuid.UUID] = None,
+):
+    q = db.query(models.Keyword)
+    if current_user is None:
+        q = q.filter(models.Keyword.visibility_scope == 'public')
+    else:
+        org_ids = []
+        try:
+            for m in current_user.get('memberships', []):
+                mid = m.get('organization_id')
+                if mid:
+                    try:
+                        org_ids.append(uuid.UUID(mid))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        q = q.filter(
+            or_(
+                models.Keyword.visibility_scope == 'public',
+                models.Keyword.owner_user_id == current_user.get('id'),
+                and_(
+                    models.Keyword.visibility_scope == 'organization',
+                    models.Keyword.organization_id.in_(org_ids) if org_ids else False,
+                ),
+            )
+        )
+    if scope in ('personal', 'organization', 'public'):
+        q = q.filter(models.Keyword.visibility_scope == scope)
+    if organization_id is not None:
+        q = q.filter(models.Keyword.organization_id == organization_id)
+    return q.offset(skip).limit(limit).all()
 
 def update_keyword(db: Session, keyword_id: uuid.UUID, keyword: schemas.KeywordUpdate):
     db_keyword = db.query(models.Keyword).filter(models.Keyword.keyword_id == keyword_id).first()
@@ -135,7 +294,10 @@ def create_memory_block(db: Session, memory_block: schemas.MemoryBlockCreate):
         errors=memory_block.errors,
         lessons_learned=memory_block.lessons_learned,
         metadata_col=memory_block.metadata_col,
-        feedback_score=memory_block.feedback_score or 0  # Default to 0 if not provided
+        feedback_score=memory_block.feedback_score or 0,  # Default to 0 if not provided
+        visibility_scope=getattr(memory_block, 'visibility_scope', 'personal') or 'personal',
+        owner_user_id=getattr(memory_block, 'owner_user_id', None),
+        organization_id=getattr(memory_block, 'organization_id', None),
     )
     db.add(db_memory_block)
     db.flush()  # Flush to get memory_id before commit
@@ -146,7 +308,13 @@ def create_memory_block(db: Session, memory_block: schemas.MemoryBlockCreate):
 
     # Create associations with keywords
     for keyword_text in extracted_keywords:
-        keyword = _get_or_create_keyword(db, keyword_text)
+        keyword = _get_or_create_keyword(
+            db,
+            keyword_text,
+            visibility_scope=db_memory_block.visibility_scope,
+            owner_user_id=db_memory_block.owner_user_id,
+            organization_id=db_memory_block.organization_id,
+        )
         db_mbk = models.MemoryBlockKeyword(memory_id=db_memory_block.id, keyword_id=keyword.keyword_id)
         db.add(db_mbk)
 
@@ -191,9 +359,40 @@ def get_all_memory_blocks(
     limit: int = 100,
     get_total: bool = False, # New parameter to indicate if total count is needed
     include_archived: bool = False, # New parameter to include archived blocks
-    is_archived: Optional[bool] = None # New parameter to explicitly filter by archived status
+    is_archived: Optional[bool] = None, # New parameter to explicitly filter by archived status
+    current_user: Optional[dict] = None,
+    filter_scope: Optional[str] = None,
+    filter_organization_id: Optional[uuid.UUID] = None,
 ):
     query = db.query(models.MemoryBlock).options(joinedload(models.MemoryBlock.memory_block_keywords).joinedload(models.MemoryBlockKeyword.keyword)) # Eager load keywords
+
+    # Apply scope filters
+    if current_user is None:
+        query = query.filter(models.MemoryBlock.visibility_scope == 'public')
+    else:
+        # Allowed: public OR personal owned OR orgs where user is a member
+        org_ids = []
+        try:
+            memberships = current_user.get('memberships', [])
+            for m in memberships:
+                mid = m.get('organization_id')
+                if mid:
+                    try:
+                        org_ids.append(uuid.UUID(mid))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        query = query.filter(
+            or_(
+                models.MemoryBlock.visibility_scope == 'public',
+                models.MemoryBlock.owner_user_id == current_user.get('id'),
+                and_(
+                    models.MemoryBlock.visibility_scope == 'organization',
+                    models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False
+                ),
+            )
+        )
 
     if is_archived is not None:
         query = query.filter(models.MemoryBlock.archived == is_archived)
@@ -237,6 +436,14 @@ def get_all_memory_blocks(
 
     if keyword_ids:
         query = query.join(models.MemoryBlockKeyword).filter(models.MemoryBlockKeyword.keyword_id.in_(keyword_ids))
+
+    # Optional explicit narrowing
+    if filter_scope in ('personal', 'organization', 'public'):
+        query = query.filter(models.MemoryBlock.visibility_scope == filter_scope)
+        if filter_scope == 'organization' and filter_organization_id is not None:
+            query = query.filter(models.MemoryBlock.organization_id == filter_organization_id)
+        if filter_scope == 'personal' and current_user is not None:
+            query = query.filter(models.MemoryBlock.owner_user_id == current_user.get('id'))
 
     # Get total count before applying limit and offset
     total_count = query.count()
@@ -395,13 +602,24 @@ def delete_feedback_log(db: Session, feedback_id: uuid.UUID):
         db.commit()
     return db_feedback_log
 
-def _get_or_create_keyword(db: Session, keyword_text: str):
+def _get_or_create_keyword(db: Session, keyword_text: str, *, visibility_scope: str = 'personal', owner_user_id=None, organization_id=None):
     # Remove leading/trailing whitespace and then trailing periods from the keyword text
     processed_keyword_text = keyword_text.strip().rstrip('.')
     
-    keyword = db.query(models.Keyword).filter(models.Keyword.keyword_text == processed_keyword_text).first()
+    q = db.query(models.Keyword).filter(models.Keyword.keyword_text == processed_keyword_text,
+                                        models.Keyword.visibility_scope == visibility_scope)
+    if visibility_scope == 'organization' and organization_id is not None:
+        q = q.filter(models.Keyword.organization_id == organization_id)
+    elif visibility_scope == 'personal' and owner_user_id is not None:
+        q = q.filter(models.Keyword.owner_user_id == owner_user_id)
+    keyword = q.first()
     if not keyword:
-        keyword = models.Keyword(keyword_text=processed_keyword_text)
+        keyword = models.Keyword(
+            keyword_text=processed_keyword_text,
+            visibility_scope=visibility_scope,
+            owner_user_id=owner_user_id,
+            organization_id=organization_id,
+        )
         db.add(keyword)
         db.flush()  # Use flush to get the ID before commit
     return keyword

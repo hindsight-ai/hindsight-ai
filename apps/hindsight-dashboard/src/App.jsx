@@ -19,6 +19,7 @@ import MemoryOptimizationCenter from './components/MemoryOptimizationCenter';
 import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { OrgProvider } from './context/OrgContext';
 import LoginPage from './components/LoginPage';
 
 function AppContent() {
@@ -136,7 +137,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppContent />
+        <OrgProvider>
+          <AppContent />
+        </OrgProvider>
       </AuthProvider>
     </Router>
   );

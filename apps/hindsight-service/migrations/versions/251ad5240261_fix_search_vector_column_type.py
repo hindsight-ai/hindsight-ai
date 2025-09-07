@@ -47,5 +47,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Revert search_vector column type back to text."""
-    op.execute("ALTER TABLE memory_blocks ALTER COLUMN search_vector TYPE text")
+    """Revert search_vector column type back to text.
+
+    Ensure we drop the GIN index on search_vector prior to changing type, as
+    text has no default operator class for GIN.
+    """
+    op.execute("DROP INDEX IF EXISTS idx_memory_blocks_search_vector;")
+    op.execute("ALTER TABLE memory_blocks ALTER COLUMN search_vector TYPE text USING search_vector::text")
