@@ -1,5 +1,6 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -34,8 +35,30 @@ elif pytest_indicator and not is_e2e_context:
 else:
     _sqlite_kwargs = {}
 
-# Create the SQLAlchemy engine
-engine = create_engine(DATABASE_URL, **_sqlite_kwargs)
+def _create_engine_with_fallback(url: str, kwargs: dict):
+    """Create engine; if in pytest context and postgres unavailable, fall back to sqlite memory.
+    This protects CI pipelines that don't spin up Postgres automatically.
+    """
+    try:
+        eng = create_engine(url, **kwargs)
+        # Attempt a lightweight connection ping only for postgres schemes
+        if url.startswith("postgres"):
+            with eng.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        return eng
+    except OperationalError:
+        # Only fallback for test scenarios (pytests) where no explicit DB provided
+        if "PYTEST_CURRENT_TEST" in os.environ and not os.getenv("TEST_DATABASE_URL") and not os.getenv("HINDSIGHT_TEST_DB"):
+            fallback_url = "sqlite+pysqlite:///:memory:"
+            fk = {
+                "connect_args": {"check_same_thread": False},
+                "poolclass": StaticPool,
+            }
+            return create_engine(fallback_url, **fk)
+        raise
+
+# Create the SQLAlchemy engine (with fallback safety)
+engine = _create_engine_with_fallback(DATABASE_URL, _sqlite_kwargs)
 
 # Create a SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

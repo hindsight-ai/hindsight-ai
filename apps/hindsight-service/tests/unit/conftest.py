@@ -11,7 +11,11 @@ def create_schema_once():
     try:
         models.Base.metadata.create_all(bind=engine)
     except OperationalError as e:
-        pytest.exit(f"Failed to create test schema: {e}")
+        # Retry once: engine may have fallen back inside database module; attempt again
+        try:
+            models.Base.metadata.create_all(bind=engine)
+        except Exception:
+            pytest.exit(f"Failed to create test schema after retry: {e}")
     yield
     try:
         models.Base.metadata.drop_all(bind=engine)
