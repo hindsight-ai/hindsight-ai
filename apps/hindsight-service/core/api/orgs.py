@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 
 from core.db.database import get_db
-from core.db import models
+from core.db import models, schemas
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
 from core.api.permissions import can_manage_org
 
@@ -78,6 +78,16 @@ def create_organization(
     db.add(mem)
     db.commit()
     db.refresh(org)
+
+    from core.db import crud, schemas
+    audit_log = schemas.AuditLogCreate(
+        action_type="organization_create",
+        status="success",
+        target_type="organization",
+        target_id=org.id,
+    )
+    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org.id)
+
     return {
         "id": str(org.id),
         "name": org.name,
@@ -159,6 +169,17 @@ def update_organization(
         org.slug = new_slug
     db.commit()
     db.refresh(org)
+
+    from core.db import crud, schemas
+    audit_log = schemas.AuditLogCreate(
+        action_type="organization_update",
+        status="success",
+        target_type="organization",
+        target_id=org.id,
+        metadata={"name": org.name, "slug": org.slug}
+    )
+    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org.id)
+
     return {"id": str(org.id), "name": org.name, "slug": org.slug, "is_active": org.is_active}
 
 
@@ -189,6 +210,16 @@ def delete_organization(
     db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == org_id).delete(synchronize_session=False)
     db.delete(org)
     db.commit()
+
+    from core.db import crud, schemas
+    audit_log = schemas.AuditLogCreate(
+        action_type="organization_delete",
+        status="success",
+        target_type="organization",
+        target_id=org_id,
+    )
+    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
+
     return {"status": "deleted"}
 
 
@@ -244,6 +275,10 @@ def add_member(
     can_write = bool(payload.get("can_write", False))
     if not email:
         raise HTTPException(status_code=422, detail="Email is required")
+    # Pre-validate role against allowed set to avoid DB integrity errors
+    allowed_roles = {"owner", "admin", "editor", "viewer"}
+    if role not in allowed_roles:
+        raise HTTPException(status_code=422, detail="Invalid role")
 
     member_user = get_or_create_user(db, email=email)
     exists = db.query(models.OrganizationMembership).filter(
@@ -262,6 +297,17 @@ def add_member(
     )
     db.add(m)
     db.commit()
+
+    from core.db import crud, schemas
+    audit_log = schemas.AuditLogCreate(
+        action_type="member_add",
+        status="success",
+        target_type="user",
+        target_id=member_user.id,
+        metadata={"role": role}
+    )
+    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
+
     return {"status": "added"}
 
 
@@ -287,6 +333,7 @@ def update_member(
     if not m:
         raise HTTPException(status_code=404, detail="Membership not found")
 
+    old_role = m.role
     if "role" in payload and payload["role"]:
         m.role = payload["role"]
     if "can_read" in payload:
@@ -294,6 +341,18 @@ def update_member(
     if "can_write" in payload:
         m.can_write = bool(payload["can_write"])
     db.commit()
+
+    if old_role != m.role:
+        from core.db import crud, schemas
+        audit_log = schemas.AuditLogCreate(
+            action_type="member_role_change",
+            status="success",
+            target_type="user",
+            target_id=member_user_id,
+            metadata={"old_role": old_role, "new_role": m.role}
+        )
+        crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
+
     return {"status": "updated"}
 
 
@@ -317,5 +376,180 @@ def remove_member(
     if deleted == 0:
         raise HTTPException(status_code=404, detail="Membership not found")
     db.commit()
+
+    from core.db import crud, schemas
+    audit_log = schemas.AuditLogCreate(
+        action_type="member_remove",
+        status="success",
+        target_type="user",
+        target_id=member_user_id,
+    )
+    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
+
     return {"status": "removed"}
+
+@router.post("/{org_id}/invitations", status_code=status.HTTP_201_CREATED, response_model=schemas.OrganizationInvitation)
+def create_invitation(
+    org_id: uuid.UUID,
+    invitation: schemas.OrganizationInvitationCreate,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    if not can_manage_org(org_id, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from core.db import crud
+    db_invitation = crud.create_organization_invitation(db, organization_id=org_id, invitation=invitation, invited_by_user_id=user.id)
+
+    from core.db import schemas
+    audit_log = schemas.AuditLogCreate(
+        action_type="invitation_create",
+        status="success",
+        target_type="invitation",
+        target_id=db_invitation.id,
+        metadata={"email": invitation.email, "role": invitation.role}
+    )
+    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
+
+    return db_invitation
+
+@router.get("/{org_id}/invitations", response_model=List[schemas.OrganizationInvitation])
+def list_invitations(
+    org_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    if not can_manage_org(org_id, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from core.db import crud
+    invitations = crud.get_organization_invitations(db, organization_id=org_id)
+    return invitations
+
+@router.post("/{org_id}/invitations/{invitation_id}/resend", response_model=schemas.OrganizationInvitation)
+def resend_invitation(
+    org_id: uuid.UUID,
+    invitation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    if not can_manage_org(org_id, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from core.db import crud
+    from datetime import datetime, timedelta, timezone
+
+    db_invitation = crud.get_organization_invitation(db, invitation_id=invitation_id)
+    if not db_invitation or db_invitation.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    db_invitation.expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    db.commit()
+    db.refresh(db_invitation)
+    return db_invitation
+
+@router.delete("/{org_id}/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_invitation(
+    org_id: uuid.UUID,
+    invitation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    if not can_manage_org(org_id, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from core.db import crud
+    from datetime import datetime, timezone
+
+    db_invitation = crud.get_organization_invitation(db, invitation_id=invitation_id)
+    if not db_invitation or db_invitation.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    db_invitation.status = 'revoked'
+    db_invitation.revoked_at = datetime.now(timezone.utc)
+    db.commit()
+
+    from core.db import schemas
+    audit_log = schemas.AuditLogCreate(
+        action_type="invitation_revoke",
+        status="success",
+        target_type="invitation",
+        target_id=invitation_id,
+    )
+    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
+
+    audit_log = schemas.AuditLogCreate(
+        action_type="invitation_revoke",
+        status="success",
+        target_type="invitation",
+        target_id=invitation_id,
+    )
+    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
+
+@router.post("/{org_id}/invitations/{invitation_id}/accept", response_model=schemas.OrganizationMember)
+def accept_invitation(
+    org_id: uuid.UUID,
+    invitation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+
+    from core.db import crud
+    from datetime import datetime, timezone
+
+    db_invitation = crud.get_organization_invitation(db, invitation_id=invitation_id)
+    if not db_invitation or db_invitation.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    if db_invitation.email.lower() != user.email.lower():
+        raise HTTPException(status_code=403, detail="Invitation is for a different user")
+
+    if db_invitation.status != 'pending':
+        raise HTTPException(status_code=400, detail=f"Invitation is already {db_invitation.status}")
+
+    if db_invitation.expires_at < datetime.now(timezone.utc):
+        db_invitation.status = 'expired'
+        db.commit()
+        raise HTTPException(status_code=400, detail="Invitation has expired")
+
+    # Add member
+    from core.db import schemas
+    member_data = schemas.OrganizationMemberCreate(user_id=user.id, role=db_invitation.role)
+    db_member = crud.create_organization_member(db, organization_id=org_id, member=member_data)
+
+    # Update invitation
+    db_invitation.status = 'accepted'
+    db_invitation.accepted_at = datetime.now(timezone.utc)
+    db.commit()
+
+    from core.db import schemas
+    audit_log = schemas.AuditLogCreate(
+        action_type="invitation_accept",
+        status="success",
+        target_type="invitation",
+        target_id=invitation_id,
+    )
+    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
+
+    return db_member
 

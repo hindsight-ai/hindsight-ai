@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import UserAccountButton from './UserAccountButton';
-import OrgSwitcher from './OrgSwitcher';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom';
 
@@ -63,7 +62,6 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
             <h2 className="text-lg sm:text-2xl font-bold text-gray-800 truncate">{title}</h2>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <OrgSwitcher />
             {/* Scale selector (no label) */}
             <select
               className="border border-gray-300 rounded-md px-2 py-1 text-xs sm:text-sm bg-white"
@@ -94,7 +92,7 @@ const MainContent = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
       </header>
 
       {/* Scaled content wrapper with horizontal scroll on small screens */}
-  <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4 hide-scrollbar">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4">
         <div className="max-w-[1200px] w-full">
           <div
             className="transform-gpu origin-top-left"

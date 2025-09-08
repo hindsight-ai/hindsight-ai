@@ -32,4 +32,10 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "e2e: end-to-end tests requiring external services",
+    "unit: fast unit tests for isolated components",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=6.3.0",
 ]

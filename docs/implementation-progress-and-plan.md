@@ -1,6 +1,6 @@
 Title: Hindsight-AI Data Governance Implementation — Progress, Context, and Next Steps
 Status: In progress
-Last updated: 2025-09-07
+Last updated: 2025-09-08
 
 Purpose
 - This document lets you (or a future maintainer) resume work without prior context. It explains what was done, where, why, and what to do next. It points to the exact files to open and what to verify.
@@ -67,6 +67,13 @@ What’s already implemented (code changes in this branch)
   - Enhanced: tests/e2e/test_permissions_extended.py (explicit narrowing on memory lists; guest behavior for scope filters)
   - New: tests/e2e/test_permissions_agents_keywords.py (agent/keyword scoping, guest reads, association mismatch 409, write 403)
 
+- Governance Phase 2.1 foundational models (2025-09-08)
+  - Added SQLAlchemy models for `OrganizationInvitation`, `AuditLog`, and `BulkOperation` in `core/db/models.py` (previously only migrations existed; runtime models were missing causing potential AttributeErrors in CRUD and routers).
+  - Search endpoints (`/memory-blocks/search/fulltext|semantic|hybrid`) now pass authenticated user context so scope filtering applies (previously always treated as guest → returned only public results). Updated in `core/api/main.py`.
+  - Fixed missing scope enforcement regression for search while retaining existing CRUD patterns. No new tests yet (add in next step).
+  - NOTE: Duplicate CRUD blocks (organizations/members/invitations) exist in `crud.py`; left in place for now to avoid large refactor during stabilization. Marked for consolidation.
+  - Follow-up (2025-09-08 later): Removed duplicated organization/member/invitation CRUD blocks in `core/db/crud.py` (kept canonical first definitions) to reduce divergence risk; added `BulkOperationUpdate` schema; resolved SQLAlchemy reserved attribute conflict by renaming `AuditLog.metadata` column attribute to `metadata_json` with adjusted CRUD create path.
+
 How to run everything locally
 - Start the dev stack (for normal development):
   - ./start_hindsight.sh
@@ -128,6 +135,7 @@ Note: implement in small PRs with tests. Use docs/data-governance-orgs-users.md 
    - Behavior to implement:
      - Fixed roles: owner/admin/editor/viewer; owner/admin can move data into org; personal→org moves require personal owner consent; superadmin override allowed.
      - Public scope is read-only except for superadmin; org owners may request enabling public sharing; superadmin approves the toggle; each publish requires superadmin approval.
+  - Recent delta (2025-09-08): Added invitation/audit/bulk models; enforced scope on search endpoints.
 
 3) Org admin workflows
    - Invitations by email (pending memberships):
@@ -195,6 +203,11 @@ Open items being tracked
 - Enforce permissions for all write endpoints (update/delete/associations) and add scope-move endpoints.
 - Add endpoint tests for orgs, memberships, and scope filters; add unit tests for permissions helpers.
 - Wire CI to run migrations E2E (added) and consider a matrix job to run API E2E tests.
+- Implement invitation lifecycle endpoints end-to-end (models present; CRUD + API partially present in `orgs.py`; add resend/revoke audit duplication cleanup and acceptance tests).
+- Implement audit logging integration in remaining sensitive endpoints (currently only org/member/invitation actions write audit logs).
+- Implement bulk operations worker integration with `bulk_operations_worker.py` and add background job status endpoints.
+- Consolidate duplicated CRUD definitions in `core/db/crud.py` (risk: confusion & maintenance drift).
+- Add tests for search endpoints verifying scoped results for guest vs member vs superadmin.
 
 Next small items (queued; do not execute until approved)
 - Unit tests: cover permissions helpers (can_read, can_write, can_manage_org, can_move_scope) across edge cases (public, missing org, viewer overrides, superadmin override).
@@ -219,3 +232,4 @@ Important: keep this document current
 Recent changes (chronological)
 - 2025-09-07: Added users/orgs/memberships schema + scoped columns and per-scope uniques; updated models/schemas; added auth + permissions scaffolding; implemented organizations and memberships endpoints; expanded /user-info; strengthened E2E test to stepwise downgrade/upgrade; fixed search_vector downgrade in migration 251ad5240261.
  - 2025-09-07: Enforced scoped reads for agents/keywords; added create permission checks (org/public); added explicit `scope`/`organization_id` narrowing on `/agents`, `/agents/search`, `/keywords`, `/memory-blocks`, and `/memory-blocks/archived`; `/user-info` unauthenticated -> 401; added E2E tests covering guest mode, narrowing, and association scope mismatch.
+- 2025-09-08: Added missing runtime models (OrganizationInvitation, AuditLog, BulkOperation); updated search endpoints to apply user scope context; documented gaps (duplicate CRUD, missing tests); prepared for Phase 2.1 feature completion.

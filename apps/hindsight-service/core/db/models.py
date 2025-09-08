@@ -13,7 +13,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
-from datetime import datetime
+from datetime import datetime, UTC
+
+
+def now_utc():
+    """Return an aware UTC datetime for default/updated timestamps."""
+    return datetime.now(UTC)
 
 Base = declarative_base()
 
@@ -34,8 +39,8 @@ class User(Base):
     is_superadmin = Column(Boolean, nullable=False, default=False)
     auth_provider = Column(String, nullable=True)
     external_subject = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
 
 class Organization(Base):
@@ -45,8 +50,8 @@ class Organization(Base):
     slug = Column(String, nullable=True, unique=True)
     is_active = Column(Boolean, nullable=False, default=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
 
 class OrganizationMembership(Base):
@@ -56,7 +61,7 @@ class OrganizationMembership(Base):
     role = Column(String, nullable=False)  # 'owner'|'admin'|'editor'|'viewer'
     can_read = Column(Boolean, nullable=False, default=True)
     can_write = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     __table_args__ = (
         Index('idx_org_memberships_user_id', 'user_id'),
@@ -71,8 +76,8 @@ class Agent(Base):
     visibility_scope = Column(String(20), nullable=False, default='personal')
     owner_user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
     organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
     transcripts = relationship("AgentTranscript", back_populates="agent")
     memory_blocks = relationship("MemoryBlock", back_populates="agent")
@@ -83,7 +88,7 @@ class AgentTranscript(Base):
     agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.agent_id'), nullable=False)
     conversation_id = Column(UUID(as_uuid=True), nullable=False)
     transcript_content = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     agent = relationship("Agent", back_populates="transcripts")
 
@@ -97,7 +102,7 @@ class MemoryBlock(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4) # Renamed from memory_id to id
     agent_id = Column(UUID(as_uuid=True), ForeignKey('agents.agent_id'), nullable=False)
     conversation_id = Column(UUID(as_uuid=True), nullable=False)
-    timestamp = Column(DateTime(timezone=True), default=datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=now_utc)
     content = Column(Text, nullable=False)
     errors = Column(Text)
     lessons_learned = Column(Text)
@@ -110,8 +115,8 @@ class MemoryBlock(Base):
     visibility_scope = Column(String(20), nullable=False, default='personal')
     owner_user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
     organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     
     # Search-related fields
     search_vector = Column(TSVECTOR, nullable=True)  # For full-text search
@@ -141,7 +146,7 @@ class FeedbackLog(Base):
     memory_id = Column(UUID(as_uuid=True), ForeignKey('memory_blocks.id'), nullable=False) # Updated ForeignKey
     feedback_type = Column(String(50), nullable=False)
     feedback_details = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     memory_block = relationship("MemoryBlock", back_populates="feedback_logs")
 
@@ -153,7 +158,7 @@ class Keyword(Base):
     visibility_scope = Column(String(20), nullable=False, default='personal')
     owner_user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
     organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id'), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
 
     memory_block_keywords = relationship("MemoryBlockKeyword", back_populates="keyword")
 
@@ -182,11 +187,83 @@ class ConsolidationSuggestion(Base):
     suggested_keywords = Column(JSONB, nullable=False)
     original_memory_ids = Column(JSONB, nullable=False)
     status = Column(String(20), nullable=False, default='pending')
-    timestamp = Column(DateTime(timezone=True), default=datetime.utcnow)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=now_utc)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
     __table_args__ = (
         Index('idx_consolidation_suggestions_status', 'status'),
         Index('idx_consolidation_suggestions_group_id', 'group_id'),
+    )
+
+
+# Governance Phase 2.1 additions (invitations, audit logs, bulk operations)
+class OrganizationInvitation(Base):
+    __tablename__ = 'organization_invitations'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
+    email = Column(Text, nullable=False)
+    invited_by_user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    role = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default='pending')  # pending|accepted|revoked|expired
+    token = Column(Text, nullable=True, unique=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index('ix_organization_invitations_email', 'email'),
+        Index('ix_organization_invitations_organization_id', 'organization_id'),
+        # Pending unique enforced at DB via partial index created in migration
+    )
+
+
+class AuditLog(Base):
+    __tablename__ = 'audit_logs'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id', ondelete='SET NULL'), nullable=True)
+    actor_user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    action_type = Column(Text, nullable=False)
+    target_type = Column(Text, nullable=True)
+    target_id = Column(UUID(as_uuid=True), nullable=True)
+    status = Column(Text, nullable=False)
+    reason = Column(Text, nullable=True)
+    # Use a non-reserved Python attribute name while keeping DB column name 'metadata'
+    metadata_json = Column('metadata', JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+    __table_args__ = (
+        Index('ix_audit_logs_organization_id_created_at', 'organization_id', 'created_at'),
+        Index('ix_audit_logs_actor_user_id_created_at', 'actor_user_id', 'created_at'),
+        Index('ix_audit_logs_action_type', 'action_type'),
+    )
+
+    # Avoid defining a .metadata property (reserved by SQLAlchemy for MetaData); use explicit accessors if needed
+    def get_metadata(self):
+        return self.metadata_json
+
+    def set_metadata(self, value):
+        self.metadata_json = value
+
+
+class BulkOperation(Base):
+    __tablename__ = 'bulk_operations'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    type = Column(Text, nullable=False)
+    actor_user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey('organizations.id', ondelete='SET NULL'), nullable=True)
+    request_payload = Column(JSONB, nullable=True)
+    status = Column(Text, nullable=False, default='pending')  # pending|running|completed|failed|cancelled
+    progress = Column(Integer, nullable=False, default=0)
+    total = Column(Integer, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    error_log = Column(JSONB, nullable=True)
+    result_summary = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+    __table_args__ = (
+        Index('ix_bulk_operations_organization_id_created_at', 'organization_id', 'created_at'),
+        Index('ix_bulk_operations_actor_user_id_created_at', 'actor_user_id', 'created_at'),
     )

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session, joinedload # Import joinedload
 from . import models, schemas
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import or_, and_, func, Text # Import func, and_, and Text
 from typing import List, Optional
 
@@ -50,27 +50,31 @@ def get_agents(
     if current_user is None:
         q = q.filter(models.Agent.visibility_scope == 'public')
     else:
-        org_ids = []
-        try:
-            for m in current_user.get('memberships', []):
-                mid = m.get('organization_id')
-                if mid:
-                    try:
-                        org_ids.append(uuid.UUID(mid))
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-        q = q.filter(
-            or_(
-                models.Agent.visibility_scope == 'public',
-                models.Agent.owner_user_id == current_user.get('id'),
-                and_(
-                    models.Agent.visibility_scope == 'organization',
-                    models.Agent.organization_id.in_(org_ids) if org_ids else False,
-                ),
+        # Superadmin shortcut: sees all
+        if current_user.get('is_superadmin'):
+            pass  # no filter; they can read everything
+        else:
+            org_ids = []
+            try:
+                for m in current_user.get('memberships', []):
+                    mid = m.get('organization_id')
+                    if mid:
+                        try:
+                            org_ids.append(uuid.UUID(mid))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            q = q.filter(
+                or_(
+                    models.Agent.visibility_scope == 'public',
+                    models.Agent.owner_user_id == current_user.get('id'),
+                    and_(
+                        models.Agent.visibility_scope == 'organization',
+                        models.Agent.organization_id.in_(org_ids) if org_ids else False,
+                    ),
+                )
             )
-        )
 
     # Optional narrowing filters
     if scope in ('personal', 'organization', 'public'):
@@ -133,7 +137,7 @@ def search_agents(
 def update_agent(db: Session, agent_id: uuid.UUID, agent: schemas.AgentUpdate):
     db_agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
     if db_agent:
-        for key, value in agent.dict(exclude_unset=True).items():
+        for key, value in agent.model_dump(exclude_unset=True).items():
             setattr(db_agent, key, value)
         db.commit()
         db.refresh(db_agent)
@@ -178,7 +182,7 @@ def get_agent_transcripts_by_conversation(db: Session, conversation_id: uuid.UUI
 def update_agent_transcript(db: Session, transcript_id: uuid.UUID, transcript: schemas.AgentTranscriptUpdate):
     db_transcript = db.query(models.AgentTranscript).filter(models.AgentTranscript.transcript_id == transcript_id).first()
     if db_transcript:
-        for key, value in transcript.dict(exclude_unset=True).items():
+        for key, value in transcript.model_dump(exclude_unset=True).items():
             setattr(db_transcript, key, value)
         db.commit()
         db.refresh(db_transcript)
@@ -229,6 +233,264 @@ def get_scoped_keyword_by_text(
         q = q.filter(models.Keyword.owner_user_id == owner_user_id)
     return q.first()
 
+# CRUD for Organization
+def create_organization(db: Session, organization: schemas.OrganizationCreate, user_id: uuid.UUID):
+    db_organization = models.Organization(
+        name=organization.name,
+        slug=organization.slug,
+        created_by=user_id
+    )
+    db.add(db_organization)
+    db.commit()
+    db.refresh(db_organization)
+    # Add creator as owner
+    db_member = models.OrganizationMembership(
+        organization_id=db_organization.id,
+        user_id=user_id,
+        role='owner'
+    )
+    db.add(db_member)
+    db.commit()
+    return db_organization
+
+def get_organization(db: Session, organization_id: uuid.UUID):
+    return db.query(models.Organization).filter(models.Organization.id == organization_id).first()
+
+def get_organizations(db: Session, user_id: uuid.UUID, skip: int = 0, limit: int = 100):
+    return db.query(models.Organization).join(models.OrganizationMembership).filter(models.OrganizationMembership.user_id == user_id).offset(skip).limit(limit).all()
+
+def update_organization(db: Session, organization_id: uuid.UUID, organization: schemas.OrganizationUpdate):
+    db_organization = db.query(models.Organization).filter(models.Organization.id == organization_id).first()
+    if db_organization:
+        update_data = organization.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_organization, key, value)
+        db.commit()
+        db.refresh(db_organization)
+    return db_organization
+
+def delete_organization(db: Session, organization_id: uuid.UUID):
+    db_organization = db.query(models.Organization).filter(models.Organization.id == organization_id).first()
+    if db_organization:
+        db.delete(db_organization)
+        db.commit()
+        return True
+    return False
+
+# CRUD for OrganizationMember
+def create_organization_member(db: Session, organization_id: uuid.UUID, member: schemas.OrganizationMemberCreate):
+    db_member = models.OrganizationMembership(
+        organization_id=organization_id,
+        **member.model_dump()
+    )
+    db.add(db_member)
+    db.commit()
+    db.refresh(db_member)
+    return db_member
+
+def get_organization_member(db: Session, organization_id: uuid.UUID, user_id: uuid.UUID):
+    return db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == organization_id, models.OrganizationMembership.user_id == user_id).first()
+
+def get_organization_members(db: Session, organization_id: uuid.UUID, skip: int = 0, limit: int = 100):
+    return db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == organization_id).offset(skip).limit(limit).all()
+
+def update_organization_member(db: Session, organization_id: uuid.UUID, user_id: uuid.UUID, member: schemas.OrganizationMemberUpdate):
+    db_member = db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == organization_id, models.OrganizationMembership.user_id == user_id).first()
+    if db_member:
+        update_data = member.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_member, key, value)
+        db.commit()
+        db.refresh(db_member)
+    return db_member
+
+# CRUD for AuditLog
+def create_audit_log(db: Session, audit_log: schemas.AuditLogCreate, actor_user_id: uuid.UUID, organization_id: Optional[uuid.UUID] = None):
+    data = audit_log.model_dump()
+    metadata_payload = data.pop('metadata', None)
+    db_audit_log = models.AuditLog(
+        **data,
+        actor_user_id=actor_user_id,
+        organization_id=organization_id,
+        metadata_json=metadata_payload,
+    )
+    db.add(db_audit_log)
+    db.commit()
+    db.refresh(db_audit_log)
+    return db_audit_log
+
+def get_audit_logs(db: Session, organization_id: Optional[uuid.UUID] = None, user_id: Optional[uuid.UUID] = None, action_type: Optional[str] = None, status: Optional[str] = None, skip: int = 0, limit: int = 100):
+    """Retrieve audit logs with optional filters.
+
+    Parameters:
+        organization_id: Restrict to a specific organization.
+        user_id: Filter by actor user id.
+        action_type: Filter by action type (e.g., 'member_add').
+        status: Filter by status (e.g., 'success', 'failure').
+        skip/limit: Pagination controls.
+    """
+    query = db.query(models.AuditLog)
+    if organization_id:
+        query = query.filter(models.AuditLog.organization_id == organization_id)
+    if user_id:
+        query = query.filter(models.AuditLog.actor_user_id == user_id)
+    if action_type:
+        query = query.filter(models.AuditLog.action_type == action_type)
+    if status:
+        query = query.filter(models.AuditLog.status == status)
+    return query.order_by(models.AuditLog.created_at.desc()).offset(skip).limit(limit).all()
+
+# CRUD for BulkOperation
+def create_bulk_operation(db: Session, bulk_operation: schemas.BulkOperationCreate, actor_user_id: uuid.UUID, organization_id: Optional[uuid.UUID] = None):
+    db_bulk_operation = models.BulkOperation(
+        **bulk_operation.model_dump(),
+        actor_user_id=actor_user_id,
+        organization_id=organization_id
+    )
+    db.add(db_bulk_operation)
+    db.commit()
+    db.refresh(db_bulk_operation)
+    return db_bulk_operation
+
+def get_bulk_operation(db: Session, bulk_operation_id: uuid.UUID):
+    return db.query(models.BulkOperation).filter(models.BulkOperation.id == bulk_operation_id).first()
+
+def get_bulk_operations(db: Session, organization_id: Optional[uuid.UUID] = None, user_id: Optional[uuid.UUID] = None, skip: int = 0, limit: int = 100):
+    query = db.query(models.BulkOperation)
+    if organization_id:
+        query = query.filter(models.BulkOperation.organization_id == organization_id)
+    if user_id:
+        query = query.filter(models.BulkOperation.actor_user_id == user_id)
+    return query.order_by(models.BulkOperation.created_at.desc()).offset(skip).limit(limit).all()
+
+def update_bulk_operation(db: Session, bulk_operation_id: uuid.UUID, bulk_operation: schemas.BulkOperationUpdate):
+    db_bulk_operation = db.query(models.BulkOperation).filter(models.BulkOperation.id == bulk_operation_id).first()
+    if db_bulk_operation:
+        update_data = bulk_operation.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_bulk_operation, key, value)
+        db.commit()
+        db.refresh(db_bulk_operation)
+    return db_bulk_operation
+
+
+# CRUD for Organization
+def create_organization(db: Session, organization: schemas.OrganizationCreate, user_id: uuid.UUID):
+    db_organization = models.Organization(
+        name=organization.name,
+        slug=organization.slug,
+        created_by=user_id
+    )
+    db.add(db_organization)
+    db.commit()
+    db.refresh(db_organization)
+    # Add creator as owner
+    db_member = models.OrganizationMembership(
+        organization_id=db_organization.id,
+        user_id=user_id,
+        role='owner'
+    )
+    db.add(db_member)
+    db.commit()
+    return db_organization
+
+def get_organization(db: Session, organization_id: uuid.UUID):
+    return db.query(models.Organization).filter(models.Organization.id == organization_id).first()
+
+def get_organizations(db: Session, user_id: uuid.UUID, skip: int = 0, limit: int = 100):
+    return db.query(models.Organization).join(models.OrganizationMembership).filter(models.OrganizationMembership.user_id == user_id).offset(skip).limit(limit).all()
+
+def update_organization(db: Session, organization_id: uuid.UUID, organization: schemas.OrganizationUpdate):
+    db_organization = db.query(models.Organization).filter(models.Organization.id == organization_id).first()
+    if db_organization:
+        update_data = organization.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_organization, key, value)
+        db.commit()
+        db.refresh(db_organization)
+    return db_organization
+
+def delete_organization(db: Session, organization_id: uuid.UUID):
+    db_organization = db.query(models.Organization).filter(models.Organization.id == organization_id).first()
+    if db_organization:
+        db.delete(db_organization)
+        db.commit()
+        return True
+    return False
+
+# CRUD for OrganizationMember
+def create_organization_member(db: Session, organization_id: uuid.UUID, member: schemas.OrganizationMemberCreate):
+    db_member = models.OrganizationMembership(
+        organization_id=organization_id,
+        **member.model_dump()
+    )
+    db.add(db_member)
+    db.commit()
+    db.refresh(db_member)
+    return db_member
+
+def get_organization_member(db: Session, organization_id: uuid.UUID, user_id: uuid.UUID):
+    return db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == organization_id, models.OrganizationMembership.user_id == user_id).first()
+
+def get_organization_members(db: Session, organization_id: uuid.UUID, skip: int = 0, limit: int = 100):
+    return db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == organization_id).offset(skip).limit(limit).all()
+
+def update_organization_member(db: Session, organization_id: uuid.UUID, user_id: uuid.UUID, member: schemas.OrganizationMemberUpdate):
+    db_member = db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == organization_id, models.OrganizationMembership.user_id == user_id).first()
+    if db_member:
+        update_data = member.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_member, key, value)
+        db.commit()
+        db.refresh(db_member)
+    return db_member
+
+def delete_organization_member(db: Session, organization_id: uuid.UUID, user_id: uuid.UUID):
+    db_member = db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == organization_id, models.OrganizationMembership.user_id == user_id).first()
+    if db_member:
+        db.delete(db_member)
+        db.commit()
+        return True
+    return False
+
+# CRUD for OrganizationInvitation
+def create_organization_invitation(db: Session, organization_id: uuid.UUID, invitation: schemas.OrganizationInvitationCreate, invited_by_user_id: uuid.UUID):
+    db_invitation = models.OrganizationInvitation(
+        organization_id=organization_id,
+        email=invitation.email,
+        role=invitation.role,
+        invited_by_user_id=invited_by_user_id,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7)
+    )
+    db.add(db_invitation)
+    db.commit()
+    db.refresh(db_invitation)
+    return db_invitation
+
+def get_organization_invitation(db: Session, invitation_id: uuid.UUID):
+    return db.query(models.OrganizationInvitation).filter(models.OrganizationInvitation.id == invitation_id).first()
+
+def get_organization_invitations(db: Session, organization_id: uuid.UUID, skip: int = 0, limit: int = 100):
+    return db.query(models.OrganizationInvitation).filter(models.OrganizationInvitation.organization_id == organization_id).offset(skip).limit(limit).all()
+
+def update_organization_invitation(db: Session, invitation_id: uuid.UUID, invitation: schemas.OrganizationInvitationUpdate):
+    db_invitation = db.query(models.OrganizationInvitation).filter(models.OrganizationInvitation.id == invitation_id).first()
+    if db_invitation:
+        update_data = invitation.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_invitation, key, value)
+        db.commit()
+        db.refresh(db_invitation)
+    return db_invitation
+
+def delete_organization_invitation(db: Session, invitation_id: uuid.UUID):
+    db_invitation = db.query(models.OrganizationInvitation).filter(models.OrganizationInvitation.id == invitation_id).first()
+    if db_invitation:
+        db.delete(db_invitation)
+        db.commit()
+        return True
+    return False
+
 def get_keywords(
     db: Session,
     skip: int = 0,
@@ -242,27 +504,30 @@ def get_keywords(
     if current_user is None:
         q = q.filter(models.Keyword.visibility_scope == 'public')
     else:
-        org_ids = []
-        try:
-            for m in current_user.get('memberships', []):
-                mid = m.get('organization_id')
-                if mid:
-                    try:
-                        org_ids.append(uuid.UUID(mid))
-                    except Exception:
-                        pass
-        except Exception:
+        if current_user.get('is_superadmin'):
             pass
-        q = q.filter(
-            or_(
-                models.Keyword.visibility_scope == 'public',
-                models.Keyword.owner_user_id == current_user.get('id'),
-                and_(
-                    models.Keyword.visibility_scope == 'organization',
-                    models.Keyword.organization_id.in_(org_ids) if org_ids else False,
-                ),
+        else:
+            org_ids = []
+            try:
+                for m in current_user.get('memberships', []):
+                    mid = m.get('organization_id')
+                    if mid:
+                        try:
+                            org_ids.append(uuid.UUID(mid))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            q = q.filter(
+                or_(
+                    models.Keyword.visibility_scope == 'public',
+                    models.Keyword.owner_user_id == current_user.get('id'),
+                    and_(
+                        models.Keyword.visibility_scope == 'organization',
+                        models.Keyword.organization_id.in_(org_ids) if org_ids else False,
+                    ),
+                )
             )
-        )
     if scope in ('personal', 'organization', 'public'):
         q = q.filter(models.Keyword.visibility_scope == scope)
     if organization_id is not None:
@@ -272,7 +537,7 @@ def get_keywords(
 def update_keyword(db: Session, keyword_id: uuid.UUID, keyword: schemas.KeywordUpdate):
     db_keyword = db.query(models.Keyword).filter(models.Keyword.keyword_id == keyword_id).first()
     if db_keyword:
-        for key, value in keyword.dict(exclude_unset=True).items():
+        for key, value in keyword.model_dump(exclude_unset=True).items():
             setattr(db_keyword, key, value)
         db.commit()
         db.refresh(db_keyword)
@@ -302,9 +567,18 @@ def create_memory_block(db: Session, memory_block: schemas.MemoryBlockCreate):
     db.add(db_memory_block)
     db.flush()  # Flush to get memory_id before commit
 
-    # Use NLP-based keyword extraction from core module
-    from core.core.keyword_extraction import extract_keywords
-    extracted_keywords = set(extract_keywords(memory_block.content))
+    # Use NLP-based keyword extraction; fallback heuristics if none
+    extracted_keywords = set()
+    try:
+        from core.core.keyword_extraction import extract_keywords  # type: ignore
+        extracted_keywords = set(extract_keywords(memory_block.content)) or set()
+    except Exception:  # pragma: no cover
+        extracted_keywords = set()
+
+    if not extracted_keywords:
+        import re
+        tokens = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", memory_block.content.lower())
+        extracted_keywords = set(tokens[:10])
 
     # Create associations with keywords
     for keyword_text in extracted_keywords:
@@ -329,7 +603,8 @@ def create_memory_block(db: Session, memory_block: schemas.MemoryBlockCreate):
     db.commit()
     db.refresh(db_memory_block)
     # Explicitly convert to schema model to ensure proper serialization
-    return schemas.MemoryBlock.from_orm(db_memory_block)
+    # Use model_validate with from_attributes per Pydantic v2 best practices
+    return schemas.MemoryBlock.model_validate(db_memory_block, from_attributes=True)
 
 def get_memory_block(db: Session, memory_id: uuid.UUID):
     return db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
@@ -477,7 +752,7 @@ def get_all_memory_blocks(
 def update_memory_block(db: Session, memory_id: uuid.UUID, memory_block: schemas.MemoryBlockUpdate):
     db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
     if db_memory_block:
-        update_data = memory_block.dict(exclude_unset=True)
+        update_data = memory_block.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(db_memory_block, key, value)
         db.commit()
@@ -549,11 +824,7 @@ def retrieve_relevant_memories(
 
 def report_memory_feedback(db: Session, memory_id: uuid.UUID, feedback_type: str, feedback_details: Optional[str] = None):
     # Record feedback in feedback_logs
-    feedback_log_create = schemas.FeedbackLogCreate(
-        memory_id=memory_id,
-        feedback_type=feedback_type,
-        feedback_details=feedback_details
-    )
+    feedback_log_create = schemas.FeedbackLogCreate(memory_id=memory_id, feedback_type=feedback_type, feedback_details=feedback_details)
     create_feedback_log(db, feedback_log_create)
 
     # Update feedback_score for the associated memory_block
@@ -571,7 +842,7 @@ def report_memory_feedback(db: Session, memory_id: uuid.UUID, feedback_type: str
 # CRUD for FeedbackLog
 def create_feedback_log(db: Session, feedback_log: schemas.FeedbackLogCreate):
     db_feedback_log = models.FeedbackLog(
-        memory_id=feedback_log.memory_id, # This will be fixed in schemas.py
+    memory_id=feedback_log.memory_id,
         feedback_type=feedback_log.feedback_type,
         feedback_details=feedback_log.feedback_details
     )
@@ -589,7 +860,7 @@ def get_feedback_logs_by_memory_block(db: Session, memory_id: uuid.UUID, skip: i
 def update_feedback_log(db: Session, feedback_id: uuid.UUID, feedback_log: schemas.FeedbackLogUpdate):
     db_feedback_log = db.query(models.FeedbackLog).filter(models.FeedbackLog.feedback_id == feedback_id).first()
     if db_feedback_log:
-        for key, value in feedback_log.dict(exclude_unset=True).items():
+        for key, value in feedback_log.model_dump(exclude_unset=True).items():
             setattr(db_feedback_log, key, value)
         db.commit()
         db.refresh(db_feedback_log)
@@ -693,7 +964,7 @@ def get_consolidation_suggestions(db: Session, status: Optional[str] = None, gro
 def update_consolidation_suggestion(db: Session, suggestion_id: uuid.UUID, suggestion: schemas.ConsolidationSuggestionUpdate):
     db_suggestion = db.query(models.ConsolidationSuggestion).filter(models.ConsolidationSuggestion.suggestion_id == suggestion_id).first()
     if db_suggestion:
-        update_data = suggestion.dict(exclude_unset=True)
+        update_data = suggestion.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(db_suggestion, key, value)
         db.commit()

@@ -260,6 +260,13 @@ class SearchService:
             similarity_threshold=0.5, include_archived=include_archived, current_user=current_user
         )
         
+        # If fulltext returned nothing (e.g., search_vector unpopulated), fall back to basic substring search
+        if not fulltext_results:
+            basic_results, _ = self._basic_search_fallback(
+                db, query, agent_id, conversation_id, limit * 2, include_archived, current_user
+            )
+            fulltext_results = basic_results
+
         # Combine and rerank results
         combined_results = self._combine_and_rerank_with_scores(
             fulltext_results, semantic_results,
@@ -331,7 +338,7 @@ class SearchService:
             if combined_score >= min_combined_score:
                 # Create new MemoryBlockWithScore with combined score
                 # Extract base memory block data from the MemoryBlockWithScore
-                base_data = {k: v for k, v in memory_block.dict().items() 
+                base_data = {k: v for k, v in memory_block.model_dump().items() 
                            if k not in ['search_score', 'search_type', 'rank_explanation']}
                 
                 combined_result = schemas.MemoryBlockWithScore(
@@ -450,7 +457,7 @@ class SearchService:
         else:
             # Fall back to basic search (existing ILIKE implementation)
             return self._basic_search_fallback(
-                db, search_query, agent_id, conversation_id, limit, include_archived
+                db, search_query, agent_id, conversation_id, limit, include_archived, search_params.get('current_user')
             )
     
     def _basic_search_fallback(
@@ -460,7 +467,8 @@ class SearchService:
         agent_id: Optional[uuid.UUID] = None,
         conversation_id: Optional[uuid.UUID] = None,
         limit: int = 50,
-        include_archived: bool = False
+        include_archived: bool = False,
+        current_user: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[schemas.MemoryBlockWithScore], Dict[str, Any]]:
         """
         Fallback to basic ILIKE search for backward compatibility.
@@ -488,6 +496,27 @@ class SearchService:
         if combined_filter is not None:
             query = query.filter(combined_filter)
         
+        # Apply scope filters
+        if current_user is None:
+            query = query.filter(models.MemoryBlock.visibility_scope == 'public')
+        else:
+            org_ids: List[uuid.UUID] = []
+            for m in (current_user.get('memberships') or []):
+                try:
+                    org_ids.append(uuid.UUID(m.get('organization_id')))
+                except Exception:
+                    pass
+            query = query.filter(
+                or_(
+                    models.MemoryBlock.visibility_scope == 'public',
+                    models.MemoryBlock.owner_user_id == current_user.get('id'),
+                    and_(
+                        models.MemoryBlock.visibility_scope == 'organization',
+                        models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
+                    ),
+                )
+            )
+
         # Apply additional filters
         if agent_id:
             query = query.filter(models.MemoryBlock.agent_id == agent_id)

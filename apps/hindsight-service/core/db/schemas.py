@@ -33,7 +33,6 @@ class MemoryBlockBase(BaseModel):
     organization_id: Optional[uuid.UUID] = None
 
 class FeedbackLogBase(BaseModel):
-    id: uuid.UUID # Changed from memory_id to id
     feedback_type: str
     feedback_details: Optional[str] = None
 
@@ -55,7 +54,7 @@ class MemoryBlockCreate(MemoryBlockBase):
     pass
 
 class FeedbackLogCreate(FeedbackLogBase):
-    pass
+    memory_id: uuid.UUID
 
 class KeywordCreate(KeywordBase):
     pass
@@ -80,6 +79,7 @@ class FeedbackLogUpdate(BaseModel):
 
 class KeywordUpdate(BaseModel):
     keyword_text: Optional[str] = None
+    visibility_scope: Optional[str] = None
 
 # Read Schemas (for GET responses)
 class Agent(AgentBase):
@@ -107,6 +107,7 @@ class MemoryBlockKeywordAssociation(BaseModel):
 
 class FeedbackLog(FeedbackLogBase):
     feedback_id: uuid.UUID
+    memory_id: uuid.UUID
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -155,6 +156,130 @@ class MemoryBlockWithScore(MemoryBlock):
     search_score: float
     search_type: str = "basic"
     rank_explanation: Optional[str] = None
+
+# Governance Schemas
+class UserBase(BaseModel):
+    email: str
+    display_name: Optional[str] = None
+
+class UserCreate(UserBase):
+    pass
+
+class User(UserBase):
+    id: uuid.UUID
+    is_superadmin: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class OrganizationBase(BaseModel):
+    name: str
+    slug: Optional[str] = None
+
+class OrganizationCreate(OrganizationBase):
+    pass
+
+class OrganizationUpdate(OrganizationBase):
+    pass
+
+class Organization(OrganizationBase):
+    id: uuid.UUID
+    is_active: bool
+    created_by: Optional[uuid.UUID] = None
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class OrganizationMemberBase(BaseModel):
+    user_id: uuid.UUID
+    role: str
+    can_read: Optional[bool] = True
+    can_write: Optional[bool] = False
+
+class OrganizationMemberCreate(OrganizationMemberBase):
+    pass
+
+class OrganizationMemberUpdate(BaseModel):
+    role: Optional[str] = None
+    can_read: Optional[bool] = None
+    can_write: Optional[bool] = None
+
+class OrganizationMember(OrganizationMemberBase):
+    organization_id: uuid.UUID
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class OrganizationInvitationBase(BaseModel):
+    email: str
+    role: str
+
+class OrganizationInvitationCreate(OrganizationInvitationBase):
+    pass
+
+class OrganizationInvitationUpdate(BaseModel):
+    status: Optional[str] = None
+    role: Optional[str] = None
+
+class OrganizationInvitation(OrganizationInvitationBase):
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    invited_by_user_id: uuid.UUID
+    status: str
+    token: Optional[str] = None
+    created_at: datetime
+    expires_at: datetime
+    accepted_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+class AuditLogBase(BaseModel):
+    action_type: str
+    status: str
+    target_type: Optional[str] = None
+    target_id: Optional[uuid.UUID] = None
+    reason: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None  # Pydantic field; internal SQLAlchemy column is metadata_json
+
+class AuditLogCreate(AuditLogBase):
+    pass
+
+class AuditLog(AuditLogBase):
+    id: uuid.UUID
+    organization_id: Optional[uuid.UUID] = None
+    actor_user_id: uuid.UUID
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class BulkOperationBase(BaseModel):
+    type: str
+    request_payload: Optional[Dict[str, Any]] = None
+
+class BulkOperationCreate(BulkOperationBase):
+    pass
+
+class BulkOperation(BulkOperationBase):
+    id: uuid.UUID
+    actor_user_id: uuid.UUID
+    organization_id: Optional[uuid.UUID] = None
+    status: str
+    progress: int
+    total: Optional[int] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    error_log: Optional[Dict[str, Any]] = None
+    result_summary: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class BulkOperationUpdate(BaseModel):
+    status: Optional[str] = None
+    progress: Optional[int] = None
+    total: Optional[int] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    error_log: Optional[Dict[str, Any]] = None
+    result_summary: Optional[Dict[str, Any]] = None
+
 
 class SearchMetadata(BaseModel):
     total_search_time_ms: Optional[float] = None

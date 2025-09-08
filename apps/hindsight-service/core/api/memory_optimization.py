@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 import json
 
 from core.db import crud, models
@@ -68,10 +68,10 @@ async def get_memory_optimization_suggestions(db: Session = Depends(get_db)):
             models.MemoryBlock.feedback_score <= 0,
             models.MemoryBlock.retrieval_count <= 1
         ).all()
-        
+
         # Filter to blocks older than 90 days with low engagement
         archival_candidates = []
-        current_time = datetime.utcnow()
+        current_time = datetime.now(UTC)
         for block in old_blocks:
             # Handle timezone-aware vs naive datetime comparison
             created_at = block.created_at
@@ -109,14 +109,14 @@ async def get_memory_optimization_suggestions(db: Session = Depends(get_db)):
                 if content_key not in content_groups:
                     content_groups[content_key] = []
                 content_groups[content_key].append(block)
-        
+
         duplicate_groups = {k: v for k, v in content_groups.items() if len(v) > 1}
         if duplicate_groups:
             total_duplicates = sum(len(group) for group in duplicate_groups.values())
             all_duplicate_blocks = []
             for group in duplicate_groups.values():
                 all_duplicate_blocks.extend(group)
-            
+
             suggestions.append({
                 "id": str(uuid.uuid4()),
                 "type": "merge",
@@ -127,10 +127,10 @@ async def get_memory_optimization_suggestions(db: Session = Depends(get_db)):
                 "estimated_impact": f"Reduce redundancy by merging {total_duplicates} similar blocks",
                 "status": "pending"
             })
-        
+
         return {
             "suggestions": suggestions,
-            "analysis_timestamp": datetime.utcnow().isoformat(),
+            "analysis_timestamp": datetime.now(UTC).isoformat(),
             "total_memory_blocks_analyzed": len(long_blocks)
         }
         
@@ -227,7 +227,7 @@ async def execute_optimization_suggestion(
                 return {
                     "suggestion_id": suggestion_id,
                     "status": "completed",
-                    "execution_timestamp": datetime.utcnow().isoformat(),
+                    "execution_timestamp": datetime.now(UTC).isoformat(),
                     "message": "Keyword suggestions generated successfully",
                     "results": {
                         "type": "keyword_suggestions",
@@ -255,7 +255,7 @@ async def execute_optimization_suggestion(
             return {
                 "suggestion_id": suggestion_id,
                 "status": "completed",
-                "execution_timestamp": datetime.utcnow().isoformat(),
+                "execution_timestamp": datetime.now(UTC).isoformat(),
                 "message": f"Optimization suggestion ({suggestion['type']}) has been queued for execution",
                 "results": {
                     "summary": "Action completed successfully",

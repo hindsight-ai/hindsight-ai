@@ -16,7 +16,7 @@ import uuid
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 import requests
-from datetime import datetime
+from datetime import datetime, UTC
 
 from core.db.crud import get_memory_block
 
@@ -140,7 +140,7 @@ class CompressionService:
                     "compression_quality_score": compression_result.get("compression_quality_score", 5),
                     "rationale": compression_result.get("rationale", ""),
                     "user_instructions": user_instructions,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(UTC).isoformat()
                 }
 
             except json.JSONDecodeError as parse_error:

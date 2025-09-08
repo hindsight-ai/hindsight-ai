@@ -23,6 +23,8 @@ from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
 from core.api.orgs import router as orgs_router
+from core.api.audits import router as audits_router
+from core.api.bulk_operations import router as bulk_operations_router
 from core.api.permissions import can_read, can_write, can_manage_org
 from core.search.search_service import SearchService
 
@@ -116,7 +118,7 @@ def create_agent_endpoint(
     if existing:
         raise HTTPException(status_code=400, detail="Agent with this name already exists in the selected scope")
 
-    agent_for_create = agent.copy(update={
+    agent_for_create = agent.model_copy(update={
         'visibility_scope': scope,
         'owner_user_id': owner_user_id,
         'organization_id': org_id if scope == 'organization' else None,
@@ -266,6 +268,55 @@ def delete_agent_endpoint(
         raise HTTPException(status_code=403, detail="Forbidden")
     success = crud.delete_agent(db, agent_id=agent_id)
     return {"message": "Agent deleted successfully"}
+
+@router.put("/agents/{agent_id}", response_model=schemas.Agent)
+def update_agent_endpoint(
+    agent_id: uuid.UUID,
+    agent_update: schemas.AgentUpdate,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    agent = crud.get_agent(db, agent_id=agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+
+    if not can_write(agent, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Check for name collision if agent_name is being updated
+    if agent_update.agent_name and agent_update.agent_name != agent.agent_name:
+        existing = crud.get_agent_by_name(
+            db,
+            agent_name=agent_update.agent_name,
+            visibility_scope=agent.visibility_scope,
+            owner_user_id=agent.owner_user_id,
+            organization_id=agent.organization_id,
+        )
+        if existing and existing.agent_id != agent_id:
+            raise HTTPException(status_code=409, detail="Agent with this name already exists in the selected scope")
+
+    updated_agent = crud.update_agent(db, agent_id=agent_id, agent=agent_update)
+    return updated_agent
 
 @router.post("/agents/{agent_id}/change-scope", response_model=schemas.Agent)
 def change_agent_scope(
@@ -803,7 +854,7 @@ def create_memory_block_endpoint(
         if not (m.get('can_write') or m.get('role') in ('owner','admin','editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
 
-    mb = memory_block.copy(update={
+    mb = memory_block.model_copy(update={
         'visibility_scope': scope,
         'owner_user_id': u.id if scope == 'personal' else None,
         'organization_id': memory_block.organization_id if scope == 'organization' else None,
@@ -1154,7 +1205,7 @@ def create_keyword_endpoint(
     if existing:
         raise HTTPException(status_code=409, detail="Keyword already exists in this scope")
 
-    kw_for_create = keyword.copy(update={
+    kw_for_create = keyword.model_copy(update={
         'owner_user_id': u.id if scope == 'personal' else getattr(keyword, 'owner_user_id', None),
     })
     return crud.create_keyword(db=db, keyword=kw_for_create)
@@ -1175,7 +1226,7 @@ def get_all_keywords_endpoint(
         x_auth_request_user=x_auth_request_user,
         x_auth_request_email=x_auth_request_email,
         x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
+    x_forwarded_email=x_forwarded_email,
     )
     current_user = None
     if email:
@@ -2242,7 +2293,11 @@ def search_memory_blocks_fulltext_endpoint(
     limit: int = 50,
     min_score: float = 0.1,
     include_archived: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
     """
     Perform BM25-like full-text search on memory blocks using PostgreSQL's full-text search capabilities.
@@ -2262,6 +2317,22 @@ def search_memory_blocks_fulltext_endpoint(
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
     
     try:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        current_user = None
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
         results, metadata = crud.search_memory_blocks_fulltext(
             db=db,
             query=query.strip(),
@@ -2269,7 +2340,7 @@ def search_memory_blocks_fulltext_endpoint(
             conversation_id=conversation_id,
             limit=limit,
             min_score=min_score,
-            include_archived=include_archived
+            include_archived=include_archived,
         )
         
         logger.info(f"Full-text search for '{query}' returned {len(results)} results")
@@ -2287,7 +2358,11 @@ def search_memory_blocks_semantic_endpoint(
     limit: int = 50,
     similarity_threshold: float = 0.7,
     include_archived: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
     """
     Perform semantic search on memory blocks using embeddings (placeholder implementation).
@@ -2307,6 +2382,22 @@ def search_memory_blocks_semantic_endpoint(
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
     
     try:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        current_user = None
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
         results, metadata = crud.search_memory_blocks_semantic(
             db=db,
             query=query.strip(),
@@ -2314,7 +2405,7 @@ def search_memory_blocks_semantic_endpoint(
             conversation_id=conversation_id,
             limit=limit,
             similarity_threshold=similarity_threshold,
-            include_archived=include_archived
+            include_archived=include_archived,
         )
         
         logger.info(f"Semantic search for '{query}' returned {len(results)} results (placeholder)")
@@ -2334,7 +2425,11 @@ def search_memory_blocks_hybrid_endpoint(
     semantic_weight: float = 0.3,
     min_combined_score: float = 0.1,
     include_archived: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
     """
     Perform hybrid search combining full-text and semantic search with weighted scoring.
@@ -2360,6 +2455,22 @@ def search_memory_blocks_hybrid_endpoint(
         raise HTTPException(status_code=400, detail="Fulltext and semantic weights must sum to 1.0")
     
     try:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        current_user = None
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
         results, metadata = crud.search_memory_blocks_hybrid(
             db=db,
             query=query.strip(),
@@ -2369,7 +2480,7 @@ def search_memory_blocks_hybrid_endpoint(
             fulltext_weight=fulltext_weight,
             semantic_weight=semantic_weight,
             min_combined_score=min_combined_score,
-            include_archived=include_archived
+            include_archived=include_archived,
         )
         
         logger.info(f"Hybrid search for '{query}' returned {len(results)} results")
@@ -2382,6 +2493,8 @@ def search_memory_blocks_hybrid_endpoint(
 # Include the main router
 app.include_router(router)
 app.include_router(orgs_router, prefix="/organizations")
+app.include_router(audits_router, prefix="/audits")
+app.include_router(bulk_operations_router, prefix="/bulk-operations")
 
 # Include memory optimization router
 try:

@@ -6,7 +6,7 @@ This module provides AI-powered suggestions for optimizing memory blocks
 from fastapi import APIRouter
 from typing import List, Dict, Any, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 import logging
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ async def get_memory_optimization_suggestions():
         return {
             "suggestions": suggestions,
             "total_blocks_analyzed": 145,
-            "analysis_timestamp": datetime.utcnow().isoformat()
+            "analysis_timestamp": datetime.now(UTC).isoformat()
         }
         
     except Exception as e:
