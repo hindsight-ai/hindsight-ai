@@ -2240,7 +2240,13 @@ async def bulk_compact_memory_blocks_endpoint(
     
     try:
         # Use ThreadPoolExecutor for concurrent processing
-        loop = asyncio.get_event_loop()
+        # Use a fresh event loop retrieval that is future-safe; if no loop set, create one
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop; create a temporary one (mainly for sync test contexts)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
             # Create tasks for all memory blocks
             tasks = [

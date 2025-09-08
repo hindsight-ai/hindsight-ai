@@ -20,7 +20,9 @@ def create_org(db, name="BulkOrg"):
 
 
 def create_membership(db, user_id, org_id, role="owner"):
-    m = models.OrganizationMembership(user_id=user_id, organization_id=str(org_id), role=role, can_write=True)
+    # Pass UUID objects directly; SQLAlchemy's PostgreSQL UUID type with SQLite shim
+    # expects UUID instances, not stringified values.
+    m = models.OrganizationMembership(user_id=user_id, organization_id=org_id, role=role, can_write=True)
     db.add(m)
     db.commit()
     return m
@@ -39,11 +41,11 @@ def test_bulk_move_dry_run_and_start(monkeypatch):
     with SessionLocal() as db:
         user = get_user(db, "admin@example.com")
         user_id = user.id  # capture before session closes
-        create_membership(db, user_id, org.id, role="owner")
-        # add an agent to move
-        agent = models.Agent(agent_name="Mover", visibility_scope="organization", organization_id=str(org.id))
-        db.add(agent)
-        db.commit()
+    create_membership(db, user_id, org.id, role="owner")
+    # add an agent to move
+    agent = models.Agent(agent_name="Mover", visibility_scope="organization", organization_id=org.id)
+    db.add(agent)
+    db.commit()
     # dry run
     payload = {"dry_run": True, "destination_owner_user_id": str(user_id)}
     r = client.post(f"/bulk-operations/organizations/{org.id}/bulk-move", json=payload, headers=auth())
@@ -65,10 +67,16 @@ def test_bulk_delete_dry_run(monkeypatch):
         user = get_user(db, "admin@example.com")
         create_membership(db, user.id, org.id, role="owner")
         # create agent to attach to memory block
-        agent = models.Agent(agent_name="DelAgent", visibility_scope="organization", organization_id=str(org.id))
+        agent = models.Agent(agent_name="DelAgent", visibility_scope="organization", organization_id=org.id)
         db.add(agent)
         db.commit()
-        mb = models.MemoryBlock(content="to delete", visibility_scope="organization", organization_id=str(org.id), agent_id=agent.agent_id, conversation_id=uuid.uuid4())
+        mb = models.MemoryBlock(
+            content="to delete",
+            visibility_scope="organization",
+            organization_id=org.id,
+            agent_id=agent.agent_id,
+            conversation_id=uuid.uuid4(),
+        )
         db.add(mb)
         db.commit()
     payload = {"dry_run": True, "resource_types": ["memory_blocks"]}

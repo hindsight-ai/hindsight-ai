@@ -24,8 +24,21 @@ def get_agent(db: Session, agent_id: uuid.UUID):
 def get_agent_by_name(db: Session, agent_name: str, *, visibility_scope: str = None, owner_user_id=None, organization_id=None):
     q = db.query(models.Agent).filter(func.lower(models.Agent.agent_name) == func.lower(agent_name))
     if visibility_scope == 'organization' and organization_id is not None:
+        # Accept either UUID object or string
+        if isinstance(organization_id, str):
+            try:
+                import uuid as _uuid
+                organization_id = _uuid.UUID(organization_id)
+            except Exception:
+                pass
         q = q.filter(models.Agent.visibility_scope == 'organization', models.Agent.organization_id == organization_id)
     elif visibility_scope == 'personal' and owner_user_id is not None:
+        if isinstance(owner_user_id, str):
+            try:
+                import uuid as _uuid
+                owner_user_id = _uuid.UUID(owner_user_id)
+            except Exception:
+                pass
         q = q.filter(models.Agent.visibility_scope == 'personal', models.Agent.owner_user_id == owner_user_id)
     elif visibility_scope == 'public':
         q = q.filter(models.Agent.visibility_scope == 'public')

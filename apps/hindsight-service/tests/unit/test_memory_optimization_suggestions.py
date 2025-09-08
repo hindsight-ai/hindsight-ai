@@ -43,8 +43,8 @@ def test_memory_optimization_suggestions(db_session: Session):
     db_session.commit()
 
     import asyncio
-    loop = asyncio.get_event_loop()
-    result = loop.run_until_complete(get_memory_optimization_suggestions(db_session))
+    # Use asyncio.run for modern event loop management (avoids deprecated get_event_loop warning)
+    result = asyncio.run(get_memory_optimization_suggestions(db_session))
 
     types = {s['type'] for s in result['suggestions']}
     assert 'compaction' in types

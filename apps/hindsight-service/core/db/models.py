@@ -12,6 +12,18 @@ from sqlalchemy import (
     CheckConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
+
+# Import SQLite compilation shims for PostgreSQL-only types when running tests
+# against an in-memory SQLite database. These provide minimal fallback
+# compilation so that metadata.create_all() succeeds without requiring a real
+# PostgreSQL instance in CI. No PostgreSQL-specific operators are emulated; the
+# tests that run under SQLite should limit themselves to basic CRUD on these
+# columns. When running against PostgreSQL, the native types and behavior are
+# preserved.
+try:  # pragma: no cover - defensive import
+    from . import sqlite_compiler_shims  # noqa: F401
+except Exception:  # pragma: no cover
+    pass
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime, UTC
 

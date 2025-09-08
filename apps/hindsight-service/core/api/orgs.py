@@ -109,8 +109,22 @@ def list_organizations(
     if current_user.get("is_superadmin"):
         orgs = db.query(models.Organization).all()
     else:
-        org_ids = [m["organization_id"] for m in current_user["memberships"]]
-        orgs = db.query(models.Organization).filter(models.Organization.id.in_(org_ids)).all()
+        raw_ids = [m.get("organization_id") for m in current_user.get("memberships", [])]
+        org_ids = []
+        for rid in raw_ids:
+            if not rid:
+                continue
+            if isinstance(rid, uuid.UUID):
+                org_ids.append(rid)
+            else:
+                try:
+                    org_ids.append(uuid.UUID(str(rid)))
+                except Exception:
+                    pass
+        if not org_ids:
+            orgs = []
+        else:
+            orgs = db.query(models.Organization).filter(models.Organization.id.in_(org_ids)).all()
     return [
         {"id": str(o.id), "name": o.name, "slug": o.slug, "is_active": o.is_active}
         for o in orgs
@@ -486,14 +500,7 @@ def revoke_invitation(
     db.commit()
 
     from core.db import schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="invitation_revoke",
-        status="success",
-        target_type="invitation",
-        target_id=invitation_id,
-    )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
-
+    # Single audit log (previously duplicated)
     audit_log = schemas.AuditLogCreate(
         action_type="invitation_revoke",
         status="success",
@@ -527,7 +534,16 @@ def accept_invitation(
     if db_invitation.status != 'pending':
         raise HTTPException(status_code=400, detail=f"Invitation is already {db_invitation.status}")
 
-    if db_invitation.expires_at < datetime.now(timezone.utc):
+    now_utc = datetime.now(timezone.utc)
+    expires_at = db_invitation.expires_at
+    # If expires_at is naive (can happen under SQLite or legacy data), assume UTC
+    if expires_at is not None and expires_at.tzinfo is None:
+        try:
+            from datetime import timezone as _tz
+            expires_at = expires_at.replace(tzinfo=_tz.utc)
+        except Exception:
+            pass
+    if expires_at and expires_at < now_utc:
         db_invitation.status = 'expired'
         db.commit()
         raise HTTPException(status_code=400, detail="Invitation has expired")
@@ -539,7 +555,7 @@ def accept_invitation(
 
     # Update invitation
     db_invitation.status = 'accepted'
-    db_invitation.accepted_at = datetime.now(timezone.utc)
+    db_invitation.accepted_at = now_utc
     db.commit()
 
     from core.db import schemas
