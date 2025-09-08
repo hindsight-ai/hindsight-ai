@@ -473,11 +473,19 @@ def create_organization_invitation(db: Session, organization_id: uuid.UUID, invi
         email=invitation.email,
         role=invitation.role,
         invited_by_user_id=invited_by_user_id,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7)
+    # Use models.now_utc for consistency so result is always timezone-aware
+    expires_at=models.now_utc() + timedelta(days=7)
     )
     db.add(db_invitation)
     db.commit()
     db.refresh(db_invitation)
+    # SQLite loses timezone info; normalize to UTC aware for consistent tests
+    if db_invitation.expires_at and db_invitation.expires_at.tzinfo is None:
+        from datetime import timezone
+        db_invitation.expires_at = db_invitation.expires_at.replace(tzinfo=timezone.utc)
+    if db_invitation.created_at and db_invitation.created_at.tzinfo is None:
+        from datetime import timezone
+        db_invitation.created_at = db_invitation.created_at.replace(tzinfo=timezone.utc)
     return db_invitation
 
 def get_organization_invitation(db: Session, invitation_id: uuid.UUID):
@@ -998,26 +1006,39 @@ def apply_consolidation(db: Session, suggestion_id: uuid.UUID):
         # Create a new MemoryBlock with the consolidated content
         original_memory_ids = db_suggestion.original_memory_ids
         if original_memory_ids:
-            first_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == original_memory_ids[0]).first()
+            # original_memory_ids may be stored as strings; coerce to UUID objects when possible
+            norm_ids = []
+            for mid in original_memory_ids:
+                if isinstance(mid, uuid.UUID):
+                    norm_ids.append(mid)
+                else:
+                    try:
+                        norm_ids.append(uuid.UUID(str(mid)))
+                    except Exception:
+                        # Skip invalid IDs silently in consolidation context
+                        continue
+            if not norm_ids:
+                return None
+            first_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == norm_ids[0]).first()
             if first_memory_block:
                 new_memory_block = models.MemoryBlock(
                     agent_id=first_memory_block.agent_id,
                     conversation_id=first_memory_block.conversation_id,
                     content=db_suggestion.suggested_content,
                     lessons_learned=db_suggestion.suggested_lessons_learned,
-                    metadata_col={"consolidated_from": original_memory_ids}
+                    metadata_col={"consolidated_from": [str(i) for i in norm_ids]}
                 )
                 db.add(new_memory_block)
                 db.flush()
 
                 # Add keywords to the new memory block
-                for keyword_text in db_suggestion.suggested_keywords:
+                for keyword_text in db_suggestion.suggested_keywords or []:
                     keyword = _get_or_create_keyword(db, keyword_text)
                     db_mbk = models.MemoryBlockKeyword(memory_id=new_memory_block.id, keyword_id=keyword.keyword_id)
                     db.add(db_mbk)
 
                 # Archive original memory blocks instead of deleting them
-                for memory_id in original_memory_ids:
+                for memory_id in norm_ids:
                     db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
                     if db_memory_block:
                         db_memory_block.archived = True # Set archived to True

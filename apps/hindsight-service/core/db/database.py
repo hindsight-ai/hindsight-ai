@@ -1,4 +1,5 @@
 import os
+import sys
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
@@ -16,7 +17,25 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5
 
 explicit_test_db = os.getenv("HINDSIGHT_TEST_DB")
 explicit_e2e_db = os.getenv("TEST_DATABASE_URL")  # set inside e2e fixtures
-pytest_indicator = "PYTEST_CURRENT_TEST" in os.environ
+def _is_pytest_runtime() -> bool:
+    """Best-effort detection that we're executing under pytest.
+
+    Rationale: ``PYTEST_CURRENT_TEST`` is only set while an individual test is
+    running, so module import time (e.g. when creating the engine) in CI may
+    not yet have it. Detect presence of the pytest package in ``sys.modules``
+    which is reliable once pytest has initialized collection. Also allow an
+    override env ``PYTEST_RUNNING=1`` for explicit control if ever needed.
+    """
+    if os.getenv("PYTEST_RUNNING") == "1":  # explicit opt-in
+        return True
+    if "PYTEST_CURRENT_TEST" in os.environ:  # during an active test
+        return True
+    # During collection pytest is already imported
+    if "pytest" in sys.modules:
+        return True
+    return False
+
+pytest_indicator = _is_pytest_runtime()
 is_e2e_context = bool(explicit_e2e_db)
 
 if explicit_test_db:
@@ -48,7 +67,7 @@ def _create_engine_with_fallback(url: str, kwargs: dict):
         return eng
     except OperationalError:
         # Only fallback for test scenarios (pytests) where no explicit DB provided
-        if "PYTEST_CURRENT_TEST" in os.environ and not os.getenv("TEST_DATABASE_URL") and not os.getenv("HINDSIGHT_TEST_DB"):
+        if _is_pytest_runtime() and not os.getenv("TEST_DATABASE_URL") and not os.getenv("HINDSIGHT_TEST_DB"):
             fallback_url = "sqlite+pysqlite:///:memory:"
             fk = {
                 "connect_args": {"check_same_thread": False},

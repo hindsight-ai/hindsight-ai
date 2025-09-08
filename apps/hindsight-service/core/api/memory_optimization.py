@@ -75,14 +75,14 @@ async def get_memory_optimization_suggestions(db: Session = Depends(get_db)):
         for block in old_blocks:
             # Handle timezone-aware vs naive datetime comparison
             created_at = block.created_at
-            if created_at.tzinfo is not None:
-                # If created_at is timezone-aware, make current_time timezone-aware too
-                from datetime import timezone
-                current_time_tz = current_time.replace(tzinfo=timezone.utc)
-                days_old = (current_time_tz - created_at).days
-            else:
-                # If created_at is naive, use naive current_time
-                days_old = (current_time - created_at).days
+            if created_at is None:
+                continue
+
+            # Ensure created_at is timezone-aware for comparison
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+
+            days_old = (current_time - created_at).days
             
             if days_old > 90:
                 archival_candidates.append(block)
