@@ -13,6 +13,13 @@ module.exports = {
         development: process.env.BABEL_ENV === 'test',
       },
     ],
+    // Enable parsing/transpiling of TypeScript in tests
+    [
+      '@babel/preset-typescript',
+      {
+        allowDeclareFields: true,
+      },
+    ],
   ],
 };
 

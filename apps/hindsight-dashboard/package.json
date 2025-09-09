@@ -21,6 +21,7 @@
   "devDependencies": {
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-react": "^7.25.9",
+  "@babel/preset-typescript": "^7.26.0",
     "@eslint/js": "^9.33.0",
     "@tailwindcss/postcss": "^4.1.12",
     "@testing-library/jest-dom": "^6.6.3",

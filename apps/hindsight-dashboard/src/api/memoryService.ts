@@ -41,7 +41,7 @@ const authFail = (status: number) => {
 };
 
 const jsonOrThrow = async (resp: Response) => {
-  if (!resp.ok) { authFail(resp.status); throw new Error(`HTTP ${resp.status}`); }
+  if (!resp.ok) { authFail(resp.status); throw new Error(`HTTP error ${resp.status}`); }
   return resp.json();
 };
 
@@ -59,7 +59,7 @@ const memoryService = {
   getMemoryBlockById: async (id: string): Promise<MemoryBlock> => jsonOrThrow(await fetch(`${base()}/memory-blocks/${id}`, { credentials: 'include' })),
   updateMemoryBlock: async (id: string, data: Partial<MemoryBlock>) => { guardGuest('Sign in to edit memory blocks.'); const resp = await fetch(`${API_BASE_URL}/memory-blocks/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), credentials: 'include' }); return jsonOrThrow(resp); },
   archiveMemoryBlock: async (id: string) => { guardGuest('Sign in to archive memory blocks.'); const resp = await fetch(`${API_BASE_URL}/memory-blocks/${id}/archive`, { method: 'POST', credentials: 'include' }); return jsonOrThrow(resp); },
-  deleteMemoryBlock: async (id: string) => { guardGuest('Sign in to delete memory blocks.'); const resp = await fetch(`${API_BASE_URL}/memory-blocks/${id}/hard-delete`, { method: 'DELETE', credentials: 'include' }); if (!resp.ok && resp.status !== 204) { authFail(resp.status); throw new Error(`HTTP ${resp.status}`); } },
+  deleteMemoryBlock: async (id: string) => { guardGuest('Sign in to delete memory blocks.'); const resp = await fetch(`${API_BASE_URL}/memory-blocks/${id}/hard-delete`, { method: 'DELETE', credentials: 'include' }); if (!resp.ok && resp.status !== 204) { authFail(resp.status); throw new Error(`HTTP error ${resp.status}`); } if (resp.status === 204) { return; } try { return await resp.json(); } catch { return; } },
   getArchivedMemoryBlocks: async (filters: Record<string, any> = {}) => {
     const { per_page, ...rest } = filters; const params = new URLSearchParams(rest);
     try { const scope = sessionStorage.getItem('ACTIVE_SCOPE'); const orgId = sessionStorage.getItem('ACTIVE_ORG_ID'); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}
@@ -79,7 +79,7 @@ const memoryService = {
   validateConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to validate suggestions.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}/validate/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' })); },
   rejectConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to reject suggestions.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}/reject/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' })); },
   triggerConsolidation: async () => { guardGuest('Sign in to trigger consolidation.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/consolidation/trigger/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' })); },
-  deleteConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to delete suggestions.'); const resp = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`, { method: 'DELETE', credentials: 'include' }); if (!resp.ok && resp.status !== 204) { authFail(resp.status); throw new Error(`HTTP ${resp.status}`); } },
+  deleteConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to delete suggestions.'); const resp = await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}`, { method: 'DELETE', credentials: 'include' }); if (!resp.ok && resp.status !== 204) { authFail(resp.status); throw new Error(`HTTP error ${resp.status}`); } if (resp.status === 204) { return; } try { return await resp.json(); } catch { return; } },
   generatePruningSuggestions: async (params: Record<string, any> = {}) => jsonOrThrow(await fetch(`${API_BASE_URL}/memory/prune/suggest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params), credentials: 'include' })),
   confirmPruning: async (memoryBlockIds: string[]) => jsonOrThrow(await fetch(`${API_BASE_URL}/memory/prune/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memory_block_ids: memoryBlockIds }), credentials: 'include' })),
   getBuildInfo: async () => jsonOrThrow(await fetch(`${base()}/build-info`, { credentials: 'include' })),

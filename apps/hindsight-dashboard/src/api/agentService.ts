@@ -54,7 +54,7 @@ const agentService = {
     const response = await fetch(`${base()}/agents/?${params.toString()}`, { credentials: 'include' });
     if (!response.ok) {
       if (response.status === 401) { notificationService.show401Error(); throw new Error('Authentication required'); }
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(`HTTP error ${response.status}`);
     }
     try {
       const data = await response.json();
@@ -70,7 +70,7 @@ const agentService = {
     const response = await fetch(`${base()}/agents/${agentId}`, { credentials: 'include' });
     if (!response.ok) {
       if (response.status === 401) { notificationService.show401Error(); throw new Error('Authentication required'); }
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(`HTTP error ${response.status}`);
     }
     return response.json();
   },
@@ -82,7 +82,7 @@ const agentService = {
     });
     if (!response.ok) {
       if (response.status === 401) { notificationService.show401Error(); throw new Error('Authentication required'); }
-      throw new Error(`HTTP ${response.status}`);
+  throw new Error(`HTTP error ${response.status}`);
     }
     return response.json();
   },
@@ -92,8 +92,10 @@ const agentService = {
     const response = await fetch(`${API_BASE_URL}/agents/${agentId}`, { method: 'DELETE', credentials: 'include' });
     if (!response.ok && response.status !== 204) {
       if (response.status === 401) { notificationService.show401Error(); throw new Error('Authentication required'); }
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(`HTTP error ${response.status}`);
     }
+    if (response.status === 204) { return; }
+  try { return await response.json(); } catch { return; }
   },
 
   updateAgent: async (agentId: string, data: Partial<Agent>): Promise<Agent> => {
@@ -103,7 +105,7 @@ const agentService = {
     });
     if (!response.ok) {
       if (response.status === 401) { notificationService.show401Error(); throw new Error('Authentication required'); }
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(`HTTP error ${response.status}`);
     }
     return response.json();
   },
@@ -119,7 +121,7 @@ const agentService = {
     const response = await fetch(`${base()}/agents/search/?${params.toString()}`, { credentials: 'include' });
     if (!response.ok) {
       if (response.status === 401) { notificationService.show401Error(); throw new Error('Authentication required'); }
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(`HTTP error ${response.status}`);
     }
     return response.json();
   },
