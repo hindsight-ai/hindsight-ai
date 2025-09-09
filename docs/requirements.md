@@ -2,6 +2,9 @@
 
 This document specifies the expected behavior, constraints, and operational requirements of the Hindsight AI application across environments (staging, production, local). It is the single source of truth for functionality, routing/auth flows, deployment, runtime configuration, and acceptance criteria.
 
+Roadmap Reference
+- Execution ordering, phased delivery plan, and acceptance criteria for in-progress governance & UX work are tracked in `docs/roadmap.md`. This requirements file defines the target state; the roadmap file defines how we get there iteratively.
+
 ## 1. Scope & Goals
 - Provide a secure web UI to manage AI Agent memories and related operations.
 - Ensure environment parity and safe deployments with minimal drift.

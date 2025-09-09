@@ -2,7 +2,7 @@
 module.exports = {
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/src'],
-  moduleFileExtensions: ['js', 'jsx', 'json'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   transform: {
     '^.+\\.[jt]sx?$': 'babel-jest',
   },
@@ -11,10 +11,10 @@ module.exports = {
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
   },
   testMatch: ['**/?(*.)+(test|spec).[jt]s?(x)'],
-  extensionsToTreatAsEsm: ['.jsx'],
+  extensionsToTreatAsEsm: ['.jsx', '.tsx'],
   coverageReporters: ['text', 'html'],
   coveragePathIgnorePatterns: [
-    '<rootDir>/src/api/authService.js',
+    '<rootDir>/src/api/authService.ts',
   ],
   coverageThreshold: {
     global: {
