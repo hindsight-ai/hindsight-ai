@@ -10,8 +10,9 @@ def _headers(user: str):
     return {"x-auth-request-user": user, "x-auth-request-email": f"{user}@example.com"}
 
 
-def test_add_member_invalid_role_rejected(db_session: Session):
-    client = TestClient(main_app)
+def test_add_member_invalid_role_rejected(db_session: Session, client):
+    import os
+    os.environ["ADMIN_EMAILS"] = "owneruser@example.com"
     owner_headers = _headers("owneruser")
     # Create organization
     r = client.post("/organizations/", json={"name": "RoleOrg", "slug": "roleorg"}, headers=owner_headers)
@@ -23,8 +24,9 @@ def test_add_member_invalid_role_rejected(db_session: Session):
     assert r.status_code == 422
 
 
-def test_member_role_change_audit_log(db_session: Session):
-    client = TestClient(main_app)
+def test_member_role_change_audit_log(db_session: Session, client):
+    import os
+    os.environ["ADMIN_EMAILS"] = "changer@example.com"
     owner_headers = _headers("changer")
     r = client.post("/organizations/", json={"name": "RoleChangeOrg", "slug": "rolechg"}, headers=owner_headers)
     assert r.status_code == 201

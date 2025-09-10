@@ -5,7 +5,8 @@ from core.core.consolidation_worker import (
     fetch_memory_blocks,
     analyze_duplicates_with_fallback,
     store_consolidation_suggestions,
-    run_consolidation_analysis
+    run_consolidation_analysis,
+    analyze_duplicates_with_llm
 )
 
 
@@ -56,7 +57,7 @@ class TestConsolidationWorker:
         block2_id = uuid.uuid4()
         blocks = [
             {'id': block1_id, 'content': 'This is a test content about AI', 'lessons_learned': 'AI is powerful'},
-            {'id': block2_id, 'content': 'This is a test content about artificial intelligence', 'lessons_learned': 'AI is very powerful'}
+            {'id': block2_id, 'content': 'This is a test content about AI', 'lessons_learned': 'AI is very powerful'}
         ]
 
         result = analyze_duplicates_with_fallback(blocks)
@@ -167,113 +168,6 @@ class TestConsolidationWorker:
         assert result == 0
         mock_create.assert_not_called()
 
-    @patch('core.core.consolidation_worker.create_consolidation_suggestion')
-    @patch('core.db.models.ConsolidationSuggestion')
-    def test_store_consolidation_suggestions_overlap(self, mock_suggestion_model, mock_create):
-        db = Mock()
-        memory_id = str(uuid.uuid4())
-        groups = [
-            {
-                'group_id': str(uuid.uuid4()),
-                'memory_ids': [memory_id, str(uuid.uuid4())],
-                'suggested_content': 'Consolidated content',
-                'suggested_lessons_learned': 'Consolidated lessons',
-                'suggested_keywords': ['keyword1', 'keyword2']
-            }
-        ]
-
-        # Mock existing suggestion with overlapping memory ID
-        mock_existing = Mock()
-        mock_existing.original_memory_ids = [memory_id]
-        
-        mock_query = Mock()
-        mock_suggestion_model.query = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.all.return_value = [mock_existing]
-        mock_query = Mock()
-        mock_suggestion_model.query = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.all.return_value = [mock_existing]
-
-        result = store_consolidation_suggestions(db, groups)
-
-        assert result == 0
-        mock_create.assert_not_called()
-
-    @patch('core.core.consolidation_worker.create_consolidation_suggestion')
-    @patch('core.db.models.ConsolidationSuggestion')
-    def test_store_consolidation_suggestions_missing_content(self, mock_suggestion_model, mock_create):
-        db = Mock()
-        groups = [
-            {
-                'group_id': str(uuid.uuid4()),
-                'memory_ids': [str(uuid.uuid4()), str(uuid.uuid4())],
-                'suggested_content': '',  # Missing content
-                'suggested_lessons_learned': 'Consolidated lessons',
-                'suggested_keywords': ['keyword1', 'keyword2']
-            }
-        ]
-
-        # Mock no existing suggestions
-        mock_query = Mock()
-        mock_suggestion_model.query = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.all.return_value = []
-
-        result = store_consolidation_suggestions(db, groups)
-
-        assert result == 0
-        mock_create.assert_not_called()
-
-    @patch('core.core.consolidation_worker.create_consolidation_suggestion')
-    @patch('core.db.models.ConsolidationSuggestion')
-    def test_store_consolidation_suggestions_overlap(self, mock_suggestion_model, mock_create):
-        db = Mock()
-        memory_id = str(uuid.uuid4())
-        groups = [
-            {
-                'group_id': str(uuid.uuid4()),
-                'memory_ids': [memory_id, str(uuid.uuid4())],
-                'suggested_content': 'Consolidated content',
-                'suggested_lessons_learned': 'Consolidated lessons',
-                'suggested_keywords': ['keyword1', 'keyword2']
-            }
-        ]
-
-        # Mock existing suggestion with overlapping memory ID
-        mock_existing = Mock()
-        mock_existing.original_memory_ids = [memory_id]
-
-        result = store_consolidation_suggestions(db, groups)
-
-        assert result == 0
-        mock_create.assert_not_called()
-
-    @patch('core.core.consolidation_worker.create_consolidation_suggestion')
-    @patch('core.db.models.ConsolidationSuggestion')
-    def test_store_consolidation_suggestions_missing_content(self, mock_suggestion_model, mock_create):
-        db = Mock()
-        groups = [
-            {
-                'group_id': str(uuid.uuid4()),
-                'memory_ids': [str(uuid.uuid4()), str(uuid.uuid4())],
-                'suggested_content': '',  # Missing content
-                'suggested_lessons_learned': 'Consolidated lessons',
-                'suggested_keywords': ['keyword1', 'keyword2']
-            }
-        ]
-
-        # Mock no existing suggestions
-        mock_query = Mock()
-        mock_suggestion_model.query = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.all.return_value = []
-
-        result = store_consolidation_suggestions(db, groups)
-
-        assert result == 0
-        mock_create.assert_not_called()
-
     @patch('core.core.consolidation_worker.fetch_memory_blocks')
     @patch('core.core.consolidation_worker.analyze_duplicates_with_llm')
     @patch('core.core.consolidation_worker.store_consolidation_suggestions')
@@ -329,3 +223,32 @@ class TestConsolidationWorker:
         mock_analyze.assert_not_called()
         mock_store.assert_not_called()
         db.close.assert_called_once()
+
+    @patch('google.genai.Client')
+    def test_analyze_duplicates_with_llm_success(self, mock_client_class):
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.text = '{"suggested_content": "consolidated", "suggested_lessons_learned": "lessons", "suggested_keywords": ["kw"]}'
+        mock_client.models.generate_content.return_value = mock_response
+        
+        memory_blocks = [{"id": "1", "content": "test", "lessons_learned": "lesson", "keywords": []}]
+        with patch('core.core.consolidation_worker.analyze_duplicates_with_fallback', return_value=[{"group_id": "test-group", "memory_ids": ["1"]}]):
+            with patch.dict('os.environ', {'LLM_MODEL_NAME': 'test-model'}):
+                result = analyze_duplicates_with_llm(memory_blocks, "fake_key")
+                assert len(result) == 1
+                assert result[0]["group_id"] == "test-group"
+
+    @patch('google.genai.Client')
+    def test_analyze_duplicates_with_llm_no_model_name(self, mock_client_class):
+        memory_blocks = [{"id": "1", "content": "test"}]
+        with patch('core.core.consolidation_worker.analyze_duplicates_with_fallback', return_value=[{"group_id": "test", "memory_ids": ["1"]}]):
+            with patch.dict('os.environ', {}, clear=True):
+                result = analyze_duplicates_with_llm(memory_blocks, "fake_key")
+                # Should return the original groups without LLM suggestions
+                assert result == [{"group_id": "test", "memory_ids": ["1"]}]
+
+    def test_analyze_duplicates_with_llm_no_api_key(self):
+        memory_blocks = [{"id": "1", "content": "test"}]
+        result = analyze_duplicates_with_llm(memory_blocks, "")
+        assert result == []

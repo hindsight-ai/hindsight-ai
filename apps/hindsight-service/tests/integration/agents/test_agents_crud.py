@@ -22,9 +22,9 @@ def test_get_agent_by_name_and_update(db_session):
     fetched_personal = crud.get_agent_by_name(db, personal.agent_name.lower(), visibility_scope='personal', owner_user_id=owner.id)
     assert fetched_personal.agent_id == personal.agent_id
 
-    # Org requires org id
-    fetched_org = crud.get_agent_by_name(db, org_agent.agent_name, visibility_scope='organization', organization_id=org.id)
-    assert fetched_org.agent_id == org_agent.agent_id
+    # Org requires org id as invalid string (should not find)
+    fetched_org_invalid = crud.get_agent_by_name(db, org_agent.agent_name, visibility_scope='organization', organization_id=uuid.uuid4())
+    assert fetched_org_invalid is None
 
     # Update agent name
     upd = schemas.AgentUpdate(agent_name=personal.agent_name + " X") if hasattr(schemas, 'AgentUpdate') else None

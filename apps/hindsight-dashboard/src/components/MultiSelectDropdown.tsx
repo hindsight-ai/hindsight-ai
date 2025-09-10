@@ -14,16 +14,16 @@ interface MultiSelectDropdownProps {
 }
 
 const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, selectedValues, onChange, placeholder, 'data-testid': dataTestId }) => {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const headerRef = useRef<HTMLDivElement | null>(null);
-  const optionsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const headerRef = useRef(null);
+  const optionsRef = useRef([]); // To hold refs to individual options
 
   const handleToggle = () => {
     setIsOpen((prevIsOpen) => !prevIsOpen);
   };
 
-  const handleOptionClick = (value: string) => {
+  const handleOptionClick = (value) => {
     const newSelectedValues = selectedValues.includes(value)
       ? selectedValues.filter((v) => v !== value)
       : [...selectedValues, value];
@@ -31,13 +31,13 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
     // Keep dropdown open after selection for multi-select behavior
   };
 
-  const handleClickOutside = (event: MouseEvent) => {
-    if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+  const handleClickOutside = (event) => {
+    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
       setIsOpen(false);
     }
   };
 
-  const handleHeaderKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleHeaderKeyDown = (event) => {
     switch (event.key) {
       case 'Enter':
       case ' ':
@@ -51,7 +51,7 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
         }
         // Move focus to the first option if dropdown is open or just opened
         if (optionsRef.current.length > 0) {
-          optionsRef.current[0]?.focus();
+          optionsRef.current[0].focus();
         }
         break;
       default:
@@ -59,7 +59,7 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
     }
   };
 
-  const handleOptionKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, index: number, value: string) => {
+  const handleOptionKeyDown = (event, index, value) => {
     switch (event.key) {
       case 'Enter':
       case ' ':
@@ -69,25 +69,25 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
       case 'ArrowUp':
         event.preventDefault();
         if (index > 0) {
-          optionsRef.current[index - 1]?.focus();
+          optionsRef.current[index - 1].focus();
         } else {
           // If at first option, loop to last or go back to header
-          headerRef.current?.focus();
+          headerRef.current.focus();
         }
         break;
       case 'ArrowDown':
         event.preventDefault();
         if (index < optionsRef.current.length - 1) {
-          optionsRef.current[index + 1]?.focus();
+          optionsRef.current[index + 1].focus();
         } else {
           // If at last option, loop to first or stay
-          optionsRef.current[0]?.focus();
+          optionsRef.current[0].focus();
         }
         break;
       case 'Escape':
         event.preventDefault();
         setIsOpen(false);
-        headerRef.current?.focus(); // Return focus to header
+        headerRef.current.focus(); // Return focus to header
         break;
       default:
         break;
@@ -114,13 +114,12 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
   }, [isOpen, options, selectedValues]);
 
 
-  const handleRemoveTag = (valueToRemove: string) => {
+  const handleRemoveTag = (valueToRemove) => {
     const newSelectedValues = selectedValues.filter((v) => v !== valueToRemove);
     onChange(newSelectedValues);
   };
-  // Stable id per component instance to avoid re-renders causing aria-controls churn
-  const dropdownOptionsIdRef = useRef<string>(`multi-select-dropdown-options-${Math.random().toString(36).slice(2, 11)}`);
-  const dropdownOptionsId = dropdownOptionsIdRef.current;
+
+  const dropdownOptionsId = `multi-select-dropdown-options-${Math.random().toString(36).substr(2, 9)}`; // Unique ID
 
   return (
     <div className="multi-select-dropdown" ref={dropdownRef} data-testid={dataTestId}>
@@ -128,7 +127,7 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
         className="dropdown-header"
         onClick={handleToggle}
         onKeyDown={handleHeaderKeyDown}
-  tabIndex={0}
+        tabIndex="0"
         role="combobox"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -176,10 +175,10 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
                 className={`dropdown-option ${selectedValues.includes(option.value) ? 'selected' : ''}`}
                 onClick={() => handleOptionClick(option.value)}
                 onKeyDown={(e) => handleOptionKeyDown(e, index, option.value)}
-                tabIndex={-1} // Programmatically manage focus
+                tabIndex="-1" // Programmatically manage focus
                 role="option"
                 aria-selected={selectedValues.includes(option.value)}
-                ref={(el) => { optionsRef.current[index] = el; }}
+                ref={(el) => (optionsRef.current[index] = el)}
               >
                 {option.label}
               </div>

@@ -26,12 +26,12 @@ const Dashboard: React.FC = () => {
     memoryBlocks: { count: 0, loading: true, error: false },
     conversations: { count: 0, loading: true, error: false }
   });
-  const [recentMemoryBlocks, setRecentMemoryBlocks] = useState<MemoryBlock[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedMemoryBlock, setSelectedMemoryBlock] = useState<MemoryBlock | null>(null);
-  const [showMemoryModal, setShowMemoryModal] = useState<boolean>(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [recentMemoryBlocks, setRecentMemoryBlocks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedMemoryBlock, setSelectedMemoryBlock] = useState(null);
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -127,7 +127,7 @@ const Dashboard: React.FC = () => {
   };
 
   // Click handlers for navigation
-  const handleStatCardClick = (statType: 'agents' | 'memoryBlocks' | 'conversations') => {
+  const handleStatCardClick = (statType) => {
     switch(statType) {
       case 'agents':
         navigate('/agents');
@@ -144,7 +144,7 @@ const Dashboard: React.FC = () => {
   };
 
   // Click handler for memory blocks
-  const handleMemoryBlockClick = (memoryBlock: MemoryBlock) => {
+  const handleMemoryBlockClick = (memoryBlock) => {
     setSelectedMemoryBlock(memoryBlock);
     setShowMemoryModal(true);
   };
@@ -260,11 +260,6 @@ const Dashboard: React.FC = () => {
                 key={memoryBlock.id}
                 memoryBlock={memoryBlock}
                 onClick={() => handleMemoryBlockClick(memoryBlock)}
-                onArchive={() => {}}
-                onDelete={() => {}}
-                onSuggestKeywords={() => {}}
-                onCompactMemory={() => {}}
-                availableAgents={[]}
               />
             ))}
           </div>

@@ -18,7 +18,7 @@ const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
 }) => {
   const [showModal, setShowModal] = useState(false);
 
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
     console.log('FAB clicked, opening modal'); // Debug log
@@ -52,7 +52,7 @@ const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
           isOpen: showModal,
           onClose: handleClose,
           onSuccess: handleSuccess
-        } as any)
+        })
       ) : (
         // Default to AddMemoryBlockModal
         <AddMemoryBlockModal

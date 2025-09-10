@@ -19,7 +19,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
     }
   }, [isOpen]);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -40,20 +40,20 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
       }
     } catch (err) {
       console.error('Failed to create agent:', err);
-      setError('Failed to create agent: ' + (err as Error).message);
+      setError('Failed to create agent: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleBackdropClick = (e) => {
     e.stopPropagation();
     if (e.target === e.currentTarget) {
       onClose();
     }
   };
 
-  const handleModalContentClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleModalContentClick = (e) => {
     e.stopPropagation();
   };
 

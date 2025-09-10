@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { getBuildInfo } from '../api/memoryService';
 
-// Narrow env typing without redeclaring global ImportMeta
-interface EnvVars { VITE_VERSION?: string; VITE_BUILD_SHA?: string; VITE_BUILD_TIMESTAMP?: string; VITE_DASHBOARD_IMAGE_TAG?: string; }
+interface BuildInfo {
+  service_name: string;
+  version: string;
+  build_sha: string;
+  build_timestamp: string;
+  image_tag: string;
+  error?: string;
+}
 
-interface BuildInfo { service_name: string; version: string; build_sha: string; build_timestamp: string; image_tag: string; error?: string; }
-interface AboutModalProps { isOpen: boolean; onClose: () => void; }
+interface AboutModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
 
 const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
   const [backendInfo, setBackendInfo] = useState<BuildInfo | null>(null);
@@ -13,15 +21,43 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { if (isOpen) { fetchBuildInfo(); } }, [isOpen]);
+  useEffect(() => {
+    if (isOpen) {
+      fetchBuildInfo();
+    }
+  }, [isOpen]);
 
   const fetchBuildInfo = async () => {
-    setLoading(true); setError(null);
-    try { const backendData = await getBuildInfo(); setBackendInfo(backendData); }
-    catch (err) { console.error('Error fetching backend build info:', err); setBackendInfo({ service_name: 'Hindsight Service', version: 'unknown', build_sha: 'unknown', build_timestamp: 'unknown', image_tag: 'unknown', error: 'Failed to fetch backend build information' }); }
-    const env = (import.meta as any).env as EnvVars || {};
-    const frontendData: BuildInfo = { service_name: 'AI Agent Memory Dashboard', version: env.VITE_VERSION || 'unknown', build_sha: env.VITE_BUILD_SHA || 'unknown', build_timestamp: env.VITE_BUILD_TIMESTAMP || 'unknown', image_tag: env.VITE_DASHBOARD_IMAGE_TAG || 'unknown' };
-    setFrontendInfo(frontendData); setLoading(false);
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Fetch backend build information
+      const backendData = await getBuildInfo();
+      setBackendInfo(backendData);
+    } catch (err) {
+      console.error('Error fetching backend build info:', err);
+      setBackendInfo({
+        service_name: "Hindsight Service",
+        version: "unknown",
+        build_sha: "unknown",
+        build_timestamp: "unknown",
+        image_tag: "unknown",
+        error: "Failed to fetch backend build information"
+      });
+    }
+    
+    // Get frontend build information from environment variables
+    const frontendData = {
+      service_name: "AI Agent Memory Dashboard",
+      version: import.meta.env.VITE_VERSION || "unknown",
+      build_sha: import.meta.env.VITE_BUILD_SHA || "unknown",
+      build_timestamp: import.meta.env.VITE_BUILD_TIMESTAMP || "unknown",
+      image_tag: import.meta.env.VITE_DASHBOARD_IMAGE_TAG || "unknown"
+    };
+    setFrontendInfo(frontendData);
+    
+    setLoading(false);
   };
 
   if (!isOpen) return null;

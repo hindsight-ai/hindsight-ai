@@ -79,14 +79,16 @@ def create_organization(
     db.commit()
     db.refresh(org)
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="organization_create",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.ORGANIZATION_CREATE,
+        status=AuditStatus.SUCCESS,
         target_type="organization",
         target_id=org.id,
+        actor_user_id=user.id,
+        organization_id=org.id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org.id)
 
     return {
         "id": str(org.id),
@@ -184,15 +186,17 @@ def update_organization(
     db.commit()
     db.refresh(org)
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="organization_update",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.ORGANIZATION_UPDATE,
+        status=AuditStatus.SUCCESS,
         target_type="organization",
         target_id=org.id,
-        metadata={"name": org.name, "slug": org.slug}
+        actor_user_id=user.id,
+        organization_id=org.id,
+        metadata={"name": org.name, "slug": org.slug},
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org.id)
 
     return {"id": str(org.id), "name": org.name, "slug": org.slug, "is_active": org.is_active}
 
@@ -225,14 +229,16 @@ def delete_organization(
     db.delete(org)
     db.commit()
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="organization_delete",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.ORGANIZATION_DELETE,
+        status=AuditStatus.SUCCESS,
         target_type="organization",
         target_id=org_id,
+        actor_user_id=user.id,
+        organization_id=org_id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return {"status": "deleted"}
 
@@ -312,15 +318,17 @@ def add_member(
     db.add(m)
     db.commit()
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="member_add",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.MEMBER_ADD,
+        status=AuditStatus.SUCCESS,
         target_type="user",
         target_id=member_user.id,
-        metadata={"role": role}
+        actor_user_id=user.id,
+        organization_id=org_id,
+        metadata={"role": role},
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return {"status": "added"}
 
@@ -357,15 +365,17 @@ def update_member(
     db.commit()
 
     if old_role != m.role:
-        from core.db import crud, schemas
-        audit_log = schemas.AuditLogCreate(
-            action_type="member_role_change",
-            status="success",
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.MEMBER_ROLE_CHANGE,
+            status=AuditStatus.SUCCESS,
             target_type="user",
             target_id=member_user_id,
-            metadata={"old_role": old_role, "new_role": m.role}
+            actor_user_id=user.id,
+            organization_id=org_id,
+            metadata={"old_role": old_role, "new_role": m.role},
         )
-        crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return {"status": "updated"}
 
@@ -391,14 +401,16 @@ def remove_member(
         raise HTTPException(status_code=404, detail="Membership not found")
     db.commit()
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="member_remove",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.MEMBER_REMOVE,
+        status=AuditStatus.SUCCESS,
         target_type="user",
         target_id=member_user_id,
+        actor_user_id=user.id,
+        organization_id=org_id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return {"status": "removed"}
 
@@ -419,15 +431,17 @@ def create_invitation(
     from core.db import crud
     db_invitation = crud.create_organization_invitation(db, organization_id=org_id, invitation=invitation, invited_by_user_id=user.id)
 
-    from core.db import schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="invitation_create",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.INVITATION_CREATE,
+        status=AuditStatus.SUCCESS,
         target_type="invitation",
         target_id=db_invitation.id,
-        metadata={"email": invitation.email, "role": invitation.role}
+        actor_user_id=user.id,
+        organization_id=org_id,
+        metadata={"email": invitation.email, "role": invitation.role},
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return db_invitation
 
@@ -472,6 +486,17 @@ def resend_invitation(
     db_invitation.expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     db.commit()
     db.refresh(db_invitation)
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.INVITATION_RESEND,
+        status=AuditStatus.SUCCESS,
+        target_type="invitation",
+        target_id=db_invitation.id,
+        actor_user_id=user.id,
+        organization_id=org_id,
+        metadata={"new_expires_at": db_invitation.expires_at.isoformat() if db_invitation.expires_at else None},
+    )
     return db_invitation
 
 @router.delete("/{org_id}/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -499,15 +524,16 @@ def revoke_invitation(
     db_invitation.revoked_at = datetime.now(timezone.utc)
     db.commit()
 
-    from core.db import schemas
-    # Single audit log (previously duplicated)
-    audit_log = schemas.AuditLogCreate(
-        action_type="invitation_revoke",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.INVITATION_REVOKE,
+        status=AuditStatus.SUCCESS,
         target_type="invitation",
         target_id=invitation_id,
+        actor_user_id=user.id,
+        organization_id=org_id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
 @router.post("/{org_id}/invitations/{invitation_id}/accept", response_model=schemas.OrganizationMember)
 def accept_invitation(
@@ -558,14 +584,16 @@ def accept_invitation(
     db_invitation.accepted_at = now_utc
     db.commit()
 
-    from core.db import schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="invitation_accept",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.INVITATION_ACCEPT,
+        status=AuditStatus.SUCCESS,
         target_type="invitation",
         target_id=invitation_id,
+        actor_user_id=user.id,
+        organization_id=org_id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return db_member
 

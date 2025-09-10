@@ -23,6 +23,9 @@ from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
 from core.api.orgs import router as orgs_router
+from core.api.agents import router as agents_router
+from core.api.keywords import router as keywords_router
+from core.api.memory_blocks import router as memory_blocks_router
 from core.api.audits import router as audits_router
 from core.api.bulk_operations import router as bulk_operations_router
 from core.api.permissions import can_read, can_write, can_manage_org
@@ -123,7 +126,21 @@ def create_agent_endpoint(
         'owner_user_id': owner_user_id,
         'organization_id': org_id if scope == 'organization' else None,
     })
-    return crud.create_agent(db=db, agent=agent_for_create)
+    created = crud.create_agent(db=db, agent=agent_for_create)
+    try:
+        from core.audit import log_agent, AuditAction, AuditStatus
+        log_agent(
+            db,
+            actor_user_id=u.id,
+            organization_id=created.organization_id,
+            agent_id=created.agent_id,
+            action=AuditAction.AGENT_CREATE,
+            name=created.agent_name,
+            status=AuditStatus.SUCCESS,
+        )
+    except Exception:
+        pass
+    return created
 
 @router.get("/agents/", response_model=List[schemas.Agent])
 def get_all_agents_endpoint(
@@ -267,6 +284,24 @@ def delete_agent_endpoint(
     if not can_write(agent, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     success = crud.delete_agent(db, agent_id=agent_id)
+    # Audit log for agent delete
+    try:
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.AGENT_DELETE,
+            status=AuditStatus.SUCCESS,
+            target_type="agent",
+            target_id=str(agent_id),
+            actor_user_id=current_user.get("id") if current_user else None,
+            organization_id=agent.organization_id,
+            metadata={
+                "agent_name": agent.agent_name,
+                "visibility_scope": agent.visibility_scope,
+            },
+        )
+    except Exception:
+        pass
     return {"message": "Agent deleted successfully"}
 
 @router.put("/agents/{agent_id}", response_model=schemas.Agent)
@@ -402,12 +437,38 @@ def change_agent_scope(
     if existing and existing.agent_id != agent.agent_id:
         raise HTTPException(status_code=409, detail="Agent with this name already exists in the target scope")
 
+    # Capture previous for metadata
+    previous_scope = agent.visibility_scope
+    previous_org_id = agent.organization_id
+    previous_owner_id = agent.owner_user_id
     # Apply
     agent.visibility_scope = target_scope
     agent.owner_user_id = owner_id
     agent.organization_id = org_uuid
     db.commit()
     db.refresh(agent)
+    # Audit log
+    try:
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.AGENT_SCOPE_CHANGE,
+            status=AuditStatus.SUCCESS,
+            target_type="agent",
+            target_id=str(agent.agent_id),
+            actor_user_id=current_user.get("id"),
+            organization_id=agent.organization_id or previous_org_id,
+            metadata={
+                "old_scope": previous_scope,
+                "new_scope": agent.visibility_scope,
+                "old_org_id": str(previous_org_id) if previous_org_id else None,
+                "new_org_id": str(agent.organization_id) if agent.organization_id else None,
+                "old_owner_user_id": str(previous_owner_id) if previous_owner_id else None,
+                "new_owner_user_id": str(agent.owner_user_id) if agent.owner_user_id else None,
+            },
+        )
+    except Exception:
+        pass
     return agent
 
 @router.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks)
@@ -968,6 +1029,43 @@ def archive_memory_block_endpoint(
         raise HTTPException(status_code=404, detail="Memory block not found")
     return db_memory_block
 
+@router.delete("/memory-blocks/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
+def soft_delete_memory_block_endpoint(
+    memory_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    """Soft-delete (archive) a memory block for backwards compatibility with tests expecting DELETE semantics.
+    If already archived, this is idempotent.
+    """
+    current = crud.get_memory_block(db, memory_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+    if not can_write(current, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not getattr(current, 'archived', False):
+        crud.archive_memory_block(db, memory_id)
+    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+
 @router.delete("/memory-blocks/{memory_id}/hard-delete", status_code=status.HTTP_204_NO_CONTENT)
 def hard_delete_memory_block_endpoint(
     memory_id: uuid.UUID,
@@ -1113,7 +1211,10 @@ def change_memory_block_scope(
         if not current_user.get("is_superadmin"):
             raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
 
-    # Determine new ownership fields
+    # Determine new ownership fields (capture previous state first)
+    previous_scope = mb.visibility_scope
+    previous_org_id = mb.organization_id
+    previous_owner_id = mb.owner_user_id
     if target_scope == 'organization':
         mb.visibility_scope = 'organization'
         mb.organization_id = target_org_uuid
@@ -1132,12 +1233,37 @@ def change_memory_block_scope(
         mb.owner_user_id = owner_id
         mb.organization_id = None
     else:  # public
+        if not current_user.get("is_superadmin"):
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
         mb.visibility_scope = 'public'
-        mb.owner_user_id = None
-        # Keep organization_id None
         mb.organization_id = None
+        mb.owner_user_id = None
 
-    # Rescope keywords to match target
+    db.commit()
+    db.refresh(mb)
+    # Audit log
+    try:
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.MEMORY_SCOPE_CHANGE,
+            status=AuditStatus.SUCCESS,
+            target_type="memory_block",
+            target_id=mb.id,
+            actor_user_id=current_user.get("id"),
+            organization_id=mb.organization_id or previous_org_id,
+            metadata={
+                "old_scope": previous_scope,
+                "new_scope": mb.visibility_scope,
+                "old_org_id": str(previous_org_id) if previous_org_id else None,
+                "new_org_id": str(mb.organization_id) if mb.organization_id else None,
+                "old_owner_user_id": str(previous_owner_id) if previous_owner_id else None,
+                "new_owner_user_id": str(mb.owner_user_id) if mb.owner_user_id else None,
+            },
+        )
+    except Exception:
+        pass
+    return mb
     # Re-query keywords since relationship may not be loaded
     current_keywords = mb.keywords
     new_keyword_ids = []
@@ -1208,7 +1334,23 @@ def create_keyword_endpoint(
     kw_for_create = keyword.model_copy(update={
         'owner_user_id': u.id if scope == 'personal' else getattr(keyword, 'owner_user_id', None),
     })
-    return crud.create_keyword(db=db, keyword=kw_for_create)
+    created = crud.create_keyword(db=db, keyword=kw_for_create)
+    # Audit: keyword create
+    try:
+        from core.audit import log_keyword, AuditAction, AuditStatus
+        log_keyword(
+            db,
+            actor_user_id=u.id,
+            organization_id=created.organization_id,
+            keyword_id=created.keyword_id,
+            action=AuditAction.KEYWORD_CREATE,
+            text=created.keyword_text,
+            status=AuditStatus.SUCCESS,
+        )
+    except Exception:
+        # Swallow audit errors to not impact main flow
+        pass
+    return created
 
 @router.get("/keywords/", response_model=List[schemas.Keyword])
 def get_all_keywords_endpoint(
@@ -1312,6 +1454,20 @@ def update_keyword_endpoint(
     if not can_write(existing, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     db_keyword = crud.update_keyword(db, keyword_id=keyword_id, keyword=keyword)
+    # Audit: keyword update
+    try:
+        from core.audit import log_keyword, AuditAction, AuditStatus
+        log_keyword(
+            db,
+            actor_user_id=u.id if email else current_user.get('id') if current_user else existing.owner_user_id,
+            organization_id=db_keyword.organization_id,
+            keyword_id=db_keyword.keyword_id,
+            action=AuditAction.KEYWORD_UPDATE,
+            text=db_keyword.keyword_text,
+            status=AuditStatus.SUCCESS,
+        )
+    except Exception:
+        pass
     return db_keyword
 
 @router.delete("/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1345,9 +1501,25 @@ def delete_keyword_endpoint(
     if not can_write(existing, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     success = crud.delete_keyword(db, keyword_id=keyword_id)
+    if success:
+        # Audit: keyword delete
+        try:
+            from core.audit import log_keyword, AuditAction, AuditStatus
+            log_keyword(
+                db,
+                actor_user_id=u.id if email else current_user.get('id') if current_user else existing.owner_user_id,
+                organization_id=existing.organization_id,
+                keyword_id=existing.keyword_id,
+                action=AuditAction.KEYWORD_DELETE,
+                text=existing.keyword_text,
+                status=AuditStatus.SUCCESS,
+            )
+        except Exception:
+            pass
     return {"message": "Keyword deleted successfully"}
 
 # MemoryBlockKeyword Association Endpoints
+# TODO: Add audit logging for memory block create/update/delete/archive & scope change endpoints (log_memory helper)
 @router.post("/memory-blocks/{memory_id}/keywords/{keyword_id}", response_model=schemas.MemoryBlockKeywordAssociation, status_code=status.HTTP_201_CREATED)
 def associate_keyword_with_memory_block_endpoint(
     memory_id: uuid.UUID,
@@ -2499,6 +2671,9 @@ def search_memory_blocks_hybrid_endpoint(
 # Include the main router
 app.include_router(router)
 app.include_router(orgs_router, prefix="/organizations")
+app.include_router(agents_router)
+app.include_router(keywords_router)
+app.include_router(memory_blocks_router)
 app.include_router(audits_router, prefix="/audits")
 app.include_router(bulk_operations_router, prefix="/bulk-operations")
 

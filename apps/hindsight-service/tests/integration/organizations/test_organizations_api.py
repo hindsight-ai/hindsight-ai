@@ -9,7 +9,38 @@ def auth(email="orguser@example.com", name="OrgUser"):
     return {"x-auth-request-email": email, "x-auth-request-user": name}
 
 
+def test_create_org_no_email():
+    headers = {"x-auth-request-user": "noemail"}
+    r = client.post("/organizations/", json={"name": "NoEmailOrg"}, headers=headers)
+    assert r.status_code == 401
+    assert "Authentication required" in r.json()["detail"]
+
+
+def test_list_orgs_non_superadmin():
+    import os
+    os.environ["ADMIN_EMAILS"] = "nonsuper@example.com"
+    # Create org as user
+    r = client.post("/organizations/", json={"name": "NonSuperOrg"}, headers=auth("nonsuper@example.com"))
+    assert r.status_code == 201
+    org_id = r.json()["id"]
+    # List orgs as same user (should see it)
+    r2 = client.get("/organizations/", headers=auth("nonsuper@example.com"))
+    assert r2.status_code == 200
+    print("Response:", r2.json())
+    assert any(o["id"] == org_id for o in r2.json())
+
+
+def test_create_org_empty_name():
+    import os
+    os.environ["ADMIN_EMAILS"] = "orguser@example.com"
+    r = client.post("/organizations/", json={"name": ""}, headers=auth())
+    assert r.status_code == 422
+    assert "Organization name is required" in r.json()["detail"]
+
+
 def test_create_list_get_update_org():
+    import os
+    os.environ["ADMIN_EMAILS"] = "orguser@example.com"
     r = client.post("/organizations/", json={"name": "TestOrg1"}, headers=auth())
     assert r.status_code == 201, r.text
     org_id = r.json()["id"]
@@ -27,10 +58,12 @@ def test_create_list_get_update_org():
 
 
 def test_add_member_and_permission_denial():
+    import os
+    os.environ["ADMIN_EMAILS"] = "owner1@example.com"
     r = client.post("/organizations/", json={"name": "PermOrg"}, headers=auth("owner1@example.com"))
     assert r.status_code == 201
     org_id = r.json()["id"]
-    # non-member tries to add member
+    # non-member tries to add member (should fail since outsider is not superadmin)
     bad = client.post(f"/organizations/{org_id}/members", json={"email": "x@example.com", "role": "viewer"}, headers=auth("outsider@example.com"))
     assert bad.status_code in (403, 404)
     # owner adds member
@@ -44,20 +77,30 @@ def test_add_member_and_permission_denial():
 
 
 def test_update_member_role_and_delete_member():
+    import os
+    os.environ["ADMIN_EMAILS"] = "roleowner@example.com"
     r = client.post("/organizations/", json={"name": "RoleOrg"}, headers=auth("roleowner@example.com"))
     org_id = r.json()["id"]
     add = client.post(f"/organizations/{org_id}/members", json={"email": "editme@example.com", "role": "viewer"}, headers=auth("roleowner@example.com"))
     assert add.status_code == 201
+    # Get the user ID from the response or from the members list
     members = client.get(f"/organizations/{org_id}/members", headers=auth("roleowner@example.com"))
-    user_id = next(m["user_id"] for m in members.json() if m["email"] == "editme@example.com")
-    upd = client.put(f"/organizations/{org_id}/members/{user_id}", json={"role": "editor"}, headers=auth("roleowner@example.com"))
-    assert upd.status_code == 200, upd.text
-    # delete
-    dele = client.delete(f"/organizations/{org_id}/members/{user_id}", headers=auth("roleowner@example.com"))
-    assert dele.status_code == 204
+    assert members.status_code == 200
+    member_data = members.json()
+    editme_member = next((m for m in member_data if m["email"] == "editme@example.com"), None)
+    assert editme_member is not None
+    member_user_id = editme_member["user_id"]
+    # update role
+    update = client.put(f"/organizations/{org_id}/members/{member_user_id}", json={"role": "editor"}, headers=auth("roleowner@example.com"))
+    assert update.status_code == 200
+    # delete member
+    delete = client.delete(f"/organizations/{org_id}/members/{member_user_id}", headers=auth("roleowner@example.com"))
+    assert delete.status_code == 204
 
 
 def test_invitations_lifecycle():
+    import os
+    os.environ["ADMIN_EMAILS"] = "inviter@example.com,invitee@example.com"
     # Create org
     r = client.post("/organizations/", json={"name": "InviteOrg"}, headers=auth("inviter@example.com"))
     assert r.status_code == 201

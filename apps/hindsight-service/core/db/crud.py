@@ -236,14 +236,30 @@ def get_scoped_keyword_by_text(
     owner_user_id: Optional[uuid.UUID] = None,
     organization_id: Optional[uuid.UUID] = None,
 ):
+    # Defensive coercion: tests may supply string UUIDs; coerce when possible so that
+    # SQLAlchemy's UUID(as_uuid=True) columns receive the proper Python type. If coercion
+    # fails we simply avoid adding the filter (no match will be found) rather than raising.
+    def _coerce_uuid(val):
+        if val is None:
+            return None
+        if isinstance(val, uuid.UUID):
+            return val
+        try:
+            return uuid.UUID(str(val))
+        except Exception:
+            return None
+
+    owner_uuid = _coerce_uuid(owner_user_id)
+    org_uuid = _coerce_uuid(organization_id)
+
     q = db.query(models.Keyword).filter(
         models.Keyword.visibility_scope == visibility_scope,
         func.lower(models.Keyword.keyword_text) == func.lower(keyword_text),
     )
-    if visibility_scope == 'organization' and organization_id is not None:
-        q = q.filter(models.Keyword.organization_id == organization_id)
-    elif visibility_scope == 'personal' and owner_user_id is not None:
-        q = q.filter(models.Keyword.owner_user_id == owner_user_id)
+    if visibility_scope == 'organization' and org_uuid is not None:
+        q = q.filter(models.Keyword.organization_id == org_uuid)
+    elif visibility_scope == 'personal' and owner_uuid is not None:
+        q = q.filter(models.Keyword.owner_user_id == owner_uuid)
     return q.first()
 
 # CRUD for Organization
