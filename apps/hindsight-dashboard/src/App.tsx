@@ -16,6 +16,7 @@ import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { OrgProvider } from './context/OrgContext';
+import { OrganizationProvider } from './context/OrganizationContext';
 import LoginPage from './components/LoginPage';
 
 interface UserInfo {
@@ -102,9 +103,11 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <OrgProvider>
-          <AppContent />
-        </OrgProvider>
+        <OrganizationProvider>
+          <OrgProvider>
+            <AppContent />
+          </OrgProvider>
+        </OrganizationProvider>
       </AuthProvider>
     </Router>
   );

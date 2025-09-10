@@ -1,6 +1,16 @@
 # Hindsight AI — Product & Technical Requirements
 
-This document specifies the expected behavior, constraints, and operational requirements of the Hindsight AI application across environments (staging, production, local). It is the single source of truth for functionality, routing/auth flows, deployment, runtime configuration, and acceptance criteria.
+This document specifies the expected behavior, constraints, and operational requirements of the Hindsight AI application across environments (staging, product4) From any app page (e.g., `/memory-blocks`), top‑right "Sign In" goes directly to Google and returns to the same page authenticated.
+5) After successful OAuth, the same tab shows authenticated state without opening a new tab.
+6) **Organization Management**: Authenticated users can access organization management through the user account dropdown menu:
+   - **"Manage Organizations"** menu item opens a modal dialog with organization and member management
+   - **Create Organizations**: Users can create new organizations with name and optional slug
+   - **View Organizations**: Lists all organizations the user has access to (superadmin sees all)
+   - **Member Management**: For each organization, users can view, add, update, and remove members
+   - **Role Management**: Support for owner, admin, editor, viewer roles with appropriate permissions
+   - **Self-Protection**: Users cannot remove themselves or change their own role
+   - **Real-time Updates**: Changes are immediately reflected in the UI with success/error notifications
+7) **Dev Mode Experience**: In local development, "Sign In" automatically authenticates as `dev@localhost` with superadmin privileges, enabling full testing of organization management features without OAuth setup.n, local). It is the single source of truth for functionality, routing/auth flows, deployment, runtime configuration, and acceptance criteria.
 
 Roadmap Reference
 - Execution ordering, phased delivery plan, and acceptance criteria for in-progress governance & UX work are tracked in `docs/roadmap.md`. This requirements file defines the target state; the roadmap file defines how we get there iteratively.
@@ -28,6 +38,15 @@ Roadmap Reference
 - Local development: docker compose or `vite dev` + API.
 
 A single compose file `docker-compose.app.yml` is used for both staging and production, parameterized by `.env` on the server.
+
+### 4.1 Local Development Authentication
+In local development mode, the system provides a simplified authentication mechanism:
+- **Dev Authentication**: Click "Sign In" button automatically authenticates as `dev@localhost`
+- **Full Permissions**: Dev user has superadmin privileges and can access all features
+- **Organization Management**: Dev user can create, manage organizations and memberships through the user menu
+- **Production Parity**: Same permission logic as production, just bypasses OAuth flow
+- **Dev Mode Indicators**: UI shows "Development Mode" status and admin badge
+- **Simplified Logout**: In dev mode, logout redirects to home page instead of OAuth logout flow
 
 ## 5. Secrets & Configuration
 All secrets are environment‑scoped in GitHub Environments. Use the same key names for both envs; values differ per env.
@@ -150,10 +169,21 @@ The backend exposes a FastAPI application with the following expectations:
   - Full-text: `GET /memory-blocks/search/fulltext` with `query`, `limit`, optional filters.
   - Semantic (placeholder): `GET /memory-blocks/search/semantic` with `query`, `similarity_threshold`.
   - Hybrid: `GET /memory-blocks/search/hybrid` with weighted params; validates weights sum to 1.0.
+- Organizations
+  - `GET /organizations/` list organizations for current user (superadmin sees all)
+  - `POST /organizations/` create new organization with `{ name, slug }` (creator becomes owner)
+  - `GET /organizations/{org_id}` get organization details
+  - `PUT /organizations/{org_id}` update organization name/slug (requires owner/admin role)
+  - `DELETE /organizations/{org_id}` delete organization (requires owner role)
+  - `GET /organizations/{org_id}/members` list organization members
+  - `POST /organizations/{org_id}/members` add member with `{ email, role, can_read, can_write }`
+  - `PUT /organizations/{org_id}/members/{user_id}` update member role/permissions
+  - `DELETE /organizations/{org_id}/members/{user_id}` remove member from organization
 
 Access control
 - Read-only enforcement for unauthenticated POST/PUT/PATCH/DELETE via ASGI middleware (checks oauth2-proxy headers).
 - Guest consumers must use `/guest-api` proxy in the dashboard, which strips auth headers.
+- Organization management requires authentication and appropriate role permissions (owner/admin for most operations).
 
 ## 12. Non‑Functional Requirements
 - Parity: same container images for staging and production (runtime config only).

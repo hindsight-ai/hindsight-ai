@@ -70,7 +70,9 @@ def test_bulk_move_validation_errors(client, org_with_user):
 
 
 def test_bulk_move_conflict_detection(client, org_with_user, db):
-    from unittest.mock import patch
+    from core.api.deps import get_current_user_context
+    from core.api.main import app
+    
     user, org = org_with_user
     dest = models.Organization(name="DestPlan", created_by=user.id)
     db.add(dest); db.commit(); db.refresh(dest)
@@ -79,7 +81,7 @@ def test_bulk_move_conflict_detection(client, org_with_user, db):
     crud.create_agent(db, schemas.AgentCreate(agent_name="dup", visibility_scope="organization", organization_id=org.id))
     crud.create_agent(db, schemas.AgentCreate(agent_name="dup", visibility_scope="organization", organization_id=dest.id))
     
-    # Mock get_current_user_context to return user with correct memberships
+    # Create mock user context with correct memberships
     fake_user = user
     fake_memberships = [
         {"organization_id": str(org.id), "role": "owner", "can_read": True, "can_write": True},
@@ -92,45 +94,74 @@ def test_bulk_move_conflict_detection(client, org_with_user, db):
         "memberships_by_org": {str(org.id): fake_memberships[0], str(dest.id): fake_memberships[1]},
     }
     
-    with patch('core.api.bulk_operations._require_current_user', return_value=(fake_user, fake_current_user)):
+    # Override dependency instead of patching
+    def mock_get_current_user_context(*args, **kwargs):
+        return fake_user, fake_current_user
+    
+    original_override = app.dependency_overrides.get(get_current_user_context)
+    app.dependency_overrides[get_current_user_context] = mock_get_current_user_context
+    
+    try:
         r = client.post(
             f"/bulk-operations/organizations/{org.id}/bulk-move",
             json={"destination_organization_id": str(dest.id), "resource_types": ["agents"]},
             headers=_h(user),
         )
-    assert r.status_code == 200
+        assert r.status_code == 200
+    finally:
+        # Clean up dependency override
+        if original_override is not None:
+            app.dependency_overrides[get_current_user_context] = original_override
+        else:
+            app.dependency_overrides.pop(get_current_user_context, None)
     data = r.json()
     assert data["conflicts"]["agents"]
     assert data["resources_to_move"]["agents"] == 1
 
 
 def test_bulk_delete_dry_run_counts(client, org_with_user, db):
-    from unittest.mock import patch
+    from core.api.deps import get_current_user_context
+    from core.api.main import app
+    
     user, org = org_with_user
-    # escalate to superadmin to ensure manage permission for delete planning
-    user.is_superadmin = True
-    db.commit(); db.refresh(user)
+    # Create test data
     crud.create_agent(db, schemas.AgentCreate(agent_name="a1", visibility_scope="organization", organization_id=org.id))
     crud.create_keyword(db, schemas.KeywordCreate(keyword_text="k1", visibility_scope="organization", organization_id=org.id))
     agent = crud.create_agent(db, schemas.AgentCreate(agent_name="mbagent", visibility_scope="organization", organization_id=org.id))
     crud.create_memory_block(db, schemas.MemoryBlockCreate(content="m1", visibility_scope="organization", organization_id=org.id, agent_id=agent.agent_id, conversation_id=uuid.uuid4()))
     
-    # Mock get_current_user_context to return superadmin user
+    # Create mock user context 
     fake_user = user
+    fake_memberships = [
+        {"organization_id": str(org.id), "role": "owner", "can_read": True, "can_write": True},
+    ]
     fake_current_user = {
         "id": user.id,
-        "is_superadmin": True,
-        "memberships": [],
-        "memberships_by_org": {},
+        "is_superadmin": False,
+        "memberships": fake_memberships,
+        "memberships_by_org": {str(org.id): fake_memberships[0]},
     }
     
-    with patch('core.api.bulk_operations._require_current_user', return_value=(fake_user, fake_current_user)):
+    # Override dependency instead of patching
+    def mock_get_current_user_context(*args, **kwargs):
+        return fake_user, fake_current_user
+    
+    original_override = app.dependency_overrides.get(get_current_user_context)
+    app.dependency_overrides[get_current_user_context] = mock_get_current_user_context
+    
+    try:
         r = client.post(
             f"/bulk-operations/organizations/{org.id}/bulk-delete",
             json={"dry_run": True},
             headers=_h(user),
         )
-    assert r.status_code == 200
+        assert r.status_code == 200
+    finally:
+        # Clean up dependency override
+        if original_override is not None:
+            app.dependency_overrides[get_current_user_context] = original_override
+        else:
+            app.dependency_overrides.pop(get_current_user_context, None)
     data = r.json()
     # Two agents were created (a1 and mbagent)
     assert data["resources_to_delete"]["agents"] == 2

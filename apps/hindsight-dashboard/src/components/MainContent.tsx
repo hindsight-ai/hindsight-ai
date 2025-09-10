@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import UserAccountButton from './UserAccountButton';
+import OrganizationSwitcher from './OrganizationSwitcher';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom';
 
@@ -53,6 +54,9 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
                 <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
               </button>
               <h2 className="text-lg sm:text-2xl font-bold text-gray-800 truncate">{title}</h2>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <OrganizationSwitcher />
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <select className="border border-gray-300 rounded-md px-2 py-1 text-xs sm:text-sm bg-white" value={String(scale)} onChange={e => updateScale(parseFloat(e.target.value))} aria-label="Display scale" title="Display scale">

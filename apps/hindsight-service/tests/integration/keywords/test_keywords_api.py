@@ -109,3 +109,91 @@ def test_memory_block_keyword_association_flow():
     # second disassociate should 404
     dis2 = client.delete(f"/memory-blocks/{mb_id}/keywords/{kid}", headers=auth())
     assert dis2.status_code == 404
+
+
+def test_memory_block_keywords_endpoint():
+    """Test the new GET /memory-blocks/{id}/keywords/ endpoint"""
+    # Create memory block first
+    r = client.post("/agents/", json={"agent_name": "KwAgent", "visibility_scope": "personal"}, headers=auth())
+    agent_id = r.json()["agent_id"]
+    
+    mb = client.post("/memory-blocks/", json={
+        "agent_id": agent_id,
+        "conversation_id": str(uuid.uuid4()),
+        "content": "Content with keywords",
+        "visibility_scope": "personal"
+    }, headers=auth())
+    assert mb.status_code == 201
+    mb_id = mb.json()["id"]
+    
+    # Create keyword and associate
+    kw = client.post("/keywords/", json={"keyword_text": "testkw123"}, headers=auth())
+    assert kw.status_code == 201
+    kid = kw.json()["keyword_id"]
+    
+    assoc = client.post(f"/memory-blocks/{mb_id}/keywords/{kid}", headers=auth())
+    assert assoc.status_code == 201
+    
+    # Test the GET endpoint
+    r = client.get(f"/memory-blocks/{mb_id}/keywords/", headers=auth())
+    assert r.status_code == 200
+    keywords = r.json()
+    assert isinstance(keywords, list)
+    assert len(keywords) >= 1
+    assert any(k["keyword_text"] == "testkw123" for k in keywords)
+    
+    # Test with nonexistent memory block
+    fake_mb_id = str(uuid.uuid4())
+    r = client.get(f"/memory-blocks/{fake_mb_id}/keywords/", headers=auth())
+    assert r.status_code == 404
+
+
+def test_keyword_memory_blocks_endpoints():
+    """Test the new keyword memory blocks GET endpoints"""
+    # Create memory block and keyword
+    r = client.post("/agents/", json={"agent_name": "KwMbAgent", "visibility_scope": "personal"}, headers=auth())
+    agent_id = r.json()["agent_id"]
+    
+    mb = client.post("/memory-blocks/", json={
+        "agent_id": agent_id,
+        "conversation_id": str(uuid.uuid4()),
+        "content": "Memory for keyword testing",
+        "visibility_scope": "personal"
+    }, headers=auth())
+    assert mb.status_code == 201
+    mb_id = mb.json()["id"]
+    
+    kw = client.post("/keywords/", json={"keyword_text": "mbtest456"}, headers=auth())
+    assert kw.status_code == 201
+    kid = kw.json()["keyword_id"]
+    
+    # Associate them
+    assoc = client.post(f"/memory-blocks/{mb_id}/keywords/{kid}", headers=auth())
+    assert assoc.status_code == 201
+    
+    # Test GET /keywords/{id}/memory-blocks/
+    r = client.get(f"/keywords/{kid}/memory-blocks/", headers=auth())
+    assert r.status_code == 200
+    memory_blocks = r.json()
+    assert isinstance(memory_blocks, list)
+    assert len(memory_blocks) >= 1
+    assert any(mb["id"] == mb_id for mb in memory_blocks)
+    
+    # Test with pagination
+    r = client.get(f"/keywords/{kid}/memory-blocks/?skip=0&limit=1", headers=auth())
+    assert r.status_code == 200
+    
+    # Test GET /keywords/{id}/memory-blocks/count
+    r = client.get(f"/keywords/{kid}/memory-blocks/count", headers=auth())
+    assert r.status_code == 200
+    count_data = r.json()
+    assert "count" in count_data
+    assert count_data["count"] >= 1
+    
+    # Test with nonexistent keyword
+    fake_kid = str(uuid.uuid4())
+    r = client.get(f"/keywords/{fake_kid}/memory-blocks/", headers=auth())
+    assert r.status_code == 404
+    
+    r = client.get(f"/keywords/{fake_kid}/memory-blocks/count", headers=auth())
+    assert r.status_code == 404

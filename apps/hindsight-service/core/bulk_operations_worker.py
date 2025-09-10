@@ -1,3 +1,12 @@
+"""
+LEGACY: Old threaded bulk operations worker.
+
+This module is deprecated and has been replaced by core.async_bulk_operations.
+It remains for backward compatibility with existing tests but should be 
+removed once all tests are updated to use the new async system.
+
+Use core.async_bulk_operations instead for new implementations.
+"""
 import logging
 import uuid
 from datetime import datetime, timezone

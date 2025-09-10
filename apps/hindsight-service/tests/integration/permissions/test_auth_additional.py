@@ -47,13 +47,14 @@ def test_create_agent_org_no_permission():
     import os
     os.environ["ADMIN_EMAILS"] = "admin@example.com"
     client = TestClient(main_app)
-    h = _headers("user")
-    # Create org
-    r = client.post("/organizations/", json={"name": "NoPermOrg", "slug": "nopermorg"}, headers=h)
+    h_admin = _headers("admin")
+    h_user = _headers("user")
+    # Admin creates org
+    r = client.post("/organizations/", json={"name": "NoPermOrg", "slug": "nopermorg"}, headers=h_admin)
     assert r.status_code == 201
     org_id = r.json()["id"]
-    # Try to create agent in org without membership
-    r2 = client.post("/agents/", json={"agent_name": "NoPermAgent", "visibility_scope": "organization", "organization_id": org_id, "description": "test"}, headers=h)
+    # Try to create agent in org as different user without membership
+    r2 = client.post("/agents/", json={"agent_name": "NoPermAgent", "visibility_scope": "organization", "organization_id": org_id, "description": "test"}, headers=h_user)
     assert r2.status_code == 403
     assert "No write permission in target organization" in r2.json()["detail"]
 

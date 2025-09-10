@@ -12,18 +12,31 @@ const isGuest = (): boolean => {
   try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; }
 };
 
-const base = () => (isGuest() ? '/guest-api' : API_BASE_URL);
-
-try {
-  if (typeof window !== 'undefined' && API_BASE_URL) {
-    const isHttps = window.location.protocol === 'https:';
-    const url = new URL(API_BASE_URL);
-    if (isHttps && url.protocol === 'http:') {
-      url.protocol = 'https:';
-      API_BASE_URL = url.toString().replace(/\/$/, '');
+const base = () => {
+  const relativeUrl = isGuest() ? '/guest-api' : API_BASE_URL;
+  
+  // Convert to absolute URL to avoid browser base URL resolution issues
+  let absoluteUrl;
+  if (typeof window !== 'undefined') {
+    // In development, ensure we use the correct port
+    const currentOrigin = window.location.origin;
+    const isDev = currentOrigin.includes(':3000');
+    
+    if (isDev) {
+      absoluteUrl = `http://localhost:3000${relativeUrl}`;
+    } else {
+      // In production, use current origin
+      absoluteUrl = `${currentOrigin}${relativeUrl}`;
     }
+  } else {
+    // Fallback for non-browser environments
+    absoluteUrl = relativeUrl;
   }
-} catch {}
+  
+  console.log(`[DEBUG] authService base URL: ${absoluteUrl} original: ${relativeUrl} origin: ${typeof window !== 'undefined' ? window.location.origin : 'unknown'}`);
+  
+  return absoluteUrl;
+};
 
 export interface OrganizationMembership {
   id?: string;
@@ -46,7 +59,7 @@ export interface CurrentUserInfo {
 const authService = {
   getCurrentUser: async (): Promise<CurrentUserInfo> => {
     try {
-      const response = await fetch(`/api/user-info`, { credentials: 'include', redirect: 'follow' });
+      const response = await fetch(`${base()}/user-info`, { credentials: 'include', redirect: 'follow' });
       if (!response.ok) {
         if (response.status === 401) {
           return { authenticated: false };

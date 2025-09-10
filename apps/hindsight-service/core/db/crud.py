@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload # Import joinedload
-from . import models, schemas
+from . import models, schemas, scope_utils
 import uuid
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import or_, and_, func, Text # Import func, and_, and Text
@@ -60,40 +60,12 @@ def get_agents(
     - Optional explicit scope/org filters narrow results
     """
     q = db.query(models.Agent)
-    if current_user is None:
-        q = q.filter(models.Agent.visibility_scope == 'public')
-    else:
-        # Superadmin shortcut: sees all
-        if current_user.get('is_superadmin'):
-            pass  # no filter; they can read everything
-        else:
-            org_ids = []
-            try:
-                for m in current_user.get('memberships', []):
-                    mid = m.get('organization_id')
-                    if mid:
-                        try:
-                            org_ids.append(uuid.UUID(mid))
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-            q = q.filter(
-                or_(
-                    models.Agent.visibility_scope == 'public',
-                    models.Agent.owner_user_id == current_user.get('id'),
-                    and_(
-                        models.Agent.visibility_scope == 'organization',
-                        models.Agent.organization_id.in_(org_ids) if org_ids else False,
-                    ),
-                )
-            )
 
-    # Optional narrowing filters
-    if scope in ('personal', 'organization', 'public'):
-        q = q.filter(models.Agent.visibility_scope == scope)
-    if organization_id is not None:
-        q = q.filter(models.Agent.organization_id == organization_id)
+    # Apply base scope filtering
+    q = scope_utils.apply_scope_filter(q, current_user, models.Agent)
+
+    # Apply optional narrowing filters
+    q = scope_utils.apply_optional_scope_narrowing(q, scope, organization_id, models.Agent)
 
     return q.offset(skip).limit(limit).all()
 
@@ -113,35 +85,12 @@ def search_agents(
     q = db.query(models.Agent).filter(
         func.similarity(models.Agent.agent_name, query) >= SIMILARITY_THRESHOLD
     )
+
     # Apply same scope rules as list
-    if current_user is None:
-        q = q.filter(models.Agent.visibility_scope == 'public')
-    else:
-        org_ids = []
-        try:
-            for m in current_user.get('memberships', []):
-                mid = m.get('organization_id')
-                if mid:
-                    try:
-                        org_ids.append(uuid.UUID(mid))
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-        q = q.filter(
-            or_(
-                models.Agent.visibility_scope == 'public',
-                models.Agent.owner_user_id == current_user.get('id'),
-                and_(
-                    models.Agent.visibility_scope == 'organization',
-                    models.Agent.organization_id.in_(org_ids) if org_ids else False,
-                ),
-            )
-        )
-    if scope in ('personal', 'organization', 'public'):
-        q = q.filter(models.Agent.visibility_scope == scope)
-    if organization_id is not None:
-        q = q.filter(models.Agent.organization_id == organization_id)
+    q = scope_utils.apply_scope_filter(q, current_user, models.Agent)
+
+    # Apply optional narrowing filters
+    q = scope_utils.apply_optional_scope_narrowing(q, scope, organization_id, models.Agent)
 
     return q.order_by(
         func.similarity(models.Agent.agent_name, query).desc()
@@ -157,19 +106,33 @@ def update_agent(db: Session, agent_id: uuid.UUID, agent: schemas.AgentUpdate):
     return db_agent
 
 def delete_agent(db: Session, agent_id: uuid.UUID):
-    db_agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
-    if db_agent:
+    """Delete an agent and its related records with proper error handling."""
+    if agent_id is None:
+        return False
+        
+    try:
+        db_agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
+        if not db_agent:
+            return False
+            
         # Delete associated AgentTranscript records
-        db.query(models.AgentTranscript).filter(models.AgentTranscript.agent_id == agent_id).delete(synchronize_session=False)
+        db.query(models.AgentTranscript).filter(
+            models.AgentTranscript.agent_id == agent_id
+        ).delete(synchronize_session=False)
         
         # Delete associated MemoryBlock records
-        db.query(models.MemoryBlock).filter(models.MemoryBlock.agent_id == agent_id).delete(synchronize_session=False)
+        db.query(models.MemoryBlock).filter(
+            models.MemoryBlock.agent_id == agent_id
+        ).delete(synchronize_session=False)
         
         # Now delete the agent
         db.delete(db_agent)
         db.commit()
-        return True # Indicate successful deletion
-    return False # Indicate agent not found or deletion failed
+        return True
+    except Exception as e:
+        db.rollback()
+        raise RuntimeError(f"Failed to delete agent {agent_id}: {str(e)}")
+        # Return False would be an alternative to raising if we prefer silent failures
 
 # CRUD for AgentTranscript
 def create_agent_transcript(db: Session, transcript: schemas.AgentTranscriptCreate):
@@ -202,11 +165,23 @@ def update_agent_transcript(db: Session, transcript_id: uuid.UUID, transcript: s
     return db_transcript
 
 def delete_agent_transcript(db: Session, transcript_id: uuid.UUID):
-    db_transcript = db.query(models.AgentTranscript).filter(models.AgentTranscript.transcript_id == transcript_id).first()
-    if db_transcript:
-        db.delete(db_transcript)
-        db.commit()
-    return db_transcript
+    """Delete an agent transcript with proper error handling."""
+    if transcript_id is None:
+        return None
+        
+    try:
+        db_transcript = db.query(models.AgentTranscript).filter(
+            models.AgentTranscript.transcript_id == transcript_id
+        ).first()
+        
+        if db_transcript:
+            db.delete(db_transcript)
+            db.commit()
+            
+        return db_transcript
+    except Exception as e:
+        db.rollback()
+        raise RuntimeError(f"Failed to delete agent transcript {transcript_id}: {str(e)}")
 
 # CRUD for Keyword
 def create_keyword(db: Session, keyword: schemas.KeywordCreate):
@@ -538,37 +513,12 @@ def get_keywords(
     organization_id: Optional[uuid.UUID] = None,
 ):
     q = db.query(models.Keyword)
-    if current_user is None:
-        q = q.filter(models.Keyword.visibility_scope == 'public')
-    else:
-        if current_user.get('is_superadmin'):
-            pass
-        else:
-            org_ids = []
-            try:
-                for m in current_user.get('memberships', []):
-                    mid = m.get('organization_id')
-                    if mid:
-                        try:
-                            org_ids.append(uuid.UUID(mid))
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-            q = q.filter(
-                or_(
-                    models.Keyword.visibility_scope == 'public',
-                    models.Keyword.owner_user_id == current_user.get('id'),
-                    and_(
-                        models.Keyword.visibility_scope == 'organization',
-                        models.Keyword.organization_id.in_(org_ids) if org_ids else False,
-                    ),
-                )
-            )
-    if scope in ('personal', 'organization', 'public'):
-        q = q.filter(models.Keyword.visibility_scope == scope)
-    if organization_id is not None:
-        q = q.filter(models.Keyword.organization_id == organization_id)
+
+    # Apply base scope filtering
+    q = scope_utils.apply_scope_filter(q, current_user, models.Keyword)
+
+    # Apply optional narrowing filters
+    q = scope_utils.apply_optional_scope_narrowing(q, scope, organization_id, models.Keyword)
     return q.offset(skip).limit(limit).all()
 
 def update_keyword(db: Session, keyword_id: uuid.UUID, keyword: schemas.KeywordUpdate):
@@ -581,11 +531,23 @@ def update_keyword(db: Session, keyword_id: uuid.UUID, keyword: schemas.KeywordU
     return db_keyword
 
 def delete_keyword(db: Session, keyword_id: uuid.UUID):
-    db_keyword = db.query(models.Keyword).filter(models.Keyword.keyword_id == keyword_id).first()
-    if db_keyword:
-        db.delete(db_keyword)
-        db.commit()
-    return db_keyword
+    """Delete a keyword with proper error handling."""
+    if keyword_id is None:
+        return None
+        
+    try:
+        db_keyword = db.query(models.Keyword).filter(
+            models.Keyword.keyword_id == keyword_id
+        ).first()
+        
+        if db_keyword:
+            db.delete(db_keyword)
+            db.commit()
+            
+        return db_keyword
+    except Exception as e:
+        db.rollback()
+        raise RuntimeError(f"Failed to delete keyword {keyword_id}: {str(e)}")
 
 # CRUD for MemoryBlock
 def create_memory_block(db: Session, memory_block: schemas.MemoryBlockCreate):
@@ -679,32 +641,7 @@ def get_all_memory_blocks(
     query = db.query(models.MemoryBlock).options(joinedload(models.MemoryBlock.memory_block_keywords).joinedload(models.MemoryBlockKeyword.keyword)) # Eager load keywords
 
     # Apply scope filters
-    if current_user is None:
-        query = query.filter(models.MemoryBlock.visibility_scope == 'public')
-    else:
-        # Allowed: public OR personal owned OR orgs where user is a member
-        org_ids = []
-        try:
-            memberships = current_user.get('memberships', [])
-            for m in memberships:
-                mid = m.get('organization_id')
-                if mid:
-                    try:
-                        org_ids.append(uuid.UUID(mid))
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-        query = query.filter(
-            or_(
-                models.MemoryBlock.visibility_scope == 'public',
-                models.MemoryBlock.owner_user_id == current_user.get('id'),
-                and_(
-                    models.MemoryBlock.visibility_scope == 'organization',
-                    models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False
-                ),
-            )
-        )
+    query = scope_utils.apply_scope_filter(query, current_user, models.MemoryBlock)
 
     if is_archived is not None:
         query = query.filter(models.MemoryBlock.archived == is_archived)
@@ -750,12 +687,7 @@ def get_all_memory_blocks(
         query = query.join(models.MemoryBlockKeyword).filter(models.MemoryBlockKeyword.keyword_id.in_(keyword_ids))
 
     # Optional explicit narrowing
-    if filter_scope in ('personal', 'organization', 'public'):
-        query = query.filter(models.MemoryBlock.visibility_scope == filter_scope)
-        if filter_scope == 'organization' and filter_organization_id is not None:
-            query = query.filter(models.MemoryBlock.organization_id == filter_organization_id)
-        if filter_scope == 'personal' and current_user is not None:
-            query = query.filter(models.MemoryBlock.owner_user_id == current_user.get('id'))
+    query = scope_utils.apply_optional_scope_narrowing(query, filter_scope, filter_organization_id, models.MemoryBlock)
 
     # Get total count before applying limit and offset
     total_count = query.count()
@@ -822,13 +754,24 @@ def archive_memory_block(db: Session, memory_id: uuid.UUID):
     return None # Return None if not found
 
 def delete_memory_block(db: Session, memory_id: uuid.UUID):
-    # This function now performs a hard delete, used for actual removal, not archiving
-    db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
-    if db_memory_block:
-        db.delete(db_memory_block)
-        db.commit()
-        return True
-    return False
+    """Delete a memory block with proper error handling."""
+    if memory_id is None:
+        return False
+        
+    try:
+        db_memory_block = db.query(models.MemoryBlock).filter(
+            models.MemoryBlock.id == memory_id
+        ).first()
+        
+        if db_memory_block:
+            db.delete(db_memory_block)
+            db.commit()
+            return True
+            
+        return False
+    except Exception as e:
+        db.rollback()
+        raise RuntimeError(f"Failed to delete memory block {memory_id}: {str(e)}")
 
 def retrieve_relevant_memories(
     db: Session,

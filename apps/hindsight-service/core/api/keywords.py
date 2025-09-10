@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from core.db import schemas, crud, models
 from core.db.database import get_db
-from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
+from core.api.auth import resolve_identity_from_headers, get_or_create_user
 from core.api.permissions import can_read, can_write
 
 router = APIRouter(tags=["keywords"])  # Preserve path structure
@@ -31,7 +31,9 @@ def create_keyword_endpoint(
     scope = (keyword.visibility_scope or 'personal')
     org_id = getattr(keyword, 'organization_id', None)
     if scope == 'organization':
-        memberships = get_user_memberships(db, u.id)
+        # Import at call time so tests can patch core.api.main.get_user_memberships
+        from core.api import main as main_module
+        memberships = main_module.get_user_memberships(db, u.id)
         by_org = {m['organization_id']: m for m in memberships}
         key = str(org_id) if org_id else None
         m = by_org.get(key) if key else None
@@ -90,7 +92,8 @@ def get_all_keywords_endpoint(
     current_user = None
     if email:
         u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
+        from core.api import main as main_module
+        memberships = main_module.get_user_memberships(db, u.id)
         current_user = {
             "id": u.id,
             "is_superadmin": bool(u.is_superadmin),
@@ -128,7 +131,8 @@ def get_keyword_endpoint(
     current_user = None
     if email:
         u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
+        from core.api import main as main_module
+        memberships = main_module.get_user_memberships(db, u.id)
         current_user = {
             "id": u.id,
             "is_superadmin": bool(u.is_superadmin),
@@ -161,7 +165,8 @@ def update_keyword_endpoint(
     current_user = None
     if email:
         u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
+        from core.api import main as main_module
+        memberships = main_module.get_user_memberships(db, u.id)
         current_user = {
             "id": u.id,
             "is_superadmin": bool(u.is_superadmin),
@@ -207,7 +212,8 @@ def delete_keyword_endpoint(
     current_user = None
     if email:
         u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
+        from core.api import main as main_module
+        memberships = main_module.get_user_memberships(db, u.id)
         current_user = {
             "id": u.id,
             "is_superadmin": bool(u.is_superadmin),
@@ -264,7 +270,8 @@ def associate_keyword_with_memory_block_endpoint(
     current_user = None
     if email:
         u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
+        from core.api import main as main_module
+        memberships = main_module.get_user_memberships(db, u.id)
         current_user = {
             "id": u.id,
             "is_superadmin": bool(u.is_superadmin),
@@ -303,7 +310,8 @@ def disassociate_keyword_from_memory_block_endpoint(
     current_user = None
     if email:
         u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
+        from core.api import main as main_module
+        memberships = main_module.get_user_memberships(db, u.id)
         current_user = {
             "id": u.id,
             "is_superadmin": bool(u.is_superadmin),
@@ -316,3 +324,38 @@ def disassociate_keyword_from_memory_block_endpoint(
     if not success:
         raise HTTPException(status_code=404, detail="Association not found")
     return {"message": "Association deleted successfully"}
+
+@router.get("/memory-blocks/{memory_id}/keywords/", response_model=List[schemas.Keyword])
+def get_memory_block_keywords_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
+    db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
+    if not db_memory_block:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+
+    keywords = crud.get_memory_block_keywords(db, memory_id=memory_id)
+    return keywords
+
+@router.get("/keywords/{keyword_id}/memory-blocks/", response_model=List[schemas.MemoryBlock])
+def get_keyword_memory_blocks_endpoint(keyword_id: uuid.UUID, skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
+    """
+    Get all memory blocks associated with a specific keyword.
+    This endpoint is used for keyword analytics to show which memory blocks use each keyword.
+    """
+    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
+    if not db_keyword:
+        raise HTTPException(status_code=404, detail="Keyword not found")
+
+    memory_blocks = crud.get_keyword_memory_blocks(db, keyword_id=keyword_id, skip=skip, limit=limit)
+    return memory_blocks
+
+@router.get("/keywords/{keyword_id}/memory-blocks/count")
+def get_keyword_memory_blocks_count_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Get the count of memory blocks associated with a specific keyword.
+    This endpoint is used for displaying usage statistics on keyword cards.
+    """
+    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
+    if not db_keyword:
+        raise HTTPException(status_code=404, detail="Keyword not found")
+
+    count = crud.get_keyword_memory_blocks_count(db, keyword_id=keyword_id)
+    return {"count": count}

@@ -81,8 +81,8 @@ def test_bulk_move_forbidden_destination(client, org_owner, db):
 
 
 def test_bulk_move_agent_conflict(client, org_owner, second_org, db):
-    import os
-    os.environ["ADMIN_EMAILS"] = "owner_it@example.com"
+    # import os
+    # os.environ["ADMIN_EMAILS"] = "owner_it@example.com"
     user, source_org = org_owner
     dest_org = second_org
     crud.create_agent(db, schemas.AgentCreate(agent_name="dup", visibility_scope="organization", organization_id=source_org.id))
@@ -98,8 +98,8 @@ def test_bulk_move_agent_conflict(client, org_owner, second_org, db):
 
 
 def test_bulk_move_keyword_conflict(client, org_owner, second_org, db):
-    import os
-    os.environ["ADMIN_EMAILS"] = "owner_it@example.com"
+    # import os
+    # os.environ["ADMIN_EMAILS"] = "owner_it@example.com"
     user, source_org = org_owner
     dest_org = second_org
     crud.create_keyword(db, schemas.KeywordCreate(keyword_text="kdup", visibility_scope="organization", organization_id=source_org.id))
@@ -117,11 +117,11 @@ def test_bulk_move_keyword_conflict(client, org_owner, second_org, db):
 def test_bulk_move_no_dry_run(client, org_owner, second_org, monkeypatch):
     import os
     os.environ["ADMIN_EMAILS"] = "owner_it@example.com"
-    from core import bulk_operations_worker as worker
+    from core import async_bulk_operations
     invoked = {"called": False}
-    def fake_move(op_id, user_id, org_id, payload):
+    async def fake_move(op_id, task_type, user_id, org_id, payload):
         invoked["called"] = True
-    monkeypatch.setattr(worker, "perform_bulk_move", fake_move)
+    monkeypatch.setattr(async_bulk_operations, "execute_bulk_operation_async", fake_move)
     user, source_org = org_owner
     dest_org = second_org
     headers = _headers(user.email)
@@ -138,11 +138,11 @@ def test_bulk_move_no_dry_run(client, org_owner, second_org, monkeypatch):
 def test_bulk_delete_no_dry_run(client, org_owner, monkeypatch):
     import os
     os.environ["ADMIN_EMAILS"] = "owner_it@example.com"
-    from core import bulk_operations_worker as worker
+    from core import async_bulk_operations
     invoked = {"called": False}
-    def fake_delete(op_id, user_id, org_id, payload):
+    async def fake_delete(op_id, task_type, user_id, org_id, payload):
         invoked["called"] = True
-    monkeypatch.setattr(worker, "perform_bulk_delete", fake_delete)
+    monkeypatch.setattr(async_bulk_operations, "execute_bulk_operation_async", fake_delete)
     user, org = org_owner
     headers = _headers(user.email)
     resp = client.post(

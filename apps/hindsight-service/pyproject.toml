@@ -72,5 +72,6 @@ output = "coverage.xml"
 
 [dependency-groups]
 dev = [
+    "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.3.0",
 ]

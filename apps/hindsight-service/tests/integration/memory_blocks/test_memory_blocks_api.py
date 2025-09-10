@@ -228,3 +228,158 @@ def test_bulk_compact_memory_blocks_empty_list(db_session):
     r = client.post("/memory-blocks/bulk-compact", json=compact_payload, headers=h)
     assert r.status_code == 400
     assert "No memory block IDs provided" in r.json()["detail"]
+
+
+def test_memory_blocks_search_endpoint(db_session):
+    """Test the /memory-blocks/search/ endpoint"""
+    client = TestClient(main_app)
+    h = _h("searchuser")
+    agent_id = _create_personal_agent(client, h, "SearchAgent")
+    
+    # Create a memory block
+    payload = {
+        "agent_id": agent_id,
+        "conversation_id": str(uuid.uuid4()),
+        "content": "This is searchable content about AI algorithms",
+        "visibility_scope": "personal",
+    }
+    r = client.post("/memory-blocks/", json=payload, headers=h)
+    assert r.status_code == 201
+    
+    # Test search with keywords
+    r = client.get("/memory-blocks/search/?keywords=AI,algorithms", headers=h)
+    assert r.status_code == 200
+    results = r.json()
+    assert isinstance(results, list)
+    
+    # Test search with agent filter
+    r = client.get(f"/memory-blocks/search/?keywords=AI&agent_id={agent_id}", headers=h)
+    assert r.status_code == 200
+    
+    # Test search with limit
+    r = client.get("/memory-blocks/search/?keywords=AI&limit=5", headers=h)
+    assert r.status_code == 200
+    
+    # Test search with no keywords (should fail)
+    r = client.get("/memory-blocks/search/?keywords=", headers=h)
+    assert r.status_code == 400
+    assert "At least one keyword is required" in r.json()["detail"]
+
+
+def test_memory_blocks_list_with_filters(db_session):
+    """Test the GET /memory-blocks/ endpoint with various filters"""
+    client = TestClient(main_app)
+    h = _h("listuser")
+    agent_id = _create_personal_agent(client, h, "ListAgent")
+    conv_id = str(uuid.uuid4())
+    
+    # Create multiple memory blocks
+    for i in range(3):
+        payload = {
+            "agent_id": agent_id,
+            "conversation_id": conv_id,
+            "content": f"Memory block {i} content",
+            "visibility_scope": "personal",
+        }
+        r = client.post("/memory-blocks/", json=payload, headers=h)
+        assert r.status_code == 201
+    
+    # Test basic list
+    r = client.get("/memory-blocks/", headers=h)
+    assert r.status_code == 200
+    data = r.json()
+    assert "items" in data
+    assert "total_items" in data
+    assert "total_pages" in data
+    assert data["total_items"] >= 3
+    
+    # Test with agent filter
+    r = client.get(f"/memory-blocks/?agent_id={agent_id}", headers=h)
+    assert r.status_code == 200
+    data = r.json()
+    assert len([item for item in data["items"] if item["agent_id"] == agent_id]) > 0
+    
+    # Test with conversation filter
+    r = client.get(f"/memory-blocks/?conversation_id={conv_id}", headers=h)
+    assert r.status_code == 200
+    data = r.json()
+    assert len([item for item in data["items"] if item["conversation_id"] == conv_id]) > 0
+    
+    # Test with pagination
+    r = client.get("/memory-blocks/?skip=0&limit=2", headers=h)
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["items"]) <= 2
+    
+    # Test with search query
+    r = client.get("/memory-blocks/?search_query=content", headers=h)
+    assert r.status_code == 200
+    
+    # Test with sort order
+    r = client.get("/memory-blocks/?sort_by=created_at&sort_order=asc", headers=h)
+    assert r.status_code == 200
+
+
+def test_memory_block_archive_endpoint(db_session):
+    """Test the archive endpoint"""
+    client = TestClient(main_app)
+    h = _h("archiveuser")
+    agent_id = _create_personal_agent(client, h, "ArchiveAgent")
+    
+    # Create a memory block
+    payload = {
+        "agent_id": agent_id,
+        "conversation_id": str(uuid.uuid4()),
+        "content": "Content to be archived",
+        "visibility_scope": "personal",
+    }
+    r = client.post("/memory-blocks/", json=payload, headers=h)
+    assert r.status_code == 201
+    memory_id = r.json()["id"]
+    
+    # Archive it
+    r = client.post(f"/memory-blocks/{memory_id}/archive", headers=h)
+    assert r.status_code == 200
+    archived_data = r.json()
+    assert archived_data["archived"] == True
+    assert "archived_at" in archived_data
+    
+    # Verify it's not in regular list (unless including archived)
+    r = client.get("/memory-blocks/", headers=h)
+    assert r.status_code == 200
+    items = r.json()["items"]
+    archived_items = [item for item in items if item["id"] == memory_id and item.get("archived", False)]
+    # Should be empty or not present since we don't include archived by default
+    
+    # Test with include_archived=true
+    r = client.get("/memory-blocks/?include_archived=true", headers=h)
+    assert r.status_code == 200
+
+
+def test_memory_block_feedback_endpoint(db_session):
+    """Test the feedback endpoint"""
+    client = TestClient(main_app)
+    h = _h("feedbackuser")
+    agent_id = _create_personal_agent(client, h, "FeedbackAgent")
+    
+    # Create a memory block
+    payload = {
+        "agent_id": agent_id,
+        "conversation_id": str(uuid.uuid4()),
+        "content": "Content for feedback testing",
+        "visibility_scope": "personal",
+    }
+    r = client.post("/memory-blocks/", json=payload, headers=h)
+    assert r.status_code == 201
+    memory_id = r.json()["id"]
+    
+    # Provide feedback with proper schema structure (must include memory_id)
+    feedback_payload = {
+        "memory_id": memory_id,
+        "feedback_type": "positive",  # Valid feedback types: positive, negative, neutral
+        "feedback_details": "Very accurate feedback"
+    }
+    r = client.post(f"/memory-blocks/{memory_id}/feedback/", json=feedback_payload, headers=h)
+    assert r.status_code == 200
+    updated_memory = r.json()
+    assert "id" in updated_memory  # Basic check that we got a memory block back

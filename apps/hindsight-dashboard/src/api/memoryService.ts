@@ -22,7 +22,29 @@ try {
   }
 } catch {}
 
-const base = () => (isGuest() ? '/guest-api' : API_BASE_URL);
+const base = () => {
+  const relativeUrl = isGuest() ? '/guest-api' : API_BASE_URL;
+  
+  // Convert to absolute URL to avoid browser base URL resolution issues
+  let absoluteUrl;
+  if (typeof window !== 'undefined') {
+    // In development, ensure we use the correct port
+    const currentOrigin = window.location.origin;
+    const isDev = currentOrigin.includes(':3000');
+    
+    if (isDev) {
+      absoluteUrl = `http://localhost:3000${relativeUrl}`;
+    } else {
+      // In production, use current origin
+      absoluteUrl = `${currentOrigin}${relativeUrl}`;
+    }
+  } else {
+    absoluteUrl = relativeUrl; // Fallback for server-side rendering
+  }
+  
+  console.log('[DEBUG] memoryService base URL:', absoluteUrl, 'original:', relativeUrl, 'origin:', typeof window !== 'undefined' ? window.location.origin : 'N/A');
+  return absoluteUrl;
+};
 
 export interface MemoryBlock { id: string; agent_id: string; content: string; visibility_scope?: string; organization_id?: string | null; }
 export interface Keyword { keyword_id: string; keyword_text: string; }
@@ -64,7 +86,9 @@ const memoryService = {
     const { per_page, ...rest } = filters; const params = new URLSearchParams(rest);
     try { const scope = sessionStorage.getItem('ACTIVE_SCOPE'); const orgId = sessionStorage.getItem('ACTIVE_ORG_ID'); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}
     if (per_page != null) params.append('limit', String(per_page));
-    return jsonOrThrow(await fetch(`${base()}/memory-blocks/archived/?${params.toString()}`, { credentials: 'include' }));
+    const url = `${base()}/memory-blocks/archived/?${params.toString()}`;
+    console.log('[DEBUG] getArchivedMemoryBlocks URL:', url);
+    return jsonOrThrow(await fetch(url, { credentials: 'include' }));
   },
   getKeywords: async (filters: Record<string, any> = {}) => { const params = new URLSearchParams(filters); try { const scope = sessionStorage.getItem('ACTIVE_SCOPE'); const orgId = sessionStorage.getItem('ACTIVE_ORG_ID'); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}; const url = `${base()}/keywords/${params.toString() ? `?${params.toString()}` : ''}`; return jsonOrThrow(await fetch(url, { credentials: 'include' })); },
   createKeyword: async (data: Record<string, any>) => { guardGuest('Sign in to create keywords.'); const resp = await fetch(`${API_BASE_URL}/keywords/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), credentials: 'include' }); return jsonOrThrow(resp); },

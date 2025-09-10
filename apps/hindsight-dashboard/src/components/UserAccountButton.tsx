@@ -1,12 +1,21 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import OrganizationManagement from './OrganizationManagement';
 
 const UserAccountButton: React.FC = () => {
   const { user, loading } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showOrgManagement, setShowOrgManagement] = useState(false);
 
   const handleLogout = () => {
-    // Redirect to logout URL or handle logout logic
+    // Check if we're in dev mode
+    if (user?.email === 'dev@localhost') {
+      // In dev mode, just refresh the page to restart auth
+      window.location.href = '/';
+      return;
+    }
+    
+    // Production logout via OAuth
     const rd = encodeURIComponent(window.location.origin);
     window.location.href = `/oauth2/sign_out?rd=${rd}`;
   };
@@ -59,11 +68,23 @@ const UserAccountButton: React.FC = () => {
           <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
             <div className="px-4 py-3 border-b border-gray-200">
               <p className="text-sm font-medium text-gray-900">
-                {user.email || user.user}
+                {user.display_name || user.email || 'User'}
               </p>
-              <p className="text-xs text-gray-500">Signed in</p>
+              <p className="text-xs text-gray-500">
+                {user.email === 'dev@localhost' ? 'Development Mode' : 'Signed in'}
+                {user.is_superadmin && <span className="ml-1 px-1 bg-red-100 text-red-800 rounded text-xs">Admin</span>}
+              </p>
             </div>
             <div className="py-1">
+              <button
+                onClick={() => {
+                  setShowOrgManagement(true);
+                  setShowDropdown(false);
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
+              >
+                Manage Organizations
+              </button>
               <button
                 onClick={handleLogout}
                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
@@ -73,6 +94,10 @@ const UserAccountButton: React.FC = () => {
             </div>
           </div>
         </>
+      )}
+      
+      {showOrgManagement && (
+        <OrganizationManagement onClose={() => setShowOrgManagement(false)} />
       )}
     </div>
   );

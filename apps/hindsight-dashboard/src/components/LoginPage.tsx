@@ -6,7 +6,23 @@ const LoginPage: React.FC = () => {
   const { enterGuestMode } = useAuth();
   const location = useLocation();
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
+    // Check if we're in dev mode by testing the user-info endpoint
+    try {
+      const response = await fetch('/api/user-info');
+      if (response.ok) {
+        const userInfo = await response.json();
+        if (userInfo.authenticated && userInfo.email === 'dev@localhost') {
+          // We're in dev mode and already authenticated, just redirect
+          window.location.href = '/dashboard';
+          return;
+        }
+      }
+    } catch (error) {
+      // Continue with OAuth flow if dev check fails
+    }
+
+    // Production OAuth flow
     const current = window.location.pathname + window.location.search + window.location.hash;
     const rdTarget = (location.pathname === '/login') ? '/dashboard' : current;
     const rd = encodeURIComponent(rdTarget);

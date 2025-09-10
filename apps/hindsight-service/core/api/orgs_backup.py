@@ -73,62 +73,29 @@ def list_organizations(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    """List organizations where the user has membership (for organization switcher)."""
     user, current_user = user_context
-    # Always return only orgs where the user has membership, even for superadmins
-    # This endpoint is used for the organization switcher dropdown
-    raw_ids = [m.get("organization_id") for m in current_user.get("memberships", [])]
-    org_ids = []
-    for rid in raw_ids:
-        if not rid:
-            continue
-        if isinstance(rid, uuid.UUID):
-            org_ids.append(rid)
-        else:
-            try:
-                org_ids.append(uuid.UUID(rid))
-            except ValueError:
-                pass
-    
-    if not org_ids:
-        orgs = []
+    # Return orgs where the user has membership; superadmin can see all
+    if current_user.get("is_superadmin"):
+        orgs = db.query(models.Organization).all()
     else:
-        orgs = db.query(models.Organization).filter(models.Organization.id.in_(org_ids)).all()
-
+        raw_ids = [m.get("organization_id") for m in current_user.get("memberships", [])]
+        org_ids = []
+        for rid in raw_ids:
+            if not rid:
+                continue
+            if isinstance(rid, uuid.UUID):
+                org_ids.append(rid)
+            else:
+                try:
+                    org_ids.append(uuid.UUID(str(rid)))
+                except Exception:
+                    pass
+        if not org_ids:
+            orgs = []
+        else:
+            orgs = db.query(models.Organization).filter(models.Organization.id.in_(org_ids)).all()
     return [
-        {
-            "id": str(o.id),
-            "name": o.name,
-            "slug": o.slug,
-            "is_active": o.is_active,
-        }
-        for o in orgs
-    ]
-
-
-@router.get("/admin")
-def list_organizations_admin(
-    db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
-):
-    """List all organizations for administration purposes (superadmin only)."""
-    user, current_user = user_context
-    
-    # Only superadmins can access this endpoint
-    if not current_user.get("is_superadmin"):
-        raise HTTPException(status_code=403, detail="Superadmin access required")
-    
-    # Return all organizations for management purposes
-    orgs = db.query(models.Organization).all()
-    
-    return [
-        {
-            "id": str(o.id),
-            "name": o.name,
-            "slug": o.slug,
-            "is_active": o.is_active,
-            "created_by": str(o.created_by) if o.created_by else None,
-        }
+        {"id": str(o.id), "name": o.name, "slug": o.slug, "is_active": o.is_active}
         for o in orgs
     ]
 
@@ -166,43 +133,31 @@ def update_organization(
 
     new_name = payload.get("name")
     new_slug = payload.get("slug")
-    new_active = payload.get("is_active")
-
-    old_data = {"name": org.name, "slug": org.slug, "is_active": org.is_active}
-    changed = False
-
-    if new_name and new_name != org.name:
-        # Check conflict
-        if db.query(models.Organization).filter(models.Organization.name == new_name, models.Organization.id != org_id).first():
+    if new_name:
+        exists = db.query(models.Organization).filter(models.Organization.name == new_name, models.Organization.id != org_id).first()
+        if exists:
             raise HTTPException(status_code=409, detail="Organization name already exists")
         org.name = new_name
-        changed = True
-
-    if new_slug is not None and new_slug != org.slug:
-        if new_slug and db.query(models.Organization).filter(models.Organization.slug == new_slug, models.Organization.id != org_id).first():
-            raise HTTPException(status_code=409, detail="Organization slug already exists")
+    if new_slug is not None:
+        if new_slug:
+            exists = db.query(models.Organization).filter(models.Organization.slug == new_slug, models.Organization.id != org_id).first()
+            if exists:
+                raise HTTPException(status_code=409, detail="Organization slug already exists")
         org.slug = new_slug
-        changed = True
+    db.commit()
+    db.refresh(org)
 
-    if new_active is not None and new_active != org.is_active:
-        org.is_active = bool(new_active)
-        changed = True
-
-    if changed:
-        db.commit()
-        db.refresh(org)
-
-        from core.audit import log, AuditAction, AuditStatus
-        log(
-            db,
-            action=AuditAction.ORGANIZATION_UPDATE,
-            status=AuditStatus.SUCCESS,
-            target_type="organization",
-            target_id=org.id,
-            actor_user_id=user.id,
-            organization_id=org.id,
-            metadata={"old_data": old_data, "new_data": {"name": org.name, "slug": org.slug, "is_active": org.is_active}},
-        )
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.ORGANIZATION_UPDATE,
+        status=AuditStatus.SUCCESS,
+        target_type="organization",
+        target_id=org.id,
+        actor_user_id=user.id,
+        organization_id=org.id,
+        metadata={"name": org.name, "slug": org.slug},
+    )
 
     return {"id": str(org.id), "name": org.name, "slug": org.slug, "is_active": org.is_active}
 
@@ -250,9 +205,12 @@ def delete_organization(
 def list_members(
     org_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
     if not can_manage_org(org_id, current_user) and not current_user.get("is_superadmin") and str(org_id) not in current_user.get("memberships_by_org", {}):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -280,9 +238,12 @@ def add_member(
     org_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -336,9 +297,12 @@ def update_member(
     member_user_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -379,9 +343,12 @@ def remove_member(
     org_id: uuid.UUID,
     member_user_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     deleted = db.query(models.OrganizationMembership).filter(
@@ -410,9 +377,12 @@ def create_invitation(
     org_id: uuid.UUID,
     invitation: schemas.OrganizationInvitationCreate,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -437,9 +407,12 @@ def create_invitation(
 def list_invitations(
     org_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -452,9 +425,12 @@ def resend_invitation(
     org_id: uuid.UUID,
     invitation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -486,9 +462,12 @@ def revoke_invitation(
     org_id: uuid.UUID,
     invitation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -519,9 +498,12 @@ def accept_invitation(
     org_id: uuid.UUID,
     invitation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
 
     from core.db import crud
     from datetime import datetime, timezone
@@ -572,3 +554,4 @@ def accept_invitation(
     )
 
     return db_member
+

@@ -1,6 +1,6 @@
 from typing import List, Optional
 import uuid, os, math
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -12,184 +12,15 @@ from core.search.search_service import SearchService
 
 router = APIRouter(tags=["memory-blocks"])  # Preserve existing paths
 
-@router.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks)
-def get_all_memory_blocks_endpoint(
-    agent_id: Optional[str] = None,
-    conversation_id: Optional[str] = None,
-    search_query: Optional[str] = None,
-    search_type: Optional[str] = "basic",
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    min_feedback_score: Optional[str] = None,
-    max_feedback_score: Optional[str] = None,
-    min_retrieval_count: Optional[str] = None,
-    max_retrieval_count: Optional[str] = None,
-    keywords: Optional[str] = None,
-    sort_by: Optional[str] = None,
-    sort_order: Optional[str] = "asc",
-    skip: int = 0,
-    limit: int = 50,
-    include_archived: Optional[bool] = False,
-    min_score: Optional[float] = None,
-    similarity_threshold: Optional[float] = None,
-    fulltext_weight: Optional[float] = None,
-    semantic_weight: Optional[float] = None,
-    min_combined_score: Optional[float] = None,
-    db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
-    scope: Optional[str] = None,
-    organization_id: Optional[str] = None,
-):
-    # (Condensed version of parsing and logic from main.py)
-    from datetime import datetime
-    processed_agent_id = None
-    if agent_id:
-        try:
-            processed_agent_id = uuid.UUID(agent_id)
-        except ValueError:
-            if agent_id != "":
-                raise HTTPException(status_code=422, detail="Invalid UUID format for agent_id.")
-    processed_conversation_id = None
-    if conversation_id:
-        try:
-            processed_conversation_id = uuid.UUID(conversation_id)
-        except ValueError:
-            if conversation_id != "":
-                raise HTTPException(status_code=422, detail="Invalid UUID format for conversation_id.")
-    def parse_dt(val):
-        if val and val != "":
-            try:
-                return datetime.fromisoformat(val)
-            except ValueError:
-                raise HTTPException(status_code=422, detail=f"Invalid datetime format for {val}.")
+def parse_optional_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
+    """Convert empty strings to None, otherwise parse as UUID"""
+    if not value or value.strip() == "":
         return None
-    processed_start_date = parse_dt(start_date)
-    processed_end_date = parse_dt(end_date)
-    def parse_int(val, field):
-        if val:
-            try:
-                return int(val)
-            except ValueError:
-                if val != "":
-                    raise HTTPException(status_code=422, detail=f"Invalid integer format for {field}.")
-        return None
-    processed_min_feedback_score = parse_int(min_feedback_score, 'min_feedback_score')
-    processed_max_feedback_score = parse_int(max_feedback_score, 'max_feedback_score')
-    processed_min_retrieval_count = parse_int(min_retrieval_count, 'min_retrieval_count')
-    processed_max_retrieval_count = parse_int(max_retrieval_count, 'max_retrieval_count')
-    processed_keyword_ids = None
-    if keywords and keywords != "":
-        import uuid as _uuid
-        try:
-            processed_keyword_ids = [_uuid.UUID(kw.strip()) for kw in keywords.split(',') if kw.strip()]
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid UUID format in keywords parameter.")
-    search_query = search_query or None
-    sort_by = sort_by or None
-    sort_order = sort_order or "asc"
-    current_user = None
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "email": u.email,
-            "display_name": u.display_name,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
-    if search_query and search_type in ["fulltext", "semantic", "hybrid"]:
-        search_service = SearchService()
-        try:
-            if search_type == "fulltext":
-                min_score_val = min_score if min_score is not None else 0.1
-                results, metadata = search_service.search_memory_blocks_fulltext(
-                    db=db,
-                    query=search_query,
-                    agent_id=processed_agent_id,
-                    conversation_id=processed_conversation_id,
-                    limit=skip + limit,
-                    min_score=min_score_val,
-                    include_archived=include_archived or False,
-                    current_user=current_user,
-                )
-            elif search_type == "semantic":
-                similarity_threshold_val = similarity_threshold if similarity_threshold is not None else 0.7
-                results, metadata = search_service.search_memory_blocks_semantic(
-                    db=db,
-                    query=search_query,
-                    agent_id=processed_agent_id,
-                    conversation_id=processed_conversation_id,
-                    limit=skip + limit,
-                    similarity_threshold=similarity_threshold_val,
-                    include_archived=include_archived or False,
-                    current_user=current_user,
-                )
-            else:  # hybrid
-                fulltext_weight_val = fulltext_weight if fulltext_weight is not None else 0.7
-                semantic_weight_val = semantic_weight if semantic_weight is not None else 0.3
-                min_combined_score_val = min_combined_score if min_combined_score is not None else 0.1
-                results, metadata = search_service.search_memory_blocks_hybrid(
-                    db=db,
-                    query=search_query,
-                    agent_id=processed_agent_id,
-                    conversation_id=processed_conversation_id,
-                    limit=skip + limit,
-                    fulltext_weight=fulltext_weight_val,
-                    semantic_weight=semantic_weight_val,
-                    min_combined_score=min_combined_score_val,
-                    include_archived=include_archived or False,
-                    current_user=current_user,
-                )
-            paginated_results = results[skip:skip + limit]
-            total_items = len(results)
-            memories = paginated_results
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
-    else:
-        filter_scope = None
-        filter_org_uuid = None
-        if scope in ("personal", "organization", "public"):
-            filter_scope = scope
-        if organization_id:
-            try:
-                filter_org_uuid = uuid.UUID(organization_id)
-            except Exception:
-                raise HTTPException(status_code=422, detail="Invalid organization_id")
-        memories, total_items = crud.get_all_memory_blocks(
-            db=db,
-            agent_id=processed_agent_id,
-            conversation_id=processed_conversation_id,
-            search_query=search_query,
-            start_date=processed_start_date,
-            end_date=processed_end_date,
-            min_feedback_score=processed_min_feedback_score,
-            max_feedback_score=processed_max_feedback_score,
-            min_retrieval_count=processed_min_retrieval_count,
-            max_retrieval_count=processed_max_retrieval_count,
-            keyword_ids=processed_keyword_ids,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            skip=skip,
-            limit=limit,
-            get_total=True,
-            include_archived=include_archived or False,
-            current_user=current_user,
-            filter_scope=filter_scope,
-            filter_organization_id=filter_org_uuid,
-        )
-    total_pages = math.ceil(total_items / limit) if limit > 0 else 0
-    return {"items": memories, "total_items": total_items, "total_pages": total_pages}
+    try:
+        return uuid.UUID(value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid UUID format: {value}")
+
 
 @router.post("/memory-blocks/", response_model=schemas.MemoryBlock, status_code=status.HTTP_201_CREATED)
 def create_memory_block_endpoint(
@@ -231,6 +62,193 @@ def create_memory_block_endpoint(
     })
     db_memory_block = crud.create_memory_block(db=db, memory_block=mb)
     return db_memory_block
+
+@router.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks)
+def get_all_memory_blocks_endpoint(
+    skip: int = 0,
+    limit: int = 100,
+    agent_id: Optional[str] = Query(default=None),
+    conversation_id: Optional[str] = Query(default=None),
+    search_query: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc",
+    include_archived: bool = False,
+    scope: Optional[str] = None,
+    organization_id: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    # Convert empty string parameters to None to handle frontend behavior
+    agent_uuid = parse_optional_uuid(agent_id)
+    conversation_uuid = parse_optional_uuid(conversation_id)
+    organization_uuid = parse_optional_uuid(organization_id)
+    
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+
+    # Get total count
+    _, total_items = crud.get_all_memory_blocks(
+        db,
+        agent_id=agent_uuid,
+        conversation_id=conversation_uuid,
+        search_query=search_query,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        skip=0,
+        limit=None,
+        get_total=True,
+        include_archived=include_archived,
+        current_user=current_user,
+        filter_scope=scope,
+        filter_organization_id=organization_uuid,
+    )
+
+    # Get paginated results
+    memory_blocks = crud.get_all_memory_blocks(
+        db,
+        agent_id=agent_uuid,
+        conversation_id=conversation_uuid,
+        search_query=search_query,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        skip=skip,
+        limit=limit,
+        get_total=False,
+        include_archived=include_archived,
+        current_user=current_user,
+        filter_scope=scope,
+        filter_organization_id=organization_uuid,
+    )
+
+    total_pages = math.ceil(total_items / limit) if limit and limit > 0 else 0
+
+    return {
+        "items": memory_blocks,
+        "total_items": total_items,
+        "total_pages": total_pages
+    }
+
+@router.get("/memory-blocks/archived/", response_model=schemas.PaginatedMemoryBlocks)
+def get_archived_memory_blocks_endpoint(
+    skip: int = 0,
+    limit: int = 100,
+    agent_id: Optional[str] = Query(default=None),
+    conversation_id: Optional[str] = Query(default=None),
+    search_query: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc",
+    scope: Optional[str] = None,
+    organization_id: Optional[str] = Query(default=None),
+    # Additional archived-specific parameters
+    feedback_score_range: Optional[str] = None,
+    retrieval_count_range: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    keywords: Optional[str] = None,
+    search_type: Optional[str] = None,
+    min_score: Optional[str] = None,
+    similarity_threshold: Optional[str] = None,
+    fulltext_weight: Optional[str] = None,
+    semantic_weight: Optional[str] = None,
+    min_combined_score: Optional[str] = None,
+    min_feedback_score: Optional[str] = None,
+    max_feedback_score: Optional[str] = None,
+    min_retrieval_count: Optional[str] = None,
+    max_retrieval_count: Optional[str] = None,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    """
+    Get archived memory blocks with all the parameters the frontend sends.
+    This endpoint specifically filters for archived=true memory blocks.
+    """
+    # Convert empty string parameters to None to handle frontend behavior
+    agent_uuid = parse_optional_uuid(agent_id)
+    conversation_uuid = parse_optional_uuid(conversation_id)
+    organization_uuid = parse_optional_uuid(organization_id)
+    
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    current_user = None
+    if email:
+        u = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, u.id)
+        current_user = {
+            "id": u.id,
+            "is_superadmin": bool(u.is_superadmin),
+            "memberships": memberships,
+            "memberships_by_org": {m["organization_id"]: m for m in memberships},
+        }
+
+    # For archived endpoint, we want to show archived blocks more liberally
+    # If no specific scope is requested, default to public archived blocks
+    effective_scope = scope or 'public'
+    
+    # Get total count of archived items
+    _, total_items = crud.get_all_memory_blocks(
+        db,
+        agent_id=agent_uuid,
+        conversation_id=conversation_uuid,
+        search_query=search_query,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        skip=0,
+        limit=None,
+        get_total=True,
+        is_archived=True,  # Explicitly filter for archived=True only
+        current_user=current_user,
+        filter_scope=effective_scope,
+        filter_organization_id=organization_uuid,
+    )
+
+    # Get paginated archived results
+    memory_blocks = crud.get_all_memory_blocks(
+        db,
+        agent_id=agent_uuid,
+        conversation_id=conversation_uuid,
+        search_query=search_query,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        skip=skip,
+        limit=limit,
+        get_total=False,
+        is_archived=True,  # Explicitly filter for archived=True only
+        current_user=current_user,
+        filter_scope=effective_scope,
+        filter_organization_id=organization_uuid,
+    )
+
+    total_pages = math.ceil(total_items / limit) if limit and limit > 0 else 0
+
+    return {
+        "items": memory_blocks,
+        "total_items": total_items,
+        "total_pages": total_pages
+    }
 
 @router.get("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
 def get_memory_block_endpoint(
@@ -442,5 +460,29 @@ def report_memory_feedback_endpoint(
         feedback_details=feedback.feedback_details
     )
     return updated_memory
+
+@router.get("/memory-blocks/search/", response_model=List[schemas.MemoryBlock])
+def search_memory_blocks_endpoint(
+    keywords: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    # This endpoint is for agent-facing semantic search, not for the dashboard's simple search.
+    # It will remain as a keyword-based search for now as per the plan,
+    # with a note that complex logic will be implemented later.
+    keyword_list = [kw.strip() for kw in keywords.split(',') if kw.strip()]
+    if not keyword_list:
+        raise HTTPException(status_code=400, detail="At least one keyword is required for search.")
+    
+    memories = crud.retrieve_relevant_memories(
+        db=db,
+        keywords=keyword_list,
+        agent_id=agent_id,
+        conversation_id=conversation_id,
+        limit=limit
+    )
+    return memories
 
 # Slimmed scope change endpoint omitted for now (kept in main for backwards compat)
