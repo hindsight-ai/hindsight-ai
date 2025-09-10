@@ -1,3 +1,12 @@
+"""
+LEGACY: Old threaded bulk operations worker.
+
+This module is deprecated and has been replaced by core.async_bulk_operations.
+It remains for backward compatibility with existing tests but should be 
+removed once all tests are updated to use the new async system.
+
+Use core.async_bulk_operations instead for new implementations.
+"""
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -6,6 +15,7 @@ from sqlalchemy.orm.exc import StaleDataError, ObjectDeletedError
 from sqlalchemy import create_engine  # (legacy import; retained if future dynamic engines needed)
 
 from core.db import models, schemas, crud
+from core.audit import log_bulk_operation, AuditAction, AuditStatus
 from core.db.database import get_db_session_local
 
 logger = logging.getLogger(__name__)
@@ -88,6 +98,18 @@ def perform_bulk_move(operation_id: uuid.UUID, actor_user_id: uuid.UUID, organiz
         if errors:
             operation.error_log = {"errors": errors}
         db.commit()
+        try:
+            log_bulk_operation(
+                db,
+                actor_user_id=actor_user_id,
+                organization_id=organization_id,
+                bulk_operation_id=operation_id,
+                action=AuditAction.BULK_OPERATION_COMPLETE,
+                status=AuditStatus.SUCCESS if not errors else AuditStatus.FAILURE,
+                metadata={"total_moved": total_moved, "errors_count": len(errors)},
+            )
+        except Exception:
+            pass
     except Exception as e:  # Final safeguard
         try:
             db.rollback()
@@ -102,6 +124,18 @@ def perform_bulk_move(operation_id: uuid.UUID, actor_user_id: uuid.UUID, organiz
             except Exception:
                 pass
         logger.error(f"Error during bulk move operation {operation_id}: {e}")
+        try:
+            log_bulk_operation(
+                db,
+                actor_user_id=actor_user_id,
+                organization_id=organization_id,
+                bulk_operation_id=operation_id,
+                action=AuditAction.BULK_OPERATION_COMPLETE,
+                status=AuditStatus.FAILURE,
+                metadata={"error": str(e)},
+            )
+        except Exception:
+            pass
 
 def perform_bulk_delete(operation_id: uuid.UUID, actor_user_id: uuid.UUID, organization_id: uuid.UUID, payload: dict):
     db = next(_get_db())
@@ -155,6 +189,18 @@ def perform_bulk_delete(operation_id: uuid.UUID, actor_user_id: uuid.UUID, organ
         if errors:
             operation.error_log = {"errors": errors}
         db.commit()
+        try:
+            log_bulk_operation(
+                db,
+                actor_user_id=actor_user_id,
+                organization_id=organization_id,
+                bulk_operation_id=operation_id,
+                action=AuditAction.BULK_OPERATION_COMPLETE,
+                status=AuditStatus.SUCCESS if not errors else AuditStatus.FAILURE,
+                metadata={"total_deleted": total_deleted, "errors_count": len(errors)},
+            )
+        except Exception:
+            pass
     except Exception as e:
         try:
             db.rollback()
@@ -169,3 +215,15 @@ def perform_bulk_delete(operation_id: uuid.UUID, actor_user_id: uuid.UUID, organ
             except Exception:
                 pass
         logger.error(f"Error during bulk delete operation {operation_id}: {e}")
+        try:
+            log_bulk_operation(
+                db,
+                actor_user_id=actor_user_id,
+                organization_id=organization_id,
+                bulk_operation_id=operation_id,
+                action=AuditAction.BULK_OPERATION_COMPLETE,
+                status=AuditStatus.FAILURE,
+                metadata={"error": str(e)},
+            )
+        except Exception:
+            pass

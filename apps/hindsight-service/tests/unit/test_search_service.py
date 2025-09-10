@@ -210,5 +210,26 @@ class TestSearchService:
             mock_basic.assert_called_once()
             assert metadata["test"] == "metadata"
 
+    def test_combine_and_rerank(self):
+        service = SearchService()
+        # Mock memory blocks
+        mock_mb1 = Mock()
+        mock_mb1.id = uuid.uuid4()
+        mock_mb2 = Mock()
+        mock_mb2.id = uuid.uuid4()
+        
+        result = service._combine_and_rerank(
+            [mock_mb1], [mock_mb2], [0.8], [0.6], 0.7, 0.3, 0.1
+        )
+        assert len(result) == 2
+
+    def test_get_search_service(self):
+        from core.search.search_service import get_search_service
+        service = get_search_service()
+        assert isinstance(service, SearchService)
+        # Test singleton
+        service2 = get_search_service()
+        assert service is service2
+
     # Note: Direct unit tests of _basic_search_fallback removed; behavior covered indirectly
     # via enhanced_search_memory_blocks_unknown_type which routes through fallback.

@@ -1,6 +1,6 @@
 Title: Hindsight-AI Data Governance Implementation — Progress, Context, and Next Steps
 Status: In progress
-Last updated: 2025-09-08
+Last updated: 2025-09-09 (synced with roadmap.md)
 
 Purpose
 - This document lets you (or a future maintainer) resume work without prior context. It explains what was done, where, why, and what to do next. It points to the exact files to open and what to verify.
@@ -96,6 +96,7 @@ Known issues (and current stance)
   - Files to inspect while working on this: apps/hindsight-service/migrations/env.py, the individual migration files in apps/hindsight-service/migrations/versions/*, and the downgrade-chain test.
 
 Next steps (implementation plan)
+NOTE: Detailed phased roadmap lives in docs/roadmap.md (Phase 2 corresponds to the immediate backend governance completion tasks below). Keep both files synchronized when marking items done.
 Note: implement in small PRs with tests. Use docs/data-governance-orgs-users.md as the source of truth for behavior.
 
 1) Schema migrations (Alembic) — Completed
@@ -196,7 +197,7 @@ Sanity checklist to resume
 - Run all tests: cd apps/hindsight-service && uv run --with pytest pytest -q
 - Verify /user-info returns memberships and is_superadmin. If using headers, set x-auth-request-email and optionally ADMIN_EMAILS.
 
-Open items being tracked
+Open items being tracked (see also docs/roadmap.md Phases 2–10 for grouped planning)
 - Enable a robust downgrade-chain E2E (once the contextlib/psycopg2 issue is tamed) and wire it into CI.
 - Implement full governance features per the design doc (phases above).
 - Add CI job(s) to run the isolated E2E migration script on every PR.

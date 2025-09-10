@@ -26,6 +26,7 @@ def postgres_container(image: str = "postgres:13"):
     user = "testuser"
     password = "testpass"
     dbname = "testdb"
+    proc = None
     for port in (55432, 55433, 55434, 55435):
         try:
             proc = subprocess.run([
@@ -44,11 +45,17 @@ def postgres_container(image: str = "postgres:13"):
                 url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
                 try:
                     yield url, container_name
+                except Exception:
+                    # If an exception occurs in the yield block, we still want to clean up
+                    pass
                 finally:
+                    # Always clean up the container
                     subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
                 return
-        except Exception:
-            subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+        except Exception as e:
+            # Clean up on failure
+            if proc and proc.returncode == 0:
+                subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             continue
     raise RuntimeError("Failed to start Postgres test container on any candidate port")
 

@@ -2,6 +2,8 @@ Title: Hindsight AI data governance: users, organizations, and permissions
 Status: Draft for review
 Last updated: 2025-09-07
 
+Roadmap linkage: Implementation sequencing, phase definitions, and acceptance criteria are maintained in `docs/roadmap.md`. This design doc remains the authoritative model & policy reference; update both when behavior or ordering changes.
+
 Summary
 - Current system exposes all data to everyone who can reach the API. There is no user or organization concept in the database, and read endpoints do not filter by identity.
 - Backend already implements GET /user-info and the dashboard calls it to determine auth status; oauth2-proxy forwards auth headers to the backend via Nginx.

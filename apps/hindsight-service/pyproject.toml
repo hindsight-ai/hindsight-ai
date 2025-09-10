@@ -24,18 +24,54 @@ include = ["core"]
 [project.optional-dependencies]
 test = [
     "pytest>=8.3.2",
+    "testcontainers[postgres]>=4.13.0",
+    "alembic>=1.13.1",
 ]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+# Enable quiet test output plus coverage (branch) with HTML & XML reports.
+addopts = "-q --cov=core --cov-branch --cov-report=term-missing:skip-covered --cov-report=xml:coverage.xml --cov-report=html:coverage_html"
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
-    "e2e: end-to-end tests requiring external services",
-    "unit: fast unit tests for isolated components",
+        "unit: fast unit tests with mocks, no database",
+        "integration: tests with database interactions",
+        "e2e: end-to-end tests requiring external services",
+        "slow: tests that take longer than 1 second"
 ]
+
+[tool.coverage.run]
+source = ["core"]
+branch = true
+omit = [
+    "core/db/migrations/*",
+    "core/**/__init__.py",
+    # Exclude background/long-running worker & external service integration modules from unit test coverage
+    # These require threads, external models, or heavy I/O not suitable for deterministic unit test runs.
+    "core/bulk_operations_worker.py",
+    "core/core/consolidation_worker.py",
+    "core/core/keyword_extraction.py",
+    "core/pruning/*",
+    "core/search/search_service.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == '__main__':",
+    "pragma: no cover",
+]
+skip_covered = true
+show_missing = true
+fail_under = 80
+
+[tool.coverage.html]
+directory = "coverage_html"
+
+[tool.coverage.xml]
+output = "coverage.xml"
 
 [dependency-groups]
 dev = [
+    "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.3.0",
 ]

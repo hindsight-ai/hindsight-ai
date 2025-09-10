@@ -6,56 +6,26 @@ from sqlalchemy.orm import Session
 
 from core.db.database import get_db
 from core.db import models, schemas
-from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
+from core.api.deps import get_current_user_context
+from core.api.auth import get_or_create_user
 from core.api.permissions import can_manage_org
 
 
 router = APIRouter(tags=["organizations"])
 
 
-def _require_current_user(db: Session,
-                          x_auth_request_user: Optional[str],
-                          x_auth_request_email: Optional[str],
-                          x_forwarded_user: Optional[str],
-                          x_forwarded_email: Optional[str]):
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    if not email:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    user = get_or_create_user(db, email=email, display_name=name)
-    # Build a compact context with memberships_by_org
-    memberships = get_user_memberships(db, user.id)
-    memberships_by_org = {m["organization_id"]: m for m in memberships}
-    current_user = {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "is_superadmin": bool(user.is_superadmin),
-        "memberships": memberships,
-        "memberships_by_org": memberships_by_org,
-    }
-    return user, current_user
-
-
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_organization(
     payload: dict,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     name = (payload.get("name") or "").strip()
     slug = (payload.get("slug") or None)
     if not name:
         raise HTTPException(status_code=422, detail="Organization name is required")
 
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
 
     # Unique checks
     if db.query(models.Organization).filter(models.Organization.name == name).first():
@@ -79,14 +49,16 @@ def create_organization(
     db.commit()
     db.refresh(org)
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="organization_create",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.ORGANIZATION_CREATE,
+        status=AuditStatus.SUCCESS,
         target_type="organization",
         target_id=org.id,
+        actor_user_id=user.id,
+        organization_id=org.id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org.id)
 
     return {
         "id": str(org.id),
@@ -99,34 +71,64 @@ def create_organization(
 @router.get("/")
 def list_organizations(
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
-    # Return orgs where the user has membership; superadmin can see all
-    if current_user.get("is_superadmin"):
-        orgs = db.query(models.Organization).all()
-    else:
-        raw_ids = [m.get("organization_id") for m in current_user.get("memberships", [])]
-        org_ids = []
-        for rid in raw_ids:
-            if not rid:
-                continue
-            if isinstance(rid, uuid.UUID):
-                org_ids.append(rid)
-            else:
-                try:
-                    org_ids.append(uuid.UUID(str(rid)))
-                except Exception:
-                    pass
-        if not org_ids:
-            orgs = []
+    """List organizations where the user has membership (for organization switcher)."""
+    user, current_user = user_context
+    # Always return only orgs where the user has membership, even for superadmins
+    # This endpoint is used for the organization switcher dropdown
+    raw_ids = [m.get("organization_id") for m in current_user.get("memberships", [])]
+    org_ids = []
+    for rid in raw_ids:
+        if not rid:
+            continue
+        if isinstance(rid, uuid.UUID):
+            org_ids.append(rid)
         else:
-            orgs = db.query(models.Organization).filter(models.Organization.id.in_(org_ids)).all()
+            try:
+                org_ids.append(uuid.UUID(rid))
+            except ValueError:
+                pass
+    
+    if not org_ids:
+        orgs = []
+    else:
+        orgs = db.query(models.Organization).filter(models.Organization.id.in_(org_ids)).all()
+
     return [
-        {"id": str(o.id), "name": o.name, "slug": o.slug, "is_active": o.is_active}
+        {
+            "id": str(o.id),
+            "name": o.name,
+            "slug": o.slug,
+            "is_active": o.is_active,
+        }
+        for o in orgs
+    ]
+
+
+@router.get("/admin")
+def list_organizations_admin(
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context),
+):
+    """List all organizations for administration purposes (superadmin only)."""
+    user, current_user = user_context
+    
+    # Only superadmins can access this endpoint
+    if not current_user.get("is_superadmin"):
+        raise HTTPException(status_code=403, detail="Superadmin access required")
+    
+    # Return all organizations for management purposes
+    orgs = db.query(models.Organization).all()
+    
+    return [
+        {
+            "id": str(o.id),
+            "name": o.name,
+            "slug": o.slug,
+            "is_active": o.is_active,
+            "created_by": str(o.created_by) if o.created_by else None,
+        }
         for o in orgs
     ]
 
@@ -135,12 +137,9 @@ def list_organizations(
 def get_organization(
     org_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -156,12 +155,9 @@ def update_organization(
     org_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -170,29 +166,43 @@ def update_organization(
 
     new_name = payload.get("name")
     new_slug = payload.get("slug")
-    if new_name:
-        exists = db.query(models.Organization).filter(models.Organization.name == new_name, models.Organization.id != org_id).first()
-        if exists:
+    new_active = payload.get("is_active")
+
+    old_data = {"name": org.name, "slug": org.slug, "is_active": org.is_active}
+    changed = False
+
+    if new_name and new_name != org.name:
+        # Check conflict
+        if db.query(models.Organization).filter(models.Organization.name == new_name, models.Organization.id != org_id).first():
             raise HTTPException(status_code=409, detail="Organization name already exists")
         org.name = new_name
-    if new_slug is not None:
-        if new_slug:
-            exists = db.query(models.Organization).filter(models.Organization.slug == new_slug, models.Organization.id != org_id).first()
-            if exists:
-                raise HTTPException(status_code=409, detail="Organization slug already exists")
-        org.slug = new_slug
-    db.commit()
-    db.refresh(org)
+        changed = True
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="organization_update",
-        status="success",
-        target_type="organization",
-        target_id=org.id,
-        metadata={"name": org.name, "slug": org.slug}
-    )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org.id)
+    if new_slug is not None and new_slug != org.slug:
+        if new_slug and db.query(models.Organization).filter(models.Organization.slug == new_slug, models.Organization.id != org_id).first():
+            raise HTTPException(status_code=409, detail="Organization slug already exists")
+        org.slug = new_slug
+        changed = True
+
+    if new_active is not None and new_active != org.is_active:
+        org.is_active = bool(new_active)
+        changed = True
+
+    if changed:
+        db.commit()
+        db.refresh(org)
+
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.ORGANIZATION_UPDATE,
+            status=AuditStatus.SUCCESS,
+            target_type="organization",
+            target_id=org.id,
+            actor_user_id=user.id,
+            organization_id=org.id,
+            metadata={"old_data": old_data, "new_data": {"name": org.name, "slug": org.slug, "is_active": org.is_active}},
+        )
 
     return {"id": str(org.id), "name": org.name, "slug": org.slug, "is_active": org.is_active}
 
@@ -201,12 +211,9 @@ def update_organization(
 def delete_organization(
     org_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -225,14 +232,16 @@ def delete_organization(
     db.delete(org)
     db.commit()
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="organization_delete",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.ORGANIZATION_DELETE,
+        status=AuditStatus.SUCCESS,
         target_type="organization",
         target_id=org_id,
+        actor_user_id=user.id,
+        organization_id=org_id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return {"status": "deleted"}
 
@@ -241,12 +250,9 @@ def delete_organization(
 def list_members(
     org_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org(org_id, current_user) and not current_user.get("is_superadmin") and str(org_id) not in current_user.get("memberships_by_org", {}):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -274,12 +280,9 @@ def add_member(
     org_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -312,15 +315,17 @@ def add_member(
     db.add(m)
     db.commit()
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="member_add",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.MEMBER_ADD,
+        status=AuditStatus.SUCCESS,
         target_type="user",
         target_id=member_user.id,
-        metadata={"role": role}
+        actor_user_id=user.id,
+        organization_id=org_id,
+        metadata={"role": role},
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return {"status": "added"}
 
@@ -331,12 +336,9 @@ def update_member(
     member_user_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -357,15 +359,17 @@ def update_member(
     db.commit()
 
     if old_role != m.role:
-        from core.db import crud, schemas
-        audit_log = schemas.AuditLogCreate(
-            action_type="member_role_change",
-            status="success",
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.MEMBER_ROLE_CHANGE,
+            status=AuditStatus.SUCCESS,
             target_type="user",
             target_id=member_user_id,
-            metadata={"old_role": old_role, "new_role": m.role}
+            actor_user_id=user.id,
+            organization_id=org_id,
+            metadata={"old_role": old_role, "new_role": m.role},
         )
-        crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return {"status": "updated"}
 
@@ -375,12 +379,9 @@ def remove_member(
     org_id: uuid.UUID,
     member_user_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     deleted = db.query(models.OrganizationMembership).filter(
@@ -391,14 +392,16 @@ def remove_member(
         raise HTTPException(status_code=404, detail="Membership not found")
     db.commit()
 
-    from core.db import crud, schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="member_remove",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.MEMBER_REMOVE,
+        status=AuditStatus.SUCCESS,
         target_type="user",
         target_id=member_user_id,
+        actor_user_id=user.id,
+        organization_id=org_id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return {"status": "removed"}
 
@@ -407,27 +410,26 @@ def create_invitation(
     org_id: uuid.UUID,
     invitation: schemas.OrganizationInvitationCreate,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     from core.db import crud
     db_invitation = crud.create_organization_invitation(db, organization_id=org_id, invitation=invitation, invited_by_user_id=user.id)
 
-    from core.db import schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="invitation_create",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.INVITATION_CREATE,
+        status=AuditStatus.SUCCESS,
         target_type="invitation",
         target_id=db_invitation.id,
-        metadata={"email": invitation.email, "role": invitation.role}
+        actor_user_id=user.id,
+        organization_id=org_id,
+        metadata={"email": invitation.email, "role": invitation.role},
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return db_invitation
 
@@ -435,12 +437,9 @@ def create_invitation(
 def list_invitations(
     org_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -453,12 +452,9 @@ def resend_invitation(
     org_id: uuid.UUID,
     invitation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -472,6 +468,17 @@ def resend_invitation(
     db_invitation.expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     db.commit()
     db.refresh(db_invitation)
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.INVITATION_RESEND,
+        status=AuditStatus.SUCCESS,
+        target_type="invitation",
+        target_id=db_invitation.id,
+        actor_user_id=user.id,
+        organization_id=org_id,
+        metadata={"new_expires_at": db_invitation.expires_at.isoformat() if db_invitation.expires_at else None},
+    )
     return db_invitation
 
 @router.delete("/{org_id}/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -479,12 +486,9 @@ def revoke_invitation(
     org_id: uuid.UUID,
     invitation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -499,27 +503,25 @@ def revoke_invitation(
     db_invitation.revoked_at = datetime.now(timezone.utc)
     db.commit()
 
-    from core.db import schemas
-    # Single audit log (previously duplicated)
-    audit_log = schemas.AuditLogCreate(
-        action_type="invitation_revoke",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.INVITATION_REVOKE,
+        status=AuditStatus.SUCCESS,
         target_type="invitation",
         target_id=invitation_id,
+        actor_user_id=user.id,
+        organization_id=org_id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
 @router.post("/{org_id}/invitations/{invitation_id}/accept", response_model=schemas.OrganizationMember)
 def accept_invitation(
     org_id: uuid.UUID,
     invitation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
 
     from core.db import crud
     from datetime import datetime, timezone
@@ -558,14 +560,15 @@ def accept_invitation(
     db_invitation.accepted_at = now_utc
     db.commit()
 
-    from core.db import schemas
-    audit_log = schemas.AuditLogCreate(
-        action_type="invitation_accept",
-        status="success",
+    from core.audit import log, AuditAction, AuditStatus
+    log(
+        db,
+        action=AuditAction.INVITATION_ACCEPT,
+        status=AuditStatus.SUCCESS,
         target_type="invitation",
         target_id=invitation_id,
+        actor_user_id=user.id,
+        organization_id=org_id,
     )
-    crud.create_audit_log(db, audit_log=audit_log, actor_user_id=user.id, organization_id=org_id)
 
     return db_member
-
