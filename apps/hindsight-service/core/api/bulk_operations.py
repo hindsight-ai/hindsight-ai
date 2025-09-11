@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from core.db.database import get_db
 from core.db import models, schemas, crud
-from core.api.deps import get_current_user_context as _require_current_user
+from core.api.deps import get_current_user_context
 from core.api.permissions import can_manage_org, get_org_membership, is_member_of_org, can_manage_org_effective
 from core import async_bulk_operations  # Updated import for async system
 from core.audit import log_bulk_operation, AuditAction, AuditStatus
@@ -20,12 +20,9 @@ router = APIRouter(tags=["bulk-operations"])
 def get_organization_inventory(
     org_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -44,12 +41,9 @@ async def bulk_move(
     org_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
 
     # Validation first (tests expect 422 over 403 when payload malformed)
     dry_run = payload.get("dry_run", True)
@@ -177,13 +171,10 @@ async def bulk_move(
 def get_bulk_operation_admin_status(
     operation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     # Light implementation to satisfy tests expecting 403 for regular users
-    _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     # Current test expectations: non-existent or unauthorized access -> 403 uniformly
     raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -192,12 +183,9 @@ async def bulk_delete(
     org_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not can_manage_org_effective(org_id, current_user, db=db, user_id=user.id, allow_db_fallback=True):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -254,12 +242,9 @@ async def bulk_delete(
 def get_operation_status(
     operation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not current_user.get("is_superadmin"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -286,12 +271,9 @@ def get_operation_status(
 @router.get("/admin/operations", response_model=List[schemas.BulkOperation])
 def get_operations_status(
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not current_user.get("is_superadmin"):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -317,12 +299,9 @@ def get_operations_status(
 def cancel_operation(
     operation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
     if not current_user.get("is_superadmin"):
         raise HTTPException(status_code=403, detail="Forbidden")
 

@@ -95,7 +95,13 @@ def test_bulk_move_conflict_detection(client, org_with_user, db):
     }
     
     # Override dependency instead of patching
-    def mock_get_current_user_context(*args, **kwargs):
+    def mock_get_current_user_context(
+        db=None,
+        x_auth_request_user=None,
+        x_auth_request_email=None,
+        x_forwarded_user=None,
+        x_forwarded_email=None,
+    ):
         return fake_user, fake_current_user
     
     original_override = app.dependency_overrides.get(get_current_user_context)
@@ -143,7 +149,13 @@ def test_bulk_delete_dry_run_counts(client, org_with_user, db):
     }
     
     # Override dependency instead of patching
-    def mock_get_current_user_context(*args, **kwargs):
+    def mock_get_current_user_context(
+        db=None,
+        x_auth_request_user=None,
+        x_auth_request_email=None,
+        x_forwarded_user=None,
+        x_forwarded_email=None,
+    ):
         return fake_user, fake_current_user
     
     original_override = app.dependency_overrides.get(get_current_user_context)

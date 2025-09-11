@@ -1,7 +1,8 @@
 import uuid
 from fastapi.testclient import TestClient
-from unittest.mock import patch, Mock
+from unittest.mock import Mock
 from core.api.main import app
+from core.api.deps import get_current_user_context
 from core.db import models, crud
 from tests.conftest import _current_session
 
@@ -26,13 +27,31 @@ def test_bulk_move_audit_start():
     # Trigger dry_run False move to start operation
     dest_owner = uuid.uuid4()
     payload = {"dry_run": False, "destination_owner_user_id": str(dest_owner), "resource_types": ["agents"]}
-    # Patch auth/permission to simplify: treat user as owner of org
-    with patch('core.api.bulk_operations._require_current_user') as mock_req:
-        fake_user = Mock(); fake_user.id = user_id
-        fake_user_context = {"id": user_id, "is_superadmin": True, "memberships_by_org": {str(org_id): {"role": "owner"}}}
-        mock_req.return_value = (fake_user, fake_user_context)
+    # Use dependency override to simplify: treat user as owner of org
+    fake_user = Mock(); fake_user.id = user_id
+    fake_user_context = {"id": user_id, "is_superadmin": True, "memberships_by_org": {str(org_id): {"role": "owner"}}}
+    
+    def mock_get_current_user_context(
+        db=None,
+        x_auth_request_user=None,
+        x_auth_request_email=None,
+        x_forwarded_user=None,
+        x_forwarded_email=None,
+    ):
+        return fake_user, fake_user_context
+    
+    original_override = app.dependency_overrides.get(get_current_user_context)
+    app.dependency_overrides[get_current_user_context] = mock_get_current_user_context
+    
+    try:
         r = client.post(f"/bulk-operations/organizations/{org_id}/bulk-move", json=payload, headers=auth())
-    assert r.status_code == 200, r.text
+        assert r.status_code == 200, r.text
+    finally:
+        # Clean up dependency override
+        if original_override is not None:
+            app.dependency_overrides[get_current_user_context] = original_override
+        else:
+            app.dependency_overrides.pop(get_current_user_context, None)
     op_id = r.json()["operation_id"]
     # Verify audit start log exists
     logs = crud.get_audit_logs(db, organization_id=org_id)
