@@ -2,11 +2,12 @@
 
 This document specifies the expected behavior, constraints, and operational requirements of the Hindsight AI application across environments (staging, product4) From any app page (e.g., `/memory-blocks`), top‑right "Sign In" goes directly to Google and returns to the same page authenticated.
 5) After successful OAuth, the same tab shows authenticated state without opening a new tab.
-6) **Organization Management**: Authenticated users can access organization management through the user account dropdown menu:
+6) **Organization Management**: Authenticated users can create and manage their own organizations through the user account dropdown menu:
    - **"Manage Organizations"** menu item opens a modal dialog with organization and member management
-   - **Create Organizations**: Users can create new organizations with name and optional slug
-   - **View Organizations**: Lists all organizations the user has access to (superadmin sees all)
-   - **Member Management**: For each organization, users can view, add, update, and remove members
+   - **Create Organizations**: Any authenticated user can create new organizations with name and optional slug, becoming the owner
+   - **Manage Own Organizations**: Users can manage organizations where they have owner or admin role (view, edit, member management)
+   - **Superadmin Global Access**: Superadmins can manage ALL organizations (including those they don't own) with visual safety indicators
+   - **Member Management**: For manageable organizations, users can view, add, update, and remove members
    - **Role Management**: Support for owner, admin, editor, viewer roles with appropriate permissions
    - **Self-Protection**: Users cannot remove themselves or change their own role
    - **Real-time Updates**: Changes are immediately reflected in the UI with success/error notifications

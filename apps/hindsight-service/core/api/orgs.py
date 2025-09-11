@@ -106,6 +106,38 @@ def list_organizations(
     ]
 
 
+@router.get("/manageable")
+def list_manageable_organizations(
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context),
+):
+    """List organizations that the user can manage (own/admin role) or all organizations for superadmins."""
+    user, current_user = user_context
+    
+    if current_user.get("is_superadmin"):
+        # Superadmins can manage all organizations
+        orgs = db.query(models.Organization).all()
+    else:
+        # Regular users can only manage organizations where they have owner or admin role
+        orgs = db.query(models.Organization).join(
+            models.OrganizationMembership,
+            models.Organization.id == models.OrganizationMembership.organization_id
+        ).filter(
+            models.OrganizationMembership.user_id == user.id,
+            models.OrganizationMembership.role.in_(['owner', 'admin'])
+        ).all()
+    
+    return [
+        {
+            "id": str(o.id),
+            "name": o.name,
+            "slug": o.slug,
+            "is_active": o.is_active,
+            "created_by": str(o.created_by) if o.created_by else None,
+        }
+        for o in orgs
+    ]
+
 @router.get("/admin")
 def list_organizations_admin(
     db: Session = Depends(get_db),

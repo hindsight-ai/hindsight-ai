@@ -81,13 +81,11 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
 
   const fetchOrganizations = async () => {
     try {
-      // Fetch both admin organizations and user memberships
+      // Fetch manageable organizations and user memberships
       const [orgs, userOrgs] = await Promise.all([
-        // Use admin endpoint for superadmins, regular endpoint for others
-        user?.is_superadmin 
-          ? organizationService.getOrganizationsAdmin()
-          : organizationService.getOrganizations(),
-        // Always fetch user's memberships for styling purposes
+        // Use manageable endpoint which handles both regular users and superadmins appropriately
+        organizationService.getManageableOrganizations(),
+        // Always fetch user's memberships for styling purposes (superadmin safety indicators)
         organizationService.getOrganizations()
       ]);
       

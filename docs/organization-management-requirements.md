@@ -7,19 +7,22 @@ This document defines the requirements for organization management functionality
 
 ### Regular User
 - **Organization Switcher**: Can only see and switch to organizations where they are members
-- **Organization Management**: No access to organization management panel
+- **Organization Creation**: Can create new organizations and automatically become owner
+- **Organization Management**: Can manage organizations where they have owner or admin role
 - **Data Access**: Only to organizations where they are members
 
 ### Superadmin
 - **Organization Switcher**: Can only see and switch to organizations where they are members (same as regular users)
-- **Organization Management**: Full administrative access with safety mechanisms
+- **Organization Management**: Full administrative access with safety mechanisms for ALL organizations
 - **Data Access**: Only to organizations where they are members (data privacy preserved)
 
 ## Organization Management Panel Access Control
 
 ### Access Requirements
-- **Who can access**: Only superadmins (`is_superadmin: true`)
-- **Access denied behavior**: Show clear message "You need superadmin privileges to access organization management"
+- **Who can access**: 
+  - Regular users: Can access to manage organizations where they have owner/admin role
+  - Superadmins: Can access to manage ALL organizations (`is_superadmin: true`)
+- **Access denied behavior**: Show clear message if user has no manageable organizations
 
 ### Organization Display Modes
 
@@ -70,8 +73,14 @@ This document defines the requirements for organization management functionality
 - **Access**: All authenticated users
 - **Behavior**: Same for regular users and superadmins
 
+#### `/organizations/manageable`
+- **Purpose**: Organization management (organizations user can manage)
+- **Returns**: Organizations where user has owner/admin role, or all organizations for superadmins
+- **Access**: All authenticated users
+- **Behavior**: Regular users see only their manageable orgs, superadmins see all
+
 #### `/organizations/admin`
-- **Purpose**: Organization management (all organizations)
+- **Purpose**: Legacy superadmin-only endpoint for all organizations
 - **Returns**: All organizations with `created_by` information
 - **Access**: Superadmins only (`is_superadmin: true`)
 - **Error**: 403 Forbidden for non-superadmins
@@ -121,14 +130,18 @@ const isUserMember = (orgId: string): boolean => {
 - [ ] Consistent behavior between regular users and superadmins
 
 ### AC2: Organization Management Access Control
-- [ ] Only superadmins can access organization management panel
-- [ ] Non-superadmins see clear "access denied" message
-- [ ] Superadmins can create, edit, delete organizations
+- [ ] Regular users can access organization management panel for organizations they own/admin
+- [ ] Regular users can create, edit, delete organizations where they have owner/admin role
+- [ ] Regular users can manage members of organizations they own/admin
+- [ ] Superadmins can access organization management panel for ALL organizations
+- [ ] Superadmins can create, edit, delete all organizations
 - [ ] Superadmins can manage members of all organizations
+- [ ] Users with no manageable organizations see appropriate message
 
-### AC3: Safe Default Behavior (Superadmin)
-- [ ] Organization management shows only member organizations by default
-- [ ] Clear visual indication of current view mode
+### AC3: Safe Default Behavior 
+- [ ] Regular users: Organization management shows only organizations they can manage (owner/admin role)
+- [ ] Superadmins: Organization management shows only member organizations by default
+- [ ] Clear visual indication of current view mode for superadmins
 - [ ] Familiar, uncluttered interface in default mode
 - [ ] Can perform all routine tasks without switching modes
 

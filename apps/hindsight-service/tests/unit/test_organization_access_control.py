@@ -288,3 +288,170 @@ class TestOrganizationAccessControl:
         # Should not be able to get members
         response = client.get(f"/organizations/{org_id}/members", headers=headers)
         assert response.status_code == 403
+
+    def test_list_manageable_organizations_regular_user_owner_admin_only(self, client: TestClient, db_session: Session):
+        """Test that /organizations/manageable returns only organizations where regular user has owner/admin role."""
+        # Set admin emails to allow some users to create orgs (but not our test user)
+        os.environ["ADMIN_EMAILS"] = "admin1@example.com,admin2@example.com"
+        
+        # Admin1 creates an organization and adds user1 as owner
+        create_response1 = client.post(
+            "/organizations/",
+            json={"name": "User1 Org"},
+            headers={
+                "x-auth-request-user": "admin1",
+                "x-auth-request-email": "admin1@example.com"
+            }
+        )
+        assert create_response1.status_code == 201
+        user1_org_id = create_response1.json()["id"]
+        
+        # Transfer ownership to user1
+        add_user1_response = client.post(
+            f"/organizations/{user1_org_id}/members",
+            json={"email": "user1@example.com", "role": "owner"},
+            headers={
+                "x-auth-request-user": "admin1",
+                "x-auth-request-email": "admin1@example.com"
+            }
+        )
+        assert add_user1_response.status_code == 201
+        
+        # Admin2 creates another organization
+        create_response2 = client.post(
+            "/organizations/",
+            json={"name": "User2 Org"},
+            headers={
+                "x-auth-request-user": "admin2",
+                "x-auth-request-email": "admin2@example.com"
+            }
+        )
+        assert create_response2.status_code == 201
+        user2_org_id = create_response2.json()["id"]        # Add user1 as admin to admin2's org
+        add_member_response = client.post(
+            f"/organizations/{user2_org_id}/members",
+            json={"email": "user1@example.com", "role": "admin"},
+            headers={
+                "x-auth-request-user": "admin2",
+                "x-auth-request-email": "admin2@example.com"
+            }
+        )
+        assert add_member_response.status_code == 201
+        
+        # Create a third org where user1 is only a viewer
+        create_response3 = client.post(
+            "/organizations/",
+            json={"name": "User3 Org"},
+            headers={
+                "x-auth-request-user": "admin1",
+                "x-auth-request-email": "admin1@example.com"
+            }
+        )
+        assert create_response3.status_code == 201
+        user3_org_id = create_response3.json()["id"]
+        
+        # Add user1 as viewer (not admin/owner) to user3's org - user1 should NOT be able to manage this
+        add_viewer_response = client.post(
+            f"/organizations/{user3_org_id}/members",
+            json={"email": "user1@example.com", "role": "viewer"},
+            headers={
+                "x-auth-request-user": "admin1",
+                "x-auth-request-email": "admin1@example.com"
+            }
+        )
+        assert add_viewer_response.status_code == 201
+        
+        # Test: user1 should see organizations where they have owner/admin role
+        response = client.get(
+            "/organizations/manageable",
+            headers={
+                "x-auth-request-user": "user1",
+                "x-auth-request-email": "user1@example.com"
+            }
+        )
+        
+        assert response.status_code == 200
+        organizations = response.json()
+        
+        # Should see 2 organizations: User1 Org (owner) and User2 Org (admin)
+        # The User3 Org should NOT be included since user1 is only a viewer there
+        assert len(organizations) == 2
+        org_names = [org["name"] for org in organizations]
+        assert "User1 Org" in org_names
+        assert "User2 Org" in org_names
+        
+        # Should include created_by field
+        for org in organizations:
+            assert "created_by" in org
+
+    def test_list_manageable_organizations_superadmin_sees_all(self, client: TestClient, db_session: Session):
+        """Test that /organizations/manageable returns all organizations for superadmins."""
+        # Set admin emails to make our test user a superadmin
+        os.environ["ADMIN_EMAILS"] = "admin@example.com"
+        
+        # Create organizations with different users (admin can create, others will be allowed for this test)
+        create_response1 = client.post(
+            "/organizations/", 
+            json={"name": "Admin Org"},
+            headers={
+                "x-auth-request-user": "admin",
+                "x-auth-request-email": "admin@example.com"
+            }
+        )
+        assert create_response1.status_code == 201
+        
+        # Temporarily allow other users to create orgs by adding them to admin emails
+        os.environ["ADMIN_EMAILS"] = "admin@example.com,other@example.com"
+        
+        create_response2 = client.post(
+            "/organizations/", 
+            json={"name": "Other Org"},
+            headers={
+                "x-auth-request-user": "other",
+                "x-auth-request-email": "other@example.com"
+            }
+        )
+        assert create_response2.status_code == 201
+        
+        # Reset admin emails to just admin
+        os.environ["ADMIN_EMAILS"] = "admin@example.com"
+        
+        # Test: superadmin should see ALL organizations via /manageable endpoint
+        response = client.get(
+            "/organizations/manageable",
+            headers={
+                "x-auth-request-user": "admin",
+                "x-auth-request-email": "admin@example.com"
+            }
+        )
+            
+        assert response.status_code == 200
+        organizations = response.json()
+        
+        # Should return all organizations (both Admin Org and Other Org)
+        assert len(organizations) == 2
+        org_names = [org["name"] for org in organizations]
+        assert "Admin Org" in org_names
+        assert "Other Org" in org_names
+        
+        # Should include created_by field
+        for org in organizations:
+            assert "created_by" in org
+
+    def test_list_manageable_organizations_empty_for_user_with_no_manageable_orgs(self, client: TestClient, db_session: Session):
+        """Test that /organizations/manageable returns empty list for users with no manageable organizations."""
+        # Don't set user as admin, so they can't create orgs
+        os.environ["ADMIN_EMAILS"] = "admin@example.com"  # Different user
+        
+        # Test: regular user with no manageable organizations should get empty list
+        response = client.get(
+            "/organizations/manageable",
+            headers={
+                "x-auth-request-user": "user",
+                "x-auth-request-email": "user@example.com"
+            }
+        )
+        
+        assert response.status_code == 200
+        organizations = response.json()
+        assert len(organizations) == 0

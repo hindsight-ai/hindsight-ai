@@ -92,6 +92,25 @@ const organizationService = {
     }
   },
 
+  // Get organizations that the user can manage (own/admin role for regular users, all for superadmins)
+  getManageableOrganizations: async (): Promise<Organization[]> => {
+    try {
+      const response = await fetch(`${base()}/organizations/manageable`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching manageable organizations:', error);
+      throw error;
+    }
+  },
+
   // Get all organizations for administration (superadmin only)
   getOrganizationsAdmin: async (): Promise<Organization[]> => {
     try {
