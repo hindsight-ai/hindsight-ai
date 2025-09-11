@@ -98,7 +98,7 @@ describe('OrganizationManagement', () => {
         loading: false,
       } as any);
 
-      mockOrganizationService.getOrganizationsAdmin.mockResolvedValue(mockOrganizations);
+      mockOrganizationService.getManageableOrganizations.mockResolvedValue(mockOrganizations);
       mockOrganizationService.getOrganizations.mockResolvedValue(mockUserMemberOrgs);
 
       render(<OrganizationManagement onClose={mockOnClose} />);
@@ -120,7 +120,7 @@ describe('OrganizationManagement', () => {
         loading: false,
       } as any);
 
-      mockOrganizationService.getOrganizationsAdmin.mockResolvedValue(mockOrganizations);
+      mockOrganizationService.getManageableOrganizations.mockResolvedValue(mockOrganizations);
       mockOrganizationService.getOrganizations.mockResolvedValue(mockUserMemberOrgs);
       mockOrganizationService.getMembers.mockResolvedValue(mockMembers);
     });
@@ -233,7 +233,7 @@ describe('OrganizationManagement', () => {
         loading: false,
       } as any);
 
-      mockOrganizationService.getOrganizationsAdmin.mockResolvedValue(mockOrganizations);
+      mockOrganizationService.getManageableOrganizations.mockResolvedValue(mockOrganizations);
       mockOrganizationService.getOrganizations.mockResolvedValue(mockUserMemberOrgs);
       mockOrganizationService.getMembers.mockResolvedValue(mockMembers);
     });
@@ -296,13 +296,13 @@ describe('OrganizationManagement', () => {
     });
 
     it('fetches admin organizations and user memberships for superadmin', async () => {
-      mockOrganizationService.getOrganizationsAdmin.mockResolvedValue(mockOrganizations);
+      mockOrganizationService.getManageableOrganizations.mockResolvedValue(mockOrganizations);
       mockOrganizationService.getOrganizations.mockResolvedValue(mockUserMemberOrgs);
 
       render(<OrganizationManagement onClose={mockOnClose} />);
 
       await waitFor(() => {
-        expect(mockOrganizationService.getOrganizationsAdmin).toHaveBeenCalledTimes(1);
+        expect(mockOrganizationService.getManageableOrganizations).toHaveBeenCalledTimes(1);
         expect(mockOrganizationService.getOrganizations).toHaveBeenCalledTimes(1);
       });
     });
@@ -322,11 +322,11 @@ describe('OrganizationManagement', () => {
       render(<OrganizationManagement onClose={mockOnClose} />);
 
       // Should show access denied, but still test the fetching logic path
-      expect(mockOrganizationService.getOrganizationsAdmin).not.toHaveBeenCalled();
+      expect(mockOrganizationService.getManageableOrganizations).not.toHaveBeenCalled();
     });
 
     it('handles fetch errors gracefully', async () => {
-      mockOrganizationService.getOrganizationsAdmin.mockRejectedValue(new Error('Fetch failed'));
+      mockOrganizationService.getManageableOrganizations.mockRejectedValue(new Error('Fetch failed'));
       mockOrganizationService.getOrganizations.mockRejectedValue(new Error('Fetch failed'));
 
       render(<OrganizationManagement onClose={mockOnClose} />);
@@ -348,7 +348,7 @@ describe('OrganizationManagement', () => {
         loading: false,
       } as any);
 
-      mockOrganizationService.getOrganizationsAdmin.mockResolvedValue(mockOrganizations);
+      mockOrganizationService.getManageableOrganizations.mockResolvedValue(mockOrganizations);
       mockOrganizationService.getOrganizations.mockResolvedValue(mockUserMemberOrgs);
       mockOrganizationService.getMembers.mockResolvedValue(mockMembers);
 

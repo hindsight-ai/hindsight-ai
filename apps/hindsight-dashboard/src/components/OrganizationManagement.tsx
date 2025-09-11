@@ -45,8 +45,8 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
 
   // Get organizations to display based on current view mode
   const displayedOrganizations = viewMode === 'member' 
-    ? allOrganizations.filter(org => isUserMember(org.id))
-    : allOrganizations;
+    ? (allOrganizations || []).filter(org => isUserMember(org.id))
+    : (allOrganizations || []);
 
   // Handle mode switching with confirmation
   const handleModeSwitch = (newMode: 'member' | 'all') => {
