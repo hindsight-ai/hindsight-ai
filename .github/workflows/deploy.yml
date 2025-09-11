@@ -22,16 +22,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+      - name: Make test script executable
+        run: chmod +x run_tests.sh
 
       - name: Run tests
-        run: uv run --extra test pytest --maxfail=1 -q
+        run: ./run_tests.sh --no-cov
 
   dashboard-tests:
     name: Dashboard (Jest)

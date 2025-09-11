@@ -22,19 +22,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+      - name: Make test script executable
+        run: chmod +x run_tests.sh
 
       - name: Run tests with coverage (XML)
-        run: >-
-          uv run --with pytest --with pytest-cov \
-          pytest --maxfail=1 \
-          --cov=core --cov-report=term --cov-report=xml:coverage.xml
+        run: ./run_tests.sh --coverage
 
       - name: Upload Python coverage to Codecov
         uses: codecov/codecov-action@v4

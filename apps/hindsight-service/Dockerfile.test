@@ -1,0 +1,36 @@
+FROM python:3.13-slim
+
+# Install system dependencies including Docker CLI
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI (to connect to host Docker daemon)
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN pip install uv
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY . .
+
+# Set environment variables to match CI
+ENV PYTHONPATH=/app
+ENV DEV_MODE=false
+
+# Install dependencies
+RUN uv sync --extra test
+
+# Default command (can be overridden)
+CMD ["uv", "run", "--extra", "test", "pytest", "--maxfail=1", "-q"]
