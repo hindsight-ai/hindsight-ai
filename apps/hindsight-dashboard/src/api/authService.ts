@@ -53,7 +53,7 @@ export interface CurrentUserInfo {
   email?: string;
   display_name?: string;
   is_superadmin?: boolean;
-  organizations?: OrganizationMembership[];
+  memberships?: OrganizationMembership[];
 }
 
 const authService = {

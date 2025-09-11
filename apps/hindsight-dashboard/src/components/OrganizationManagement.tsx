@@ -36,13 +36,12 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
   const [showModeConfirmation, setShowModeConfirmation] = useState(false);
 
   // Check if user has access to organization management
-  // Users can access org management if they are:
-  // 1. Superadmins (can manage all organizations), OR
-  // 2. Regular users with at least one organization membership (can manage organizations where they have owner/admin roles)
-  const hasAccess = user?.authenticated === true && (
-    user?.is_superadmin === true || 
-    (user?.organizations && user.organizations.length > 0)
-  );
+  // Users can access org management if they are authenticated
+  // This allows them to:
+  // 1. Create new organizations (become owners)
+  // 2. Manage organizations where they have memberships
+  // 3. Superadmins can manage all organizations
+  const hasAccess = user?.authenticated === true;
 
   // Check if user is a member of an organization
   const isUserMember = (orgId: string): boolean => {
@@ -232,7 +231,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
             </button>
           </div>
           <div className="text-center py-8">
-            <p className="text-gray-600">You need to be a superadmin or have organization memberships to access organization management.</p>
+            <p className="text-gray-600">You need to be authenticated to access organization management.</p>
           </div>
         </div>
       </div>

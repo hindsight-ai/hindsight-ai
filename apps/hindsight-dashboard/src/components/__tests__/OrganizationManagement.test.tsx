@@ -83,24 +83,28 @@ describe('OrganizationManagement', () => {
       render(<OrganizationManagement onClose={mockOnClose} />);
 
       expect(screen.getByText('Access Denied')).toBeInTheDocument();
-      expect(screen.getByText('You need to be a superadmin or have organization memberships to access organization management.')).toBeInTheDocument();
+      expect(screen.getByText('You need to be authenticated to access organization management.')).toBeInTheDocument();
     });
 
-    it('shows access denied for authenticated users with no organizations', async () => {
+    it('allows access for authenticated users with no memberships (can create organizations)', async () => {
       mockUseAuth.mockReturnValue({
         user: {
           authenticated: true,
           email: 'user@example.com',
           is_superadmin: false,
-          organizations: [],
+          memberships: [],
         },
         loading: false,
       } as any);
 
+      mockOrganizationService.getManageableOrganizations.mockResolvedValue([]);
+      mockOrganizationService.getOrganizations.mockResolvedValue([]);
+
       render(<OrganizationManagement onClose={mockOnClose} />);
 
-      expect(screen.getByText('Access Denied')).toBeInTheDocument();
-      expect(screen.getByText('You need to be a superadmin or have organization memberships to access organization management.')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Organization Management')).toBeInTheDocument();
+      });
     });
 
     it('allows access for authenticated users with organization memberships', async () => {
@@ -109,7 +113,7 @@ describe('OrganizationManagement', () => {
           authenticated: true,
           email: 'user@example.com',
           is_superadmin: false,
-          organizations: [
+          memberships: [
             {
               organization_id: '1',
               organization_name: 'Test Org',
@@ -138,7 +142,7 @@ describe('OrganizationManagement', () => {
           authenticated: true,
           email: 'admin@example.com',
           is_superadmin: true,
-          organizations: [],
+          memberships: [],
         },
         loading: false,
       } as any);
@@ -159,7 +163,7 @@ describe('OrganizationManagement', () => {
           authenticated: true,
           email: 'admin@example.com',
           is_superadmin: true,
-          organizations: [
+          memberships: [
             {
               organization_id: '1',
               organization_name: 'Test Org',
@@ -381,22 +385,27 @@ describe('OrganizationManagement', () => {
       });
     });
 
-    it('fetches regular organizations for non-superadmin (fallback)', async () => {
+    it('fetches manageable organizations for authenticated regular users', async () => {
       mockUseAuth.mockReturnValue({
         user: {
           authenticated: true,
           email: 'user@example.com',
           is_superadmin: false,
+          memberships: [],
         },
         loading: false,
       } as any);
 
-      mockOrganizationService.getOrganizations.mockResolvedValue(mockUserMemberOrgs);
+      mockOrganizationService.getManageableOrganizations.mockResolvedValue([]);
+      mockOrganizationService.getOrganizations.mockResolvedValue([]);
 
       render(<OrganizationManagement onClose={mockOnClose} />);
 
-      // Should show access denied, but still test the fetching logic path
-      expect(mockOrganizationService.getManageableOrganizations).not.toHaveBeenCalled();
+      // Regular authenticated users should now have access and fetch organizations
+      await waitFor(() => {
+        expect(mockOrganizationService.getManageableOrganizations).toHaveBeenCalled();
+        expect(mockOrganizationService.getOrganizations).toHaveBeenCalled();
+      });
     });
 
     it('handles fetch errors gracefully', async () => {
