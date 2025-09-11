@@ -72,12 +72,10 @@ describe('OrganizationManagement', () => {
   });
 
   describe('Access Control', () => {
-    it('shows access denied for non-superadmin users', async () => {
+    it('shows access denied for unauthenticated users', async () => {
       mockUseAuth.mockReturnValue({
         user: {
-          authenticated: true,
-          email: 'user@example.com',
-          is_superadmin: false,
+          authenticated: false,
         },
         loading: false,
       } as any);
@@ -85,15 +83,91 @@ describe('OrganizationManagement', () => {
       render(<OrganizationManagement onClose={mockOnClose} />);
 
       expect(screen.getByText('Access Denied')).toBeInTheDocument();
-      expect(screen.getByText('You need superadmin privileges to access organization management.')).toBeInTheDocument();
+      expect(screen.getByText('You need to be a superadmin or have organization memberships to access organization management.')).toBeInTheDocument();
     });
 
-    it('allows access for superadmin users', async () => {
+    it('shows access denied for authenticated users with no organizations', async () => {
+      mockUseAuth.mockReturnValue({
+        user: {
+          authenticated: true,
+          email: 'user@example.com',
+          is_superadmin: false,
+          organizations: [],
+        },
+        loading: false,
+      } as any);
+
+      render(<OrganizationManagement onClose={mockOnClose} />);
+
+      expect(screen.getByText('Access Denied')).toBeInTheDocument();
+      expect(screen.getByText('You need to be a superadmin or have organization memberships to access organization management.')).toBeInTheDocument();
+    });
+
+    it('allows access for authenticated users with organization memberships', async () => {
+      mockUseAuth.mockReturnValue({
+        user: {
+          authenticated: true,
+          email: 'user@example.com',
+          is_superadmin: false,
+          organizations: [
+            {
+              organization_id: '1',
+              organization_name: 'Test Org',
+              role: 'admin',
+              can_read: true,
+              can_write: true,
+            }
+          ],
+        },
+        loading: false,
+      } as any);
+
+      mockOrganizationService.getManageableOrganizations.mockResolvedValue(mockOrganizations);
+      mockOrganizationService.getOrganizations.mockResolvedValue(mockUserMemberOrgs);
+
+      render(<OrganizationManagement onClose={mockOnClose} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Organization Management')).toBeInTheDocument();
+      });
+    });
+
+    it('allows access for superadmin users (even without organization memberships)', async () => {
       mockUseAuth.mockReturnValue({
         user: {
           authenticated: true,
           email: 'admin@example.com',
           is_superadmin: true,
+          organizations: [],
+        },
+        loading: false,
+      } as any);
+
+      mockOrganizationService.getManageableOrganizations.mockResolvedValue(mockOrganizations);
+      mockOrganizationService.getOrganizations.mockResolvedValue(mockUserMemberOrgs);
+
+      render(<OrganizationManagement onClose={mockOnClose} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Organization Management')).toBeInTheDocument();
+      });
+    });
+
+    it('allows access for superadmin users with organization memberships', async () => {
+      mockUseAuth.mockReturnValue({
+        user: {
+          authenticated: true,
+          email: 'admin@example.com',
+          is_superadmin: true,
+          organizations: [
+            {
+              organization_id: '1',
+              organization_name: 'Test Org',
+              role: 'owner',
+              can_read: true,
+              can_write: true,
+            }
+          ],
         },
         loading: false,
       } as any);
