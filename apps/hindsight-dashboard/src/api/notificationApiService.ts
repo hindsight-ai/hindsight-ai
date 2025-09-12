@@ -5,7 +5,7 @@
  * Follows the same patterns as existing services (authService, organizationService).
  */
 
-// Base URL resolution (align with other services and enforce https when needed)
+// Base URL resolution (align with other services)
 let API_BASE_URL: string = '/api';
 try {
   if (typeof window !== 'undefined' && (window as any).__ENV__?.HINDSIGHT_SERVICE_API_URL) {
@@ -15,23 +15,33 @@ try {
   }
 } catch {}
 
-// Normalize protocol: if page is https and base is http, force https
-try {
-  if (typeof window !== 'undefined' && API_BASE_URL) {
-    const isHttps = window.location.protocol === 'https:';
-    const url = new URL(API_BASE_URL, window.location.origin);
-    if (isHttps && url.protocol === 'http:') {
-      url.protocol = 'https:';
-      API_BASE_URL = url.toString().replace(/\/$/, '');
-    }
-  }
-} catch {}
-
 const isGuest = (): boolean => {
   try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; }
 };
 
-const base = () => (isGuest() ? '/guest-api' : API_BASE_URL);
+const base = () => {
+  const relativeUrl = isGuest() ? '/guest-api' : API_BASE_URL;
+  
+  // Convert to absolute URL to avoid browser base URL resolution issues
+  let absoluteUrl;
+  if (typeof window !== 'undefined') {
+    // In development, ensure we use the correct port
+    const currentOrigin = window.location.origin;
+    const isDev = currentOrigin.includes(':3000');
+    
+    if (isDev) {
+      absoluteUrl = `http://localhost:3000${relativeUrl}`;
+    } else {
+      // In production, use current origin (ensuring HTTPS if page is HTTPS)
+      absoluteUrl = `${currentOrigin}${relativeUrl}`;
+    }
+  } else {
+    absoluteUrl = relativeUrl; // Fallback for server-side rendering
+  }
+  
+  console.log('[DEBUG] notificationApiService base URL:', absoluteUrl, 'original:', relativeUrl, 'origin:', typeof window !== 'undefined' ? window.location.origin : 'N/A');
+  return absoluteUrl;
+};
 
 // TypeScript interfaces for notification data
 export interface Notification {
