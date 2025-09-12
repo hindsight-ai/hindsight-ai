@@ -176,7 +176,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: "${{ env.COMPOSE_FILE }},config/,templates/,letsencrypt/"
+          source: "${{ env.COMPOSE_FILE }},config/,templates/,letsencrypt/,check_env.sh"
           target: "~/${{ env.SERVER_DIR }}"
 
       - name: Execute deployment commands on remote server
@@ -189,6 +189,9 @@ jobs:
           script: |
             set -euo pipefail
             cd ~/${{ env.SERVER_DIR }}
+
+            # Make validation script executable
+            chmod +x check_env.sh
 
             # Create .env file
             echo "Creating .env file for ${{ env.ENV_NAME }}..."
@@ -206,6 +209,18 @@ jobs:
             LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
             CONSOLIDATION_BATCH_SIZE=${{ secrets.CONSOLIDATION_BATCH_SIZE }}
             FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}
+            SUPPORT_EMAIL=${{ secrets.SUPPORT_EMAIL }}
+            SUPPORT_CONTACT_MIN_INTERVAL_SECONDS=${{ secrets.SUPPORT_CONTACT_MIN_INTERVAL_SECONDS }}
+            PRUNING_BATCH_SIZE=${{ secrets.PRUNING_BATCH_SIZE }}
+            PRUNING_MAX_ITERATIONS=${{ secrets.PRUNING_MAX_ITERATIONS }}
+            EMAIL_PROVIDER=${{ secrets.EMAIL_PROVIDER }}
+            FROM_EMAIL=${{ secrets.FROM_EMAIL }}
+            FROM_NAME=${{ secrets.FROM_NAME }}
+            REPLY_TO_EMAIL=${{ secrets.REPLY_TO_EMAIL }}
+            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+            EMAIL_TEMPLATE_DIR=${{ secrets.EMAIL_TEMPLATE_DIR }}
+            EMAIL_RATE_LIMIT_HOUR=${{ secrets.EMAIL_RATE_LIMIT_HOUR }}
+            EMAIL_RATE_LIMIT_DAY=${{ secrets.EMAIL_RATE_LIMIT_DAY }}
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             HINDSIGHT_SERVICE_API_URL=${{ secrets.API_URL }}
@@ -238,6 +253,14 @@ jobs:
             # Authenticate with GitHub Container Registry
             echo "Authenticating with GitHub Container Registry..."
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Validate environment variables before deployment
+            echo "Validating environment variables..."
+            export DEPLOYMENT_ENV="${{ env.ENV_NAME }}"
+            if ! bash /tmp/check_env.sh; then
+              echo "❌ Environment validation failed! Deployment aborted."
+              exit 1
+            fi
 
             # Decide profile flag for production only
             PROFILE_FLAG=""

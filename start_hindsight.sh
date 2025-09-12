@@ -28,6 +28,13 @@ if [ ! -f .env ]; then
     fi
 fi
 
+# Validate environment variables before starting services
+echo "Validating environment variables..."
+if ! bash check_env.sh; then
+    echo "❌ Environment validation failed! Please check your .env file."
+    exit 1
+fi
+
 # Check if services are already running
 if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps | grep -q "Up"; then
     echo "Hindsight AI services are already running."
