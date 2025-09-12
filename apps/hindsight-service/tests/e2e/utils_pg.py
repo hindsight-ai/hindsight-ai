@@ -2,6 +2,8 @@ import subprocess
 import time
 import uuid
 from contextlib import contextmanager
+import shutil
+import pytest
 
 from sqlalchemy import create_engine, text
 
@@ -22,6 +24,9 @@ def wait_for_postgres(host: str, port: int, user: str, password: str, db: str, t
 @contextmanager
 def postgres_container(image: str = "postgres:13"):
     """Spin up an isolated Postgres container on a random high port and tear it down."""
+    # Skip if Docker CLI is not available in this environment
+    if not shutil.which("docker"):
+        pytest.skip("Docker is not available; skipping e2e tests that require containers")
     container_name = f"hsai-migtest-{uuid.uuid4().hex[:8]}"
     user = "testuser"
     password = "testpass"
@@ -58,4 +63,3 @@ def postgres_container(image: str = "postgres:13"):
                 subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             continue
     raise RuntimeError("Failed to start Postgres test container on any candidate port")
-

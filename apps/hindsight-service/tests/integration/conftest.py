@@ -63,3 +63,17 @@ def viewer_context(user_factory, organization_factory, membership_factory):
     membership_factory(org, user, role='viewer', can_write=False)
     return user, org
 
+# Compatibility fixtures for tests expecting older names
+@pytest.fixture
+def test_org_owner(org_owner_context):
+    user, _ = org_owner_context
+    return user
+
+@pytest.fixture
+def test_organization(org_owner_context):
+    _, org = org_owner_context
+    return org
+
+@pytest.fixture
+def test_user(user_factory):
+    return user_factory("testuser@example.com")

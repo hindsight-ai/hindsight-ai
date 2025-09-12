@@ -12,11 +12,13 @@ import ConsolidationSuggestionDetail from './components/ConsolidationSuggestionD
 import ArchivedMemoryBlockList from './components/ArchivedMemoryBlockList';
 import PruningSuggestions from './components/PruningSuggestions';
 import MemoryOptimizationCenter from './components/MemoryOptimizationCenter';
+import SupportPage from './components/SupportPage';
 import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { OrgProvider } from './context/OrgContext';
 import { OrganizationProvider } from './context/OrganizationContext';
+import { NotificationProvider } from './context/NotificationContext';
 import LoginPage from './components/LoginPage';
 
 interface UserInfo {
@@ -69,7 +71,8 @@ function AppContent() {
       '/analytics': 'Analytics',
       '/consolidation-suggestions': 'Consolidation',
       '/archived-memory-blocks': 'Archived',
-      '/pruning-suggestions': 'Pruning'
+      '/pruning-suggestions': 'Pruning',
+      '/support': 'Support'
     };
     if (pathname.startsWith('/memory-blocks/')) return 'Memory Block Detail';
     if (pathname.startsWith('/consolidation-suggestions/')) return 'Consolidation Detail';
@@ -79,7 +82,7 @@ function AppContent() {
   return (
     <div className="App" data-testid="dashboard-container">
       <NotificationContainer />
-      <Layout title={getPageTitle(location.pathname)}>
+      <Layout title={getPageTitle(location.pathname)} onOpenAbout={() => setShowAboutModal(true)}>
         <Routes>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/memory-blocks" element={<MemoryBlocksPage key={location.pathname} />} />
@@ -92,6 +95,7 @@ function AppContent() {
           <Route path="/archived-memory-blocks" element={<ArchivedMemoryBlockList key={location.pathname} />} />
           <Route path="/pruning-suggestions" element={<PruningSuggestions key={location.pathname} />} />
           <Route path="/memory-optimization-center" element={<MemoryOptimizationCenter />} />
+          <Route path="/support" element={<SupportPage />} />
         </Routes>
       </Layout>
       <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} />
@@ -103,11 +107,13 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <OrganizationProvider>
-          <OrgProvider>
-            <AppContent />
-          </OrgProvider>
-        </OrganizationProvider>
+        <NotificationProvider>
+          <OrganizationProvider>
+            <OrgProvider>
+              <AppContent />
+            </OrgProvider>
+          </OrganizationProvider>
+        </NotificationProvider>
       </AuthProvider>
     </Router>
   );

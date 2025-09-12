@@ -15,6 +15,9 @@ dependencies = [
     "requests>=2.32.4",
     "scikit-learn>=1.7.0",
     "google-genai>=1.19.0",
+    "jinja2>=3.1.4",
+    "resend>=0.8.0",
+    "sendgrid>=6.11.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -24,6 +27,8 @@ include = ["core"]
 [project.optional-dependencies]
 test = [
     "pytest>=8.3.2",
+    "pytest-cov>=6.3.0",
+    "pytest-asyncio>=1.1.0",
     "testcontainers[postgres]>=4.13.0",
     "alembic>=1.13.1",
 ]
@@ -71,7 +76,10 @@ directory = "coverage_html"
 output = "coverage.xml"
 
 [dependency-groups]
-dev = [
+dev = []
+test = [
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.3.0",
+    "pytest>=8.4.2",
+    "testcontainers[postgres]>=4.13.0",
 ]

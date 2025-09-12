@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Hindsight AI Notification{% endblock %}</title>
+    <style>
+        /* Reset and base styles */
+        body, table, td, p, h1, h2, h3, h4, h5, h6 {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f8fafc;
+            color: #334155;
+            line-height: 1.6;
+        }
+        
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 32px 24px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        /* Content */
+        .content {
+            padding: 32px 24px;
+        }
+        
+        .content h2 {
+            color: #1e293b;
+            font-size: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        
+        .content p {
+            margin-bottom: 16px;
+            color: #475569;
+            font-size: 16px;
+        }
+        
+        .content .highlight {
+            background-color: #f1f5f9;
+            border-left: 4px solid #667eea;
+            padding: 16px;
+            margin: 24px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        /* Buttons */
+        .button-container {
+            text-align: center;
+            margin: 32px 0;
+        }
+        
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white !important;
+            padding: 14px 28px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 8px;
+            transition: transform 0.2s ease;
+        }
+        
+        .button:hover {
+            transform: translateY(-1px);
+        }
+        
+        .button-secondary {
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+        }
+        
+        .button-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+        
+        /* Footer */
+        .footer {
+            background-color: #f8fafc;
+            padding: 24px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .footer p {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        /* Responsive */
+        @media (max-width: 600px) {
+            .email-container {
+                margin: 0 16px;
+            }
+            
+            .header, .content, .footer {
+                padding: 24px 16px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .content h2 {
+                font-size: 20px;
+            }
+            
+            .button {
+                display: block;
+                margin: 8px auto;
+                max-width: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div style="padding: 24px 16px;">
+        <div class="email-container">
+            <!-- Header -->
+            <div class="header">
+                <h1>{% block header_title %}Hindsight AI{% endblock %}</h1>
+                <p>{% block header_subtitle %}AI-Powered Memory Management{% endblock %}</p>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="content">
+                {% block content %}
+                <h2>Notification</h2>
+                <p>You have a new notification from Hindsight AI.</p>
+                {% endblock %}
+            </div>
+            
+            <!-- Footer -->
+            <div class="footer">
+                <p>This email was sent by Hindsight AI</p>
+                <p>
+                    <a href="{{ unsubscribe_url if unsubscribe_url else '#' }}">Unsubscribe</a> | 
+                    <a href="{{ support_url if support_url else 'mailto:support@hindsight-ai.com' }}">Support</a>
+                </p>
+                <p style="margin-top: 16px; font-size: 12px;">
+                    © {{ current_year if current_year else '2025' }} Hindsight AI. All rights reserved.
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

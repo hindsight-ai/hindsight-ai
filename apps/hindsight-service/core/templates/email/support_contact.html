@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Support Request - Hindsight AI{% endblock %}
+
+{% block header_title %}New Support Request{% endblock %}
+{% block header_subtitle %}Submitted via Dashboard About panel{% endblock %}
+
+{% block content %}
+<h2>Request Details</h2>
+
+<div class="highlight">
+  <p><strong>User:</strong> {{ user_name }} &lt;{{ user_email }}&gt;</p>
+  <p><strong>Submitted at:</strong> {{ submitted_at }}</p>
+</div>
+
+{% if message and message|length > 0 %}
+<h3>Message</h3>
+<p style="white-space: pre-wrap;">{{ message }}</p>
+{% else %}
+<p><em>No message provided.</em></p>
+{% endif %}
+
+<h2>Environment</h2>
+<div class="highlight">
+  <p><strong>Current URL:</strong> {{ context.current_url if context.current_url else 'unknown' }}</p>
+  <p><strong>User Agent:</strong> {{ context.user_agent if context.user_agent else 'unknown' }}</p>
+  {% if context.reported_user_email and context.reported_user_email != user_email %}
+  <p><strong>Reported User Email:</strong> {{ context.reported_user_email }}</p>
+  {% endif %}
+</div>
+
+<h2>Frontend</h2>
+<div class="highlight">
+  <p><strong>Service:</strong> {{ frontend.service_name if frontend.service_name else 'unknown' }}</p>
+  <p><strong>Version:</strong> {{ frontend.version if frontend.version else 'unknown' }}</p>
+  <p><strong>Build SHA:</strong> {{ frontend.build_sha if frontend.build_sha else 'unknown' }}</p>
+  <p><strong>Build Timestamp:</strong> {{ frontend.build_timestamp if frontend.build_timestamp else 'unknown' }}</p>
+  <p><strong>Image Tag:</strong> {{ frontend.image_tag if frontend.image_tag else 'unknown' }}</p>
+  
+</div>
+
+<h2>Backend</h2>
+<div class="highlight">
+  <p><strong>Service:</strong> {{ backend.service_name if backend.service_name else 'unknown' }}</p>
+  <p><strong>Version:</strong> {{ backend.version if backend.version else 'unknown' }}</p>
+  <p><strong>Build SHA:</strong> {{ backend.build_sha if backend.build_sha else 'unknown' }}</p>
+  <p><strong>Build Timestamp:</strong> {{ backend.build_timestamp if backend.build_timestamp else 'unknown' }}</p>
+  <p><strong>Image Tag:</strong> {{ backend.image_tag if backend.image_tag else 'unknown' }}</p>
+</div>
+
+<p style="margin-top: 24px; color: #64748b; font-size: 14px;">
+  This message was generated automatically by the Hindsight AI dashboard to help diagnose issues quickly.
+  Please reply to the user if additional details are needed.
+  
+</p>
+{% endblock %}
+

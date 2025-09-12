@@ -9,7 +9,7 @@ interface OrganizationManagementProps {
 }
 
 const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose }) => {
-  const { user } = useAuth();
+  const { user, refresh: refreshUser } = useAuth();
   const { refreshOrganizations } = useOrganization();
   const [allOrganizations, setAllOrganizations] = useState<Organization[]>([]);
 
@@ -25,6 +25,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
     onClose();
   };
   const [userMemberOrganizations, setUserMemberOrganizations] = useState<Organization[]>([]);
+  // Non-superadmin users are always in 'member' mode
   const [viewMode, setViewMode] = useState<'member' | 'all'>('member');
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
@@ -34,27 +35,32 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
   const [addMemberMode, setAddMemberMode] = useState(false);
   const [newMemberData, setNewMemberData] = useState<AddMemberData>({ email: '', role: 'viewer' });
   const [showModeConfirmation, setShowModeConfirmation] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   // Check if user has access to organization management
-  // Users can access org management if they are authenticated
-  // This allows them to:
-  // 1. Create new organizations (become owners)
-  // 2. Manage organizations where they have memberships
-  // 3. Superadmins can manage all organizations
-  const hasAccess = user?.authenticated === true;
-
-  // Check if user is a member of an organization
+  // Users can access org management if they are authenticated:
+  // 1. Superadmins (can manage all organizations), OR
+  // 2. Regular authenticated users (can create organizations and manage ones where they have owner/admin roles)
+  const hasAccess = user?.authenticated === true;  // Check if user is a member of an organization
   const isUserMember = (orgId: string): boolean => {
     return userMemberOrganizations.some(org => org.id === orgId);
   };
 
-  // Get organizations to display based on current view mode
-  const displayedOrganizations = viewMode === 'member' 
-    ? (allOrganizations || []).filter(org => isUserMember(org.id))
-    : (allOrganizations || []);
+  // Get organizations to display based on current view mode and user permissions
+  const displayedOrganizations = user?.is_superadmin 
+    ? (viewMode === 'member' 
+        ? (allOrganizations || []).filter(org => isUserMember(org.id))
+        : (allOrganizations || []))
+    : (allOrganizations || []).filter(org => isUserMember(org.id)); // Non-superadmin users only see their organizations
 
   // Handle mode switching with confirmation
   const handleModeSwitch = (newMode: 'member' | 'all') => {
+    // Only superadmins can switch to "all" mode
+    if (newMode === 'all' && !user?.is_superadmin) {
+      notificationService.showError('Only superadmins can view all organizations');
+      return;
+    }
+    
     if (newMode === 'all' && viewMode === 'member') {
       setShowModeConfirmation(true);
     } else {
@@ -131,6 +137,9 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
         slug: newOrgData.slug?.trim() || undefined,
       });
       
+      // Refresh user data to update memberships (critical for delete button visibility)
+      await refreshUser();
+      
       await fetchOrganizations();
       
       // Also refresh the organization dropdown in the context
@@ -161,8 +170,6 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
       await organizationService.addMember(selectedOrg.id, {
         email: newMemberData.email.trim(),
         role: newMemberData.role,
-        can_read: true,
-        can_write: newMemberData.role !== 'viewer',
       });
       
       await fetchMembers(selectedOrg.id);
@@ -194,14 +201,47 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
     try {
       await organizationService.updateMember(selectedOrg.id, userId, {
         role: newRole,
-        can_read: true,
-        can_write: newRole !== 'viewer',
       });
       await fetchMembers(selectedOrg.id);
       notificationService.showSuccess('Member role updated successfully');
     } catch (error) {
       notificationService.showError(`Failed to update member role: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  };
+
+  const handleDeleteOrganization = async () => {
+    if (!selectedOrg) return;
+
+    try {
+      await organizationService.deleteOrganization(selectedOrg.id);
+      
+      // Refresh the organizations list
+      await fetchOrganizations();
+      
+      // Also refresh the organization dropdown in the context
+      try {
+        await refreshOrganizations();
+      } catch (error) {
+        console.error('Failed to refresh organization dropdown after deletion:', error);
+      }
+      
+      // Clear the selected organization
+      setSelectedOrg(null);
+      setShowDeleteConfirmation(false);
+      notificationService.showSuccess('Organization deleted successfully');
+    } catch (error) {
+      notificationService.showError(`Failed to delete organization: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setShowDeleteConfirmation(false);
+    }
+  };
+
+  const canManageOrganization = (org: Organization | null): boolean => {
+    if (!org || !user) return false;
+    if (user.is_superadmin) return true;
+    
+    // Check if user is a member with admin or owner role using user's memberships
+    const membership = user.memberships?.find(m => m.organization_id === org.id);
+    return membership ? ['admin', 'owner'].includes(membership.role || '') : false;
   };
 
   if (loading) {
@@ -230,7 +270,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
               ×
             </button>
           </div>
-          <div className="text-center py-8">
+                    <div className="text-center py-8">
             <p className="text-gray-600">You need to be authenticated to access organization management.</p>
           </div>
         </div>
@@ -267,24 +307,31 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                 >
                   My Organizations
                 </button>
-                <button
-                  onClick={() => handleModeSwitch('all')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                    viewMode === 'all'
-                      ? 'bg-orange-100 text-orange-800 border border-orange-300'
-                      : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                >
-                  All Organizations
-                </button>
+                {/* Only superadmins can see "All Organizations" */}
+                {user?.is_superadmin && (
+                  <button
+                    onClick={() => handleModeSwitch('all')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                      viewMode === 'all'
+                        ? 'bg-orange-100 text-orange-800 border border-orange-300'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    All Organizations
+                  </button>
+                )}
               </div>
             </div>
             <div className="text-sm text-gray-500">
-              {viewMode === 'member' 
-                ? `Showing ${displayedOrganizations.length} organizations where you are a member`
-                : `Showing ${displayedOrganizations.length} organizations (${userMemberOrganizations.length} member, ${displayedOrganizations.length - userMemberOrganizations.length} admin-only)`
+              {user?.is_superadmin 
+                ? (viewMode === 'member' 
+                    ? `Showing ${displayedOrganizations.length} organizations where you are a member`
+                    : `Showing ${displayedOrganizations.length} organizations (${userMemberOrganizations.length} member, ${displayedOrganizations.length - userMemberOrganizations.length} admin-only)`)
+                : `Showing ${displayedOrganizations.length} organizations where you are a member`
               }
             </div>
+            
+
           </div>
         </div>
 
@@ -352,8 +399,26 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                 return (
                   <div
                     key={org.id}
-                    onClick={() => setSelectedOrg(org)}
-                    className={`p-3 border rounded cursor-pointer transition ${membershipBorderClass} ${membershipBgClass}`}
+                    onClick={async () => {
+                      // Non-superadmin users can only select organizations where they are members
+                      if (!user?.is_superadmin && !isMember) {
+                        notificationService.showError('You can only access organizations where you are a member');
+                        return;
+                      }
+                      
+                      // Refresh user data when switching organizations to ensure button state is correct
+                      try {
+                        await refreshUser();
+                      } catch (error) {
+                        console.error('Failed to refresh user data when switching organizations:', error);
+                        // Don't block organization switching if refresh fails
+                      }
+                      
+                      setSelectedOrg(org);
+                    }}
+                    className={`p-3 border rounded transition ${membershipBorderClass} ${membershipBgClass} ${
+                      (!user?.is_superadmin && !isMember) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                    }`}
                   >
                     <div className="flex justify-between items-start">
                       <div>
@@ -385,15 +450,31 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
               <>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold">Members of {selectedOrg.name}</h3>
-                  <button
-                    onClick={() => setAddMemberMode(true)}
-                    className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition"
-                  >
-                    + Add Member
-                  </button>
+                  {(user?.is_superadmin || isUserMember(selectedOrg.id)) ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setAddMemberMode(true)}
+                        className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition"
+                      >
+                        + Add Member
+                      </button>
+                      {canManageOrganization(selectedOrg) && (
+                        <button
+                          onClick={() => setShowDeleteConfirmation(true)}
+                          className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600 transition"
+                        >
+                          Delete Org
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-500 italic">Read-only (not a member)</span>
+                  )}
                 </div>
+                
 
-                {addMemberMode && (
+
+                {addMemberMode && (user?.is_superadmin || isUserMember(selectedOrg.id)) && (
                   <form onSubmit={handleAddMember} className="mb-4 p-4 border rounded bg-gray-50">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                       <input
@@ -528,6 +609,43 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                 className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700"
               >
                 Show All Organizations
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Organization Confirmation Dialog */}
+      {showDeleteConfirmation && selectedOrg && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <span className="text-red-600 font-bold">⚠</span>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-lg font-medium text-gray-900">Delete Organization</h3>
+              </div>
+            </div>
+            <div className="mb-4">
+              <p className="text-sm text-gray-500">
+                Are you sure you want to delete the organization "{selectedOrg.name}"? 
+                This action cannot be undone. Make sure all agents, memories, and keywords 
+                have been removed from the organization first.
+              </p>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirmation(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteOrganization}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+              >
+                Delete Organization
               </button>
             </div>
           </div>

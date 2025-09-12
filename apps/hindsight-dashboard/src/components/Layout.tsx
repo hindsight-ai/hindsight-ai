@@ -5,9 +5,10 @@ import MainContent from './MainContent';
 interface LayoutProps {
   title: string;
   children: React.ReactNode;
+  onOpenAbout?: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, title }) => {
+const Layout: React.FC<LayoutProps> = ({ children, title, onOpenAbout }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -21,7 +22,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
         <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} onCollapseChange={handleSidebarCollapse} />
       </div>
       <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-16 ml-0' : 'lg:ml-64 ml-0'}`}>
-        <MainContent title={title} toggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed}>
+        <MainContent title={title} toggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} onOpenAbout={onOpenAbout}>
           {children}
         </MainContent>
       </div>

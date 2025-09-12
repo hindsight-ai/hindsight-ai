@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import UserAccountButton from './UserAccountButton';
 import OrganizationSwitcher from './OrganizationSwitcher';
+import NotificationBell from './NotificationBell';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom';
 
@@ -9,9 +10,10 @@ interface MainContentProps {
   title: string;
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  onOpenAbout?: () => void;
 }
 
-const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarCollapsed, toggleSidebar }) => {
+const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarCollapsed, toggleSidebar, onOpenAbout }) => {
   const { guest } = useAuth();
   const location = useLocation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -64,7 +66,21 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
                 <option value="0.75">75%</option>
                 <option value="0.5">50%</option>
               </select>
+              <button
+                type="button"
+                onClick={() => onOpenAbout && onOpenAbout()}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-100"
+                title="About Hindsight AI"
+                aria-label="About Hindsight AI"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M12 16v-4"></path>
+                  <path d="M12 8h.01"></path>
+                </svg>
+              </button>
               {guest && <span className="px-2 py-0.5 text-[10px] sm:text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">Guest Mode · Read-only</span>}
+              <NotificationBell />
               <UserAccountButton />
             </div>
           </div>

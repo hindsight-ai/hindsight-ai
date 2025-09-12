@@ -1,6 +1,105 @@
 # Hindsight AI — Product & Technical Requirements
 
-This document specifies the expected behavior, constraints, and operational requirements of the Hindsight AI application across environments (staging, product4) From any app page (e.g., `/memory-blocks`), top‑right "Sign In" goes directly to Google and returns to the same page authenticated.
+This document specifies the expected behavior, constraints, and operational requirements of the Hindsight AI application across environments (staging, product4) From any app page (e.g., `/memory-blocks`), top‑right "Sign In" goes directly to G## 14. Acceptance Criteria (Key Scenarios)
+
+### Core Application Flow
+1) First visit (unauthenticated) to `/` redirects to `/login`.
+2) On `/login`, clicking "Sign In" sends user to Google and returns to `/dashboard` authenticated.
+3) On `/login`, clicking "Explore as Guest" navigates to `/dashboard` with guest badge and write actions blocked.
+4) From any app page (e.g., `/memory-blocks`), top‑right "Sign In" goes directly to Google and returns to the same page authenticated.
+5) After successful OAuth, the same tab shows authenticated state without opening a new tab.
+6) Switching environments uses the same dashboard image with a different runtime `HINDSIGHT_SERVICE_API_URL`.
+7) Certificates are issued successfully for `APP_HOST` and `TRAEFIK_DASHBOARD_HOST`; no literal `${...}` placeholders appear in Traefik logs.
+8) CI prevents overlapping deploys per branch (concurrency), and staging deploys never affect production.
+
+### Organization Management Acceptance Criteria
+
+#### AC-ORG-1: Organization Switcher (Both User Types)
+- ✅ Shows only organizations where user is a member
+- ✅ Allows switching only to member organizations
+- ✅ Returns appropriate error for non-member organization access
+- ✅ Consistent behavior between regular users and superadmins
+
+#### AC-ORG-2: Organization Management Access Control
+- ✅ Regular users can access organization management panel for organizations they own/admin
+- ✅ Regular users can create, edit, delete organizations where they have owner/admin role
+- ✅ Regular users can manage members of organizations they own/admin
+- ✅ Superadmins can access organization management panel for ALL organizations
+- ✅ Superadmins can create, edit, delete all organizations
+- ✅ Superadmins can manage members of all organizations
+- ✅ Users with no manageable organizations see appropriate message
+
+#### AC-ORG-3: Safe Default Behavior 
+- ✅ Regular users: Organization management shows only organizations they can manage (owner/admin role)
+- ✅ Superadmins: Organization management shows only member organizations by default
+- ✅ Clear visual indication of current view mode for superadmins
+- ✅ Familiar, uncluttered interface in default mode
+- ✅ Can perform all routine tasks without switching modes
+
+#### AC-ORG-4: Explicit All-Organizations Access (Superadmin)
+- ✅ Requires explicit user action to view all organizations
+- ✅ Shows confirmation dialog when switching to "all organizations" mode
+- ✅ Clear visual distinction between member vs non-member organizations
+- ✅ Membership status badges/indicators visible
+- ✅ Can switch back to member-only view easily
+
+#### AC-ORG-5: Visual Safety Indicators
+- ✅ Green styling for member organizations
+- ✅ Red styling for non-member organizations  
+- ✅ "Member" vs "Admin Access Only" badges
+- ✅ Current mode clearly displayed (Member Organizations / All Organizations)
+- ✅ Prominent mode toggle button
+
+#### AC-ORG-6: Interaction Safety
+- ✅ Warning dialog when selecting non-member organization for management
+- ✅ Confirmation required for destructive actions on non-member organizations
+- ✅ Breadcrumb or context indicator showing current organization's membership status
+- ✅ Clear "back to member organizations" option always available
+
+#### AC-ORG-7: Data Access Boundaries (Both User Types)
+- ✅ Users can only access data from organizations where they are members
+- ✅ Superadmins cannot access organization data they're not members of
+- ✅ API endpoints enforce membership-based data access
+- ✅ Clear error messages for unauthorized data access attempts
+
+#### AC-ORG-8: Real-time UI State Management ✅ **NEWLY IMPLEMENTED**
+- ✅ Delete buttons appear immediately after creating new organization without panel close/reopen
+- ✅ Delete buttons appear immediately after switching organizations without panel close/reopen
+- ✅ Organization dropdown automatically refreshes after creating new organization
+- ✅ Organization dropdown automatically refreshes after exiting organization management panel
+- ✅ New organizations become immediately available for selection without page reload
+- ✅ Smooth UX transition with no manual refresh required
+- ✅ User data refreshes automatically in background to ensure accurate permission display
+- ✅ Graceful handling of refresh failures without blocking organization operations
+- ✅ RGB methodology test coverage validates state management reliability
+
+### Organization Management Testing Implementation
+
+#### RGB Methodology Test Coverage
+The delete button state refresh functionality has been validated using comprehensive RGB (Red-Green-Blue) methodology testing:
+
+**RED Phase - Expected Behavior Definition:**
+- ✅ Test for refresh call when creating organization
+- ✅ Test for refresh call when switching organizations  
+- ✅ Test for proper role-based access controls after refresh
+
+**GREEN Phase - Core Functionality:**
+- ✅ Test that validates refresh is called gracefully even when it fails
+- ✅ Test that organization operations continue despite refresh errors
+- ✅ Test for error logging and user feedback mechanisms
+
+**BLUE Phase - Advanced Scenarios:**
+- ✅ Test for consistent refresh behavior across multiple organization switches
+- ✅ Test for robust error handling and concurrent operations
+- ✅ Test for UI responsiveness during background refresh operations
+
+**Test Results:** All 20 OrganizationManagement tests pass, including 4 new RGB methodology tests specifically for delete button state refresh functionality.
+
+**Implementation Details:**
+- Frontend: Added `refreshUser()` calls in organization creation and switching handlers
+- Error Handling: Graceful fallback when refresh operations fail
+- Background Operations: Non-blocking user data synchronization
+- Test Coverage: Comprehensive validation of timing, error scenarios, and edge cases returns to the same page authenticated.
 5) After successful OAuth, the same tab shows authenticated state without opening a new tab.
 6) **Organization Management**: Authenticated users can create and manage their own organizations through the user account dropdown menu:
    - **"Manage Organizations"** menu item opens a modal dialog with organization and member management
@@ -11,7 +110,8 @@ This document specifies the expected behavior, constraints, and operational requ
    - **Role Management**: Support for owner, admin, editor, viewer roles with appropriate permissions
    - **Self-Protection**: Users cannot remove themselves or change their own role
    - **Real-time Updates**: Changes are immediately reflected in the UI with success/error notifications
-7) **Dev Mode Experience**: In local development, "Sign In" automatically authenticates as `dev@localhost` with superadmin privileges, enabling full testing of organization management features without OAuth setup.n, local). It is the single source of truth for functionality, routing/auth flows, deployment, runtime configuration, and acceptance criteria.
+   - **Immediate UI State Refresh**: Delete buttons and other role-dependent controls appear immediately after organization creation or switching without requiring panel close/reopen
+7) **Dev Mode Experience**: In local development, "Sign In" automatically authenticates as `dev@localhost` with superadmin privileges, enabling full testing of organization management features without OAuth setup.
 
 Roadmap Reference
 - Execution ordering, phased delivery plan, and acceptance criteria for in-progress governance & UX work are tracked in `docs/roadmap.md`. This requirements file defines the target state; the roadmap file defines how we get there iteratively.
@@ -49,7 +149,557 @@ In local development mode, the system provides a simplified authentication mecha
 - **Dev Mode Indicators**: UI shows "Development Mode" status and admin badge
 - **Simplified Logout**: In dev mode, logout redirects to home page instead of OAuth logout flow
 
-## 5. Secrets & Configuration
+## 5. Organization Management Detailed Requirements
+
+### 5.1 User Roles & Permissions
+
+#### Regular User
+- **Organization Switcher**: Can only see and switch to organizations where they are members
+- **Organization Creation**: Can create new organizations and automatically become owner
+- **Organization Management**: Can manage organizations where they have owner or admin role
+- **Data Access**: Only to organizations where they are members
+
+#### Superadmin
+- **Organization Switcher**: Can only see and switch to organizations where they are members (same as regular users)
+- **Organization Management**: Full administrative access with safety mechanisms for ALL organizations
+- **Data Access**: Only to organizations where they are members (data privacy preserved)
+
+### 5.2 Organization Management Panel Access Control
+
+#### Access Requirements
+- **Who can access**: 
+  - Regular users: Can access to manage organizations where they have owner/admin role
+  - Superadmins: Can access to manage ALL organizations (`is_superadmin: true`)
+- **Access denied behavior**: Show clear message if user has no manageable organizations
+
+#### Organization Display Modes
+
+##### Mode 1: Member Organizations (Default)
+- **Default view**: Shows only organizations where superadmin is a member
+- **Visual styling**: Standard styling, clear and familiar
+- **Interaction**: Can immediately manage these organizations
+- **Purpose**: Safe default for routine organization management tasks
+
+##### Mode 2: All Organizations (Explicit Opt-in)
+- **Access method**: Requires explicit user action (toggle/button)
+- **Visual indicators**: 
+  - Clear visual distinction between member vs non-member organizations
+  - Green border/background for organizations where superadmin is a member
+  - Red border/background for organizations where superadmin is NOT a member
+  - Badge/tag indicating membership status ("Member" vs "Admin Access Only")
+- **Warning mechanism**: Confirmation prompt when accessing non-member organization
+- **Purpose**: Administrative tasks on all organizations
+
+### 5.3 Real-time UI State Management
+
+#### Immediate State Refresh Requirements
+- **Organization Creation**: Delete buttons and role-dependent controls appear immediately after creating organization without manual refresh
+- **Organization Switching**: UI updates immediately when switching between organizations
+- **User Data Synchronization**: User membership data refreshes automatically to ensure accurate permission display
+- **Error Handling**: Graceful handling of refresh failures without blocking operations
+- **Background Operations**: State refresh operations run asynchronously without affecting user experience
+
+#### Implementation Details
+- **Frontend Refresh Calls**: Automatic `refreshUser()` calls after organization creation and switching
+- **Optimistic UI Updates**: UI updates immediately while background data synchronization occurs
+- **Fallback Mechanisms**: Manual refresh options available if automatic refresh fails
+- **Test Coverage**: Comprehensive RGB methodology testing ensures reliable state management
+
+### 5.4 Safety Mechanisms
+
+#### Visual Safety Indicators
+1. **Color Coding**:
+   - Green: Organizations where superadmin is a member (safe zone)
+   - Red: Organizations where superadmin is NOT a member (admin-only access)
+
+2. **Membership Badges**:
+   - "Member": User has actual membership and data access
+   - "Admin Access Only": User can manage but cannot access organization data
+
+3. **Mode Indicator**:
+   - Clear indication of current view mode (Member Orgs vs All Orgs)
+   - Prominent toggle to switch between modes
+
+#### Interaction Safety
+1. **Default Filter**: Show only member organizations by default
+2. **Explicit Opt-in**: Require deliberate action to view non-member organizations
+3. **Confirmation Dialogs**: Warn when performing actions on non-member organizations
+4. **Breadcrumb Context**: Always show current mode and organization membership status
+
+### 5.5 Implementation Specifications
+
+#### Backend API Endpoints
+
+##### `/organizations/` 
+- **Purpose**: Organization switcher dropdown
+- **Returns**: Only organizations where user is a member
+- **Access**: All authenticated users
+- **Behavior**: Same for regular users and superadmins
+
+##### `/organizations/manageable`
+- **Purpose**: Organization management (organizations user can manage)
+- **Returns**: Organizations where user has owner/admin role, or all organizations for superadmins
+- **Access**: All authenticated users
+- **Behavior**: Regular users see only their manageable orgs, superadmins see all
+
+##### `/organizations/admin`
+- **Purpose**: Legacy superadmin-only endpoint for all organizations
+- **Returns**: All organizations with `created_by` information
+- **Access**: Superadmins only (`is_superadmin: true`)
+- **Error**: 403 Forbidden for non-superadmins
+
+##### `/organizations/{org_id}/members`
+- **Purpose**: Get organization membership information
+- **Returns**: List of organization members
+- **Access**: Organization members + superadmins
+- **Usage**: Determine superadmin's membership status
+
+#### Frontend Component Implementation
+
+##### OrganizationManagement Component State Management
+```typescript
+const [viewMode, setViewMode] = useState<'member' | 'all'>('member');
+const [organizations, setOrganizations] = useState<Organization[]>([]);
+const [userMemberOrganizations, setUserMemberOrganizations] = useState<Organization[]>([]);
+const [showAllConfirmation, setShowAllConfirmation] = useState(false);
+```
+
+##### Display Logic
+```typescript
+const displayedOrganizations = viewMode === 'member' 
+  ? organizations.filter(org => isUserMember(org.id))
+  : organizations;
+
+const isUserMember = (orgId: string): boolean => {
+  return userMemberOrganizations.some(org => org.id === orgId);
+};
+```
+
+##### Safety Controls Implementation
+- Default to 'member' mode
+- Require explicit toggle to 'all' mode
+- Show confirmation dialog when switching to 'all' mode
+- Visual indicators for membership status
+- Warning when selecting non-member organization
+
+### 5.6 Technical Considerations
+
+#### Performance
+- Minimize API calls by caching membership information
+- Efficient filtering for large numbers of organizations
+
+#### Security  
+- Server-side validation of all permissions
+- Client-side indicators are UX only, not security boundaries
+- Audit logging for superadmin actions on non-member organizations
+
+#### Accessibility
+- Clear visual indicators that work with screen readers
+- Keyboard navigation support for mode switching
+- High contrast options for color-coded indicators
+
+### 5.7 Future Enhancements
+
+1. **Audit Trail**: Log superadmin access to non-member organizations
+2. **Temporary Access**: Time-limited access grants for specific organizations
+3. **Delegation**: Allow organization owners to grant temporary admin access
+4. **Notification**: Alert organization owners when superadmin accesses their organization
+
+### 5.8 User Experience Flow
+
+#### Superadmin Organization Management Flow
+1. **Initial Access**: Opens organization management → sees only member organizations
+2. **Routine Management**: Can immediately manage member organizations (safe zone)
+3. **Admin Tasks**: Clicks "Show All Organizations" → confirmation dialog → sees all organizations with visual indicators
+4. **Safe Selection**: Green organizations = member (can access data), Red organizations = admin-only (management only)
+5. **Return to Safety**: Can easily return to member-only view
+
+#### Error Prevention Mechanisms
+1. **Visual Cues**: Immediate visual feedback about membership status
+2. **Default Safety**: Safe behavior by default, dangerous behavior requires opt-in
+3. **Confirmation Dialogs**: Extra confirmation for potentially risky actions
+4. **Clear Context**: Always know what mode you're in and what access you have
+
+## 6. Notification System Requirements
+
+### 7.1 Implementation Plan and Status Tracking
+
+```xml
+<!-- STATUS TRACKING: This section tracks the implementation progress of the notification system -->
+<!-- INSTRUCTIONS: Update status attributes when work begins or completes -->
+<!-- STATUSES: not-started | in-progress | testing | completed -->
+<!-- LAST UPDATED: September 11, 2025 -->
+
+<implementation-plan name="notification-system" last-updated="2025-09-11">
+  <phase number="1" name="Foundation" status="completed">
+    <task name="database-schema" status="completed">Design and implement notification tables</task>
+    <task name="backend-service" status="completed">Create NotificationService class</task>
+    <task name="basic-email" status="completed">Basic email notification for membership changes</task>
+    <task name="in-app-infrastructure" status="completed">In-app notification system foundation</task>
+    <task name="api-endpoints" status="completed">Basic notification API endpoints</task>
+    <task name="integration" status="completed">Integration with organization invitation flow</task>
+  </phase>
+  <phase number="2" name="User Interface" status="not-started">
+    <task name="notification-bell" status="not-started">Header notification bell with badge</task>
+    <task name="notification-dropdown" status="not-started">Quick notification preview dropdown</task>
+    <task name="settings-page" status="not-started">User notification preferences page</task>
+    <task name="notification-center" status="not-started">Full notification management page</task>
+  </phase>
+  <phase number="3" name="Enhanced Features" status="not-started">
+    <task name="email-templates" status="not-started">Rich HTML email templates</task>
+    <task name="real-time-updates" status="not-started">WebSocket real-time notifications</task>
+    <task name="batch-operations" status="not-started">Mark all read, bulk actions</task>
+    <task name="delivery-tracking" status="not-started">Email delivery monitoring</task>
+  </phase>
+  <phase number="4" name="Testing & Documentation" status="not-started">
+    <task name="unit-tests" status="not-started">Comprehensive test suite</task>
+    <task name="integration-tests" status="not-started">End-to-end notification flow tests</task>
+    <task name="documentation" status="not-started">API documentation and user guides</task>
+  </phase>
+</implementation-plan>
+```
+
+### 7.2 System Overview
+
+#### Multi-Channel Notification Architecture
+The notification system provides both email and in-app notifications to ensure users are always informed of important organization events while respecting their communication preferences.
+
+#### Core Principles
+- **Security-First**: Critical notifications (membership changes) always delivered via in-app
+- **User Control**: Granular email preferences while maintaining security notifications
+- **Reliability**: Robust delivery tracking and retry mechanisms
+- **Performance**: Efficient batching and real-time updates
+
+### 7.3 Notification Channels
+
+#### Email Notifications (External)
+- **Purpose**: Professional external communication
+- **User Control**: Can be disabled per category
+- **Templates**: Rich HTML with organization branding
+- **Delivery**: Immediate for critical events, batched for summaries
+
+#### In-App Notifications (Internal)
+- **Purpose**: Real-time system communication
+- **Security**: Always active for critical events (cannot be disabled)
+- **Interface**: Bell icon with badge count positioned in top-right header area near user account controls + notification center
+- **Positioning**: Following standard UX conventions, notification bell appears in top-right corner where users expect to find it
+- **Persistence**: Retained until acknowledged by user
+
+### 7.4 Notification Categories
+
+#### Security-Critical (Always Delivered Both Ways)
+- ✅ **Organization Membership**: Added to or removed from organization
+- ✅ **Role Changes**: User role modified within organization  
+- ✅ **Security Events**: Account access, permission changes
+
+#### Informational (Email Optional, In-App Always)
+- 📋 **Organization Updates**: Name changes, settings modifications
+- 📢 **System Announcements**: New features, maintenance windows
+- 📊 **Activity Summaries**: Weekly digest emails (optional)
+
+#### Activity (Fully Optional)
+- 💬 **Collaboration**: Comments, shared content
+- 🔔 **General Updates**: Non-critical system events
+
+### 7.5 User Preference Management
+
+#### Notification Settings Page
+**Location**: User Account Dropdown → "Notification Settings"
+
+#### Email Notification Controls
+```
+📧 Email Notifications
+├── ✅ Organization Membership (when added/removed) [Security - Always On]
+├── ✅ Role Changes (when your role is modified) [Security - Always On] 
+├── ⬜ Organization Updates (name changes, settings)
+├── ⬜ Weekly Activity Summary (digest emails)
+└── ⬜ System Announcements (new features, maintenance)
+
+📱 In-App Notifications  
+├── ✅ Security Events (always on for compliance)
+├── ✅ Organization Events (always on)
+├── ⬜ Activity Notifications (comments, collaborations)
+└── ⬜ System Messages (tips, feature suggestions)
+```
+
+### 7.6 Database Schema Design
+
+#### User Notification Preferences
+```sql
+CREATE TABLE user_notification_settings (
+    user_id UUID PRIMARY KEY REFERENCES users(id),
+    email_org_membership BOOLEAN DEFAULT true,
+    email_role_changes BOOLEAN DEFAULT true, 
+    email_org_updates BOOLEAN DEFAULT false,
+    email_weekly_digest BOOLEAN DEFAULT false,
+    email_system_announcements BOOLEAN DEFAULT true,
+    in_app_activity BOOLEAN DEFAULT true,
+    in_app_system_messages BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+#### In-App Notifications
+```sql
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    type VARCHAR(50) NOT NULL, -- 'org_membership', 'role_change', 'org_update', etc.
+    category VARCHAR(20) NOT NULL, -- 'security', 'info', 'activity'
+    title VARCHAR(255) NOT NULL,
+    content TEXT,
+    is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT NOW(),
+    read_at TIMESTAMP,
+    related_org_id UUID REFERENCES organizations(id),
+    metadata JSONB, -- Additional context data
+    expires_at TIMESTAMP -- Auto-cleanup old notifications
+);
+```
+
+#### Email Delivery Tracking
+```sql
+CREATE TABLE email_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    notification_id UUID REFERENCES notifications(id),
+    user_id UUID NOT NULL REFERENCES users(id),
+    email_address VARCHAR(255) NOT NULL,
+    template_name VARCHAR(100) NOT NULL,
+    sent_at TIMESTAMP,
+    delivered_at TIMESTAMP,
+    opened_at TIMESTAMP,
+    failed_at TIMESTAMP,
+    error_message TEXT,
+    retry_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### 7.7 Backend Implementation Specifications
+
+#### NotificationService Class
+```python
+class NotificationService:
+    async def notify_user(
+        self, 
+        user_id: UUID, 
+        type: str, 
+        title: str, 
+        content: str,
+        category: str = "info",
+        org_id: UUID = None,
+        metadata: dict = None
+    ) -> Notification:
+        """Create and dispatch notification via all appropriate channels"""
+        
+    async def send_email_notification(
+        self, 
+        user_id: UUID, 
+        notification: Notification
+    ) -> EmailNotification:
+        """Send email if user preferences allow"""
+        
+    async def create_in_app_notification(
+        self, 
+        user_id: UUID, 
+        notification_data: dict
+    ) -> Notification:
+        """Always create in-app notification"""
+        
+    async def get_user_notifications(
+        self, 
+        user_id: UUID, 
+        filters: dict = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[Notification]:
+        """Retrieve user notifications with filtering"""
+        
+    async def mark_notifications_read(
+        self, 
+        user_id: UUID, 
+        notification_ids: List[UUID]
+    ) -> int:
+        """Mark specific notifications as read"""
+        
+    async def get_unread_count(self, user_id: UUID) -> int:
+        """Get count of unread notifications for badge"""
+```
+
+#### Email Template System
+```python
+class EmailTemplateService:
+    templates = {
+        'org_membership_added': 'Welcome to {org_name}! You have been added as {role}.',
+        'org_membership_removed': 'You have been removed from {org_name}.',
+        'role_changed': 'Your role in {org_name} has been changed to {new_role}.',
+        'org_updated': '{org_name} has been updated by {updated_by}.',
+        'weekly_digest': 'Your weekly activity summary for {date_range}.'
+    }
+    
+    async def render_template(
+        self, 
+        template_name: str, 
+        context: dict
+    ) -> Tuple[str, str]:
+        """Return (subject, html_content) for email"""
+```
+
+### 7.8 Frontend Implementation Specifications
+
+#### React Components Architecture
+
+##### NotificationBell Component
+```typescript
+interface NotificationBellProps {
+  user: User;
+  onNotificationClick: () => void;
+}
+
+const NotificationBell: React.FC<NotificationBellProps> = ({ user, onNotificationClick }) => {
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showDropdown, setShowDropdown] = useState(false);
+  
+  // Real-time unread count updates
+  // Dropdown with recent notifications
+  // Click handlers for navigation
+};
+```
+
+##### NotificationCenter Component  
+```typescript
+interface NotificationCenterProps {
+  user: User;
+}
+
+const NotificationCenter: React.FC<NotificationCenterProps> = ({ user }) => {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [filters, setFilters] = useState({ category: 'all', read: 'all' });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  
+  // Pagination, filtering, search
+  // Bulk operations (mark read, delete)
+  // Real-time updates via WebSocket
+};
+```
+
+##### NotificationSettings Component
+```typescript
+interface NotificationSettingsProps {
+  user: User;
+  onSettingsUpdate: (settings: NotificationSettings) => void;
+}
+
+const NotificationSettings: React.FC<NotificationSettingsProps> = ({ user, onSettingsUpdate }) => {
+  const [emailSettings, setEmailSettings] = useState<EmailNotificationSettings>({});
+  const [inAppSettings, setInAppSettings] = useState<InAppNotificationSettings>({});
+  
+  // Toggle controls for each notification type
+  // Save/cancel functionality
+  // Preview email templates
+};
+```
+
+### 7.9 Integration Points
+
+#### Organization Management Integration
+- **Member Addition**: Trigger `org_membership_added` notification
+- **Role Changes**: Trigger `role_changed` notification  
+- **Member Removal**: Trigger `org_membership_removed` notification
+- **Organization Updates**: Trigger `org_updated` notification
+
+#### API Endpoints
+```python
+# New notification endpoints
+GET /api/notifications/ # Get user notifications with pagination/filtering
+POST /api/notifications/mark-read # Mark notifications as read
+GET /api/notifications/unread-count # Get unread notification count
+GET /api/notifications/settings # Get user notification preferences
+PUT /api/notifications/settings # Update user notification preferences
+
+# Integration with existing endpoints
+POST /api/organizations/{org_id}/members # Enhanced to send notifications
+PUT /api/organizations/{org_id}/members/{user_id} # Enhanced to send notifications
+DELETE /api/organizations/{org_id}/members/{user_id} # Enhanced to send notifications
+```
+
+### 7.10 Real-time Updates
+
+#### WebSocket Integration
+- **Connection**: Establish WebSocket on login
+- **Events**: Real-time notification delivery
+- **Fallback**: Polling mechanism for WebSocket failures
+- **Scaling**: Redis pub/sub for multi-instance deployments
+
+#### Event Types
+```typescript
+interface NotificationEvent {
+  type: 'notification_created' | 'notification_read' | 'notification_deleted';
+  data: {
+    notification_id: string;
+    user_id: string;
+    unread_count: number;
+    notification?: Notification;
+  };
+}
+```
+
+### 6.6 Acceptance Criteria
+
+#### AC-NOTIF-1: Basic Email Notifications
+**Given** a user is invited to an organization
+**When** the invitation is created
+**Then** an email notification should be sent to the invitee's email address
+**And** the email should contain organization name, inviter name, and accept/decline links
+
+#### AC-NOTIF-2: Email Notification Preferences
+**Given** a user has email notifications disabled
+**When** they are invited to an organization
+**Then** no email should be sent
+**But** an in-app notification should still be created
+
+#### AC-NOTIF-3: In-App Notification Creation and UI Positioning
+**Given** a user receives any organization-related event
+**When** the event occurs
+**Then** an in-app notification should be created
+**And** the notification should appear in their notification list
+**And** the unread count should be updated
+**And** the notification bell should be positioned in the top-right header area near the user account button
+**And** the notification bell should follow standard UX conventions for notification placement
+
+#### AC-NOTIF-4: Real-Time Notification Updates
+**Given** a user has the application open
+**When** they receive a new notification
+**Then** the notification should appear in real-time without refresh
+**And** the unread count should update immediately
+
+#### AC-NOTIF-5: Notification Persistence
+**Given** a user receives notifications
+**When** they log out and log back in
+**Then** unread notifications should still be visible
+**And** read notifications should be preserved for 30 days
+
+#### AC-NOTIF-6: Notification Settings Management
+**Given** a user wants to change notification preferences
+**When** they access notification settings
+**Then** they should be able to toggle email notifications on/off
+**And** changes should take effect immediately for new events
+
+#### AC-NOTIF-7: Multiple Notification Events
+**Given** various organization events occur (invite, accept, remove, role change)
+**When** each event happens
+**Then** appropriate notifications should be generated for relevant users
+**And** each notification should contain event-specific information
+
+#### AC-NOTIF-8: Notification Performance
+**Given** the notification system is operational
+**When** notifications are created and delivered
+**Then** email delivery should complete within 30 seconds
+**And** in-app notifications should appear within 5 seconds
+**And** the system should handle at least 100 concurrent notifications
+
+## 7. Secrets & Configuration
 All secrets are environment‑scoped in GitHub Environments. Use the same key names for both envs; values differ per env.
 
 Required secrets (per env):
@@ -67,7 +717,7 @@ Runtime env (set in server `.env` by the workflow):
 - `APP_HOST`, `TRAEFIK_DASHBOARD_HOST`, `HINDSIGHT_SERVICE_API_URL`.
 - Backend build meta: `BACKEND_BUILD_SHA`, `FRONTEND_BUILD_SHA`, `BUILD_TIMESTAMP` (informational).
 
-## 6. Deployment Pipeline
+## 8. Deployment Pipeline
 - Trigger: push to `main` or `staging`.
 - Jobs:
   - Build & push backend image to GHCR.
@@ -83,12 +733,12 @@ Runtime env (set in server `.env` by the workflow):
   - Production: `~/hindsight-ai-production`
   - Staging: `~/hindsight-ai-staging`
 
-## 7. Networking, DNS, TLS
+## 9. Networking, DNS, TLS
 - DNS: `APP_HOST` and `TRAEFIK_DASHBOARD_HOST` point to their respective servers.
 - TLS: Traefik obtains certs via Let’s Encrypt DNS‑01 using Cloudflare API.
 - Universal SSL limitation: avoid two‑level subdomains like `app.staging.domain`; use single level such as `app-staging.domain` unless you manage a delegated sub‑zone or advanced cert.
 
-## 8. Reverse Proxy & Routing
+## 10. Reverse Proxy & Routing
 - Traefik terminates TLS and routes:
   - Dashboard: `Host(${APP_HOST})` → Nginx (dashboard).
   - OAuth paths: `/oauth2/*` to oauth2-proxy.
@@ -99,11 +749,11 @@ Runtime env (set in server `.env` by the workflow):
   - Serves SPA with fallback to `index.html`.
   - Serves `/env.js` with `Cache-Control: no-store`.
 
-## 9. Frontend Runtime Configuration
+## 11. Frontend Runtime Configuration
 - Single image for all envs with runtime configuration via `env.js` (generated at container start from `HINDSIGHT_SERVICE_API_URL`).
 - Build metadata passed as Vite vars: `VITE_VERSION`, `VITE_BUILD_SHA`, `VITE_BUILD_TIMESTAMP`, `VITE_DASHBOARD_IMAGE_TAG` (shown in About dialog).
 
-## 10. Authentication & Authorization
+## 12. Authentication & Authorization
 - Identity provider: Google OAuth via oauth2-proxy.
 - Cookie domain: `.hindsight-ai.com` (works for staging and production).
 - Backend requires auth for mutating operations; unauthenticated POST/PUT/PATCH/DELETE return 401 with a guest‑mode message.
@@ -133,7 +783,7 @@ Runtime env (set in server `.env` by the workflow):
 - `/env.js` caching disabled.
 - OAuth2‑proxy headers forwarded to backend for identity (`X-Auth-Request-*` and `X-Forwarded-*`).
 
-## 11. Backend API Expectations
+## 13. Backend API Expectations
 The backend exposes a FastAPI application with the following expectations:
 
 - General
@@ -186,14 +836,14 @@ Access control
 - Guest consumers must use `/guest-api` proxy in the dashboard, which strips auth headers.
 - Organization management requires authentication and appropriate role permissions (owner/admin for most operations).
 
-## 12. Non‑Functional Requirements
+## 14. Non‑Functional Requirements
 - Parity: same container images for staging and production (runtime config only).
 - Availability: dashboard, backend, oauth2‑proxy, traefik remain Up after deploy health check.
 - Observability: basic container logs visible in CI on failure.
 - Security: secrets never baked into images; all secret values come from environment.
 - Performance: dashboard loads without blocking on cross‑origin OAuth redirect attempts.
 
-## 13. Local Development Requirements
+## 15. Local Development Requirements
 - Compose dev: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`
   - Dashboard at `http://localhost:3000`, API at `http://localhost:8000`.
   - Vite dev proxy forwards `/api` and `/guest-api` to `http://localhost:8000`.
@@ -214,7 +864,7 @@ Access control
 - Override file `docker-compose.dev.yml` exposes DB (5432), API (8000), Dashboard (3000) and enables `develop.watch` for hot rebuild.
 - Use `./start_hindsight.sh --watch` for watch mode (Compose v2.21+).
 
-## 14. Acceptance Criteria (Key Scenarios)
+## 16. Acceptance Criteria (Key Scenarios)
 1) First visit (unauthenticated) to `/` redirects to `/login`.
 2) On `/login`, clicking “Sign In” sends user to Google and returns to `/dashboard` authenticated.
 3) On `/login`, clicking “Explore as Guest” navigates to `/dashboard` with guest badge and write actions blocked.
@@ -224,22 +874,23 @@ Access control
 7) Certificates are issued successfully for `APP_HOST` and `TRAEFIK_DASHBOARD_HOST`; no literal `${...}` placeholders appear in Traefik logs.
 8) CI prevents overlapping deploys per branch (concurrency), and staging deploys never affect production.
 
-## 15. Risks & Mitigations
+## 17. Risks & Mitigations
 - OAuth redirect mismatch: ensure Google Cloud OAuth has `https://<APP_HOST>/oauth2/callback` for both envs.
 - DNS wildcard limitations: prefer single‑level subdomains (e.g., `app-staging.domain`).
 - Browser caching: hard refresh after deploy if UI changes appear inconsistent.
 
-## 16. Change Management
+## 18. Change Management
 - All changes flow via PRs/branch pushes to `staging` or `main`.
 - This document must be updated when routes, auth flows, secrets, or deploy steps change.
 
 ---
 Last updated: manual
 
-## 17. Frontend Application Shell & Layout
+## 19. Frontend Application Shell & Layout
 - Layout structure:
   - Fixed left sidebar that never scrolls with page content (positioned fixed; app content accounts for its width).
-  - Top header within main content contains page title, scale selector, guest badge (when applicable), and user account button.
+  - Top header within main content contains page title, scale selector, guest badge (when applicable), notification bell, and user account button.
+  - Header layout: Page title and controls on left, notification bell and user account button positioned in top-right corner following standard UX conventions.
   - Main content area scrolls independently (internal scroll container), preserving the fixed sidebar and header positions.
 - Responsive behavior:
   - Sidebar collapsible; collapsed width ~16 (Tailwind) vs expanded ~64.
@@ -252,7 +903,7 @@ Last updated: manual
   - When in guest mode, header shows “Guest Mode · Read-only”.
   - All mutating actions are blocked with a warning via the notification service.
 
-## 18. Routing Map & Navigation
+## 20. Routing Map & Navigation
 - Routes:
   - `/login`: full-screen login page (standalone, no app layout).
   - `/dashboard`: default authenticated landing page.
@@ -264,7 +915,7 @@ Last updated: manual
   - Sign In in header goes directly to `/oauth2/sign_in?rd=<current_path>` (bypasses `/login`).
   - Sign Out redirects to `/oauth2/sign_out?rd=<origin>`.
 
-## 19. Login & Guest Page UX (/login)
+## 21. Login & Guest Page UX (/login)
 - Content:
   - Title, short description, two buttons: “Sign In” (primary) and “Explore as Guest”.
 - Behavior:

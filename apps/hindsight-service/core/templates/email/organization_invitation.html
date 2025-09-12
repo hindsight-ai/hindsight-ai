@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Invitation to {{ organization_name }} - Hindsight AI{% endblock %}
+
+{% block header_title %}You're Invited!{% endblock %}
+{% block header_subtitle %}{{ inviter_name }} has invited you to join {{ organization_name }}{% endblock %}
+
+{% block content %}
+<h2>Join {{ organization_name }}</h2>
+
+<p>Hello!</p>
+
+<p><strong>{{ inviter_name }}</strong> has invited you to join <strong>{{ organization_name }}</strong> on Hindsight AI.</p>
+
+<div class="highlight">
+    <p><strong>Organization:</strong> {{ organization_name }}</p>
+    <p><strong>Invited by:</strong> {{ inviter_name }}</p>
+    <p><strong>Role:</strong> {{ role if role else 'Member' }}</p>
+</div>
+
+<p>Hindsight AI helps teams manage their AI memory and knowledge effectively. By joining {{ organization_name }}, you'll be able to:</p>
+
+<ul style="margin: 16px 0; padding-left: 24px; color: #475569;">
+    <li>Access shared memory blocks and knowledge</li>
+    <li>Collaborate on AI memory management</li>
+    <li>Contribute to the organization's AI knowledge base</li>
+    <li>Track and optimize memory usage</li>
+</ul>
+
+<div class="button-container">
+    <a href="{{ accept_url }}" class="button">Accept Invitation</a>
+    <a href="{{ decline_url }}" class="button button-secondary">Decline</a>
+</div>
+
+<p style="margin-top: 32px; color: #64748b; font-size: 14px;">
+    This invitation will expire in 7 days. If you have any questions, please contact {{ inviter_name }} or our support team.
+</p>
+
+{% if invitation_message %}
+<div class="highlight" style="margin-top: 24px;">
+    <p><strong>Personal message from {{ inviter_name }}:</strong></p>
+    <p style="font-style: italic;">{{ invitation_message }}</p>
+</div>
+{% endif %}
+{% endblock %}

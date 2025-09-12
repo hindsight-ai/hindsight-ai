@@ -456,4 +456,230 @@ describe('OrganizationManagement', () => {
       });
     });
   });
+
+  // =============================================================================
+  // DELETE BUTTON STATE REFRESH TESTS - RGB METHODOLOGY
+  // =============================================================================
+  
+  describe('Delete Button State Refresh (RGB)', () => {
+    describe('RED Phase - Expected Behavior Definition', () => {
+      it('should call refresh user data when creating organization', async () => {
+        const mockRefreshUser = jest.fn();
+        
+        mockUseAuth.mockReturnValue({
+          user: {
+            authenticated: true,
+            email: 'owner@example.com',
+            is_superadmin: false,
+            memberships: [],
+          },
+          loading: false,
+          refresh: mockRefreshUser,
+        } as any);
+
+        mockOrganizationService.getManageableOrganizations.mockResolvedValue([]);
+        mockOrganizationService.getOrganizations.mockResolvedValue([]);
+        mockOrganizationService.createOrganization.mockResolvedValue({
+          id: 'new-org-id',
+          name: 'New Test Org',
+          slug: 'new-test-org',
+          is_active: true,
+        });
+
+        render(<OrganizationManagement onClose={mockOnClose} />);
+
+        await waitFor(() => {
+          expect(screen.getByText('+ New')).toBeInTheDocument();
+        });
+
+        // Create organization - click + New button
+        fireEvent.click(screen.getByText('+ New'));
+        
+        // Wait for form to appear and fill it
+        await waitFor(() => {
+          expect(screen.getByPlaceholderText('Organization Name')).toBeInTheDocument();
+        });
+        
+        fireEvent.change(screen.getByPlaceholderText('Organization Name'), {
+          target: { value: 'New Test Org' }
+        });
+        fireEvent.click(screen.getByText('Create'));
+
+        // Verify refresh was called during organization creation
+        await waitFor(() => {
+          expect(mockRefreshUser).toHaveBeenCalled();
+        });
+      });
+
+      it('should call refresh user data when switching organizations', async () => {
+        const mockRefreshUser = jest.fn();
+        
+        mockUseAuth.mockReturnValue({
+          user: {
+            authenticated: true,
+            email: 'owner@example.com',
+            is_superadmin: false,
+            memberships: [
+              {
+                organization_id: '1',
+                organization_name: 'Test Org 1',
+                role: 'owner',
+                can_read: true,
+                can_write: true,
+              }
+            ],
+          },
+          loading: false,
+          refresh: mockRefreshUser,
+        } as any);
+
+        mockOrganizationService.getManageableOrganizations.mockResolvedValue([
+          { id: '1', name: 'Test Org 1', slug: 'test-org-1', is_active: true }
+        ]);
+        mockOrganizationService.getOrganizations.mockResolvedValue([
+          { id: '1', name: 'Test Org 1', slug: 'test-org-1', is_active: true }
+        ]);
+        mockOrganizationService.getMembers.mockResolvedValue(mockMembers);
+
+        render(<OrganizationManagement onClose={mockOnClose} />);
+
+        await waitFor(() => {
+          expect(screen.getByText('Test Org 1')).toBeInTheDocument();
+        });
+
+        // Clear previous calls
+        mockRefreshUser.mockClear();
+
+        // Switch to organization
+        fireEvent.click(screen.getByText('Test Org 1'));
+
+        // Verify refresh was called during organization switching
+        await waitFor(() => {
+          expect(mockRefreshUser).toHaveBeenCalled();
+        });
+      });
+    });
+
+    describe('GREEN Phase - Core Functionality', () => {
+      it('handles refresh failures gracefully', async () => {
+        const mockRefreshUser = jest.fn().mockImplementation(() => {
+          throw new Error('Refresh failed');
+        });
+        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        
+        mockUseAuth.mockReturnValue({
+          user: {
+            authenticated: true,
+            email: 'owner@example.com',
+            is_superadmin: false,
+            memberships: [
+              {
+                organization_id: '1',
+                organization_name: 'Test Org',
+                role: 'owner',
+                can_read: true,
+                can_write: true,
+              }
+            ],
+          },
+          loading: false,
+          refresh: mockRefreshUser,
+        } as any);
+
+        mockOrganizationService.getManageableOrganizations.mockResolvedValue([
+          { id: '1', name: 'Test Org', slug: 'test-org', is_active: true }
+        ]);
+        mockOrganizationService.getOrganizations.mockResolvedValue([
+          { id: '1', name: 'Test Org', slug: 'test-org', is_active: true }
+        ]);
+        mockOrganizationService.getMembers.mockResolvedValue(mockMembers);
+
+        render(<OrganizationManagement onClose={mockOnClose} />);
+
+        await waitFor(() => {
+          expect(screen.getByText('Test Org')).toBeInTheDocument();
+        });
+
+        // Switch to organization (should handle refresh error gracefully)
+        fireEvent.click(screen.getByText('Test Org'));
+
+        // Verify operation completed despite refresh failure
+        await waitFor(() => {
+          expect(mockRefreshUser).toHaveBeenCalled();
+          expect(consoleSpy).toHaveBeenCalledWith(
+            'Failed to refresh user data when switching organizations:',
+            expect.any(Error)
+          );
+        });
+
+        consoleSpy.mockRestore();
+      });
+    });
+
+    describe('BLUE Phase - Advanced Scenarios', () => {
+      it('ensures refresh is called consistently across multiple organization switches', async () => {
+        const mockRefreshUser = jest.fn();
+        
+        mockUseAuth.mockReturnValue({
+          user: {
+            authenticated: true,
+            email: 'multi-owner@example.com',
+            is_superadmin: false,
+            memberships: [
+              {
+                organization_id: '1',
+                organization_name: 'Owner Org',
+                role: 'owner',
+                can_read: true,
+                can_write: true,
+              },
+              {
+                organization_id: '2',
+                organization_name: 'Admin Org',
+                role: 'admin',
+                can_read: true,
+                can_write: true,
+              }
+            ],
+          },
+          loading: false,
+          refresh: mockRefreshUser,
+        } as any);
+
+        const organizations = [
+          { id: '1', name: 'Owner Org', slug: 'owner-org', is_active: true },
+          { id: '2', name: 'Admin Org', slug: 'admin-org', is_active: true }
+        ];
+
+        mockOrganizationService.getManageableOrganizations.mockResolvedValue(organizations);
+        mockOrganizationService.getOrganizations.mockResolvedValue(organizations);
+        mockOrganizationService.getMembers.mockResolvedValue(mockMembers);
+
+        render(<OrganizationManagement onClose={mockOnClose} />);
+
+        await waitFor(() => {
+          expect(screen.getByText('Owner Org')).toBeInTheDocument();
+        });
+
+        // Switch between organizations multiple times
+        fireEvent.click(screen.getByText('Admin Org'));
+        await waitFor(() => {
+          expect(mockRefreshUser).toHaveBeenCalledTimes(1);
+        });
+
+        fireEvent.click(screen.getByText('Owner Org'));
+        await waitFor(() => {
+          expect(mockRefreshUser).toHaveBeenCalledTimes(2);
+        });
+
+        fireEvent.click(screen.getByText('Admin Org'));
+        await waitFor(() => {
+          expect(mockRefreshUser).toHaveBeenCalledTimes(3);
+        });
+
+        // Verify refresh called for each switch
+        expect(mockRefreshUser).toHaveBeenCalledTimes(3);
+      });
+    });
+  });
 });

@@ -78,6 +78,26 @@ const memoryService = {
     const resp = await fetch(`${base()}/memory-blocks/?${params.toString()}`, { credentials: 'include' });
     return jsonOrThrow(resp);
   },
+  contactSupport: async (payload: Record<string, any>) => {
+    guardGuest('Sign in to contact support.');
+    const resp = await fetch(`${API_BASE_URL}/support/contact`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    if (resp.status === 429) {
+      // Surface rate-limit message clearly
+      try {
+        const data = await resp.json();
+        const msg = data?.detail || `Please wait before sending another support request.`;
+        throw new Error(msg);
+      } catch {
+        throw new Error('Please wait before sending another support request.');
+      }
+    }
+    return jsonOrThrow(resp);
+  },
   getMemoryBlockById: async (id: string): Promise<MemoryBlock> => jsonOrThrow(await fetch(`${base()}/memory-blocks/${id}`, { credentials: 'include' })),
   updateMemoryBlock: async (id: string, data: Partial<MemoryBlock>) => { guardGuest('Sign in to edit memory blocks.'); const resp = await fetch(`${API_BASE_URL}/memory-blocks/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), credentials: 'include' }); return jsonOrThrow(resp); },
   archiveMemoryBlock: async (id: string) => { guardGuest('Sign in to archive memory blocks.'); const resp = await fetch(`${API_BASE_URL}/memory-blocks/${id}/archive`, { method: 'POST', credentials: 'include' }); return jsonOrThrow(resp); },
@@ -129,4 +149,4 @@ const memoryService = {
 };
 
 export default memoryService;
-export const { getMemoryBlocks, getMemoryBlockById, updateMemoryBlock, archiveMemoryBlock, deleteMemoryBlock, getArchivedMemoryBlocks, getKeywords, createKeyword, updateKeyword, deleteKeyword, addKeywordToMemoryBlock, removeKeywordFromMemoryBlock, getConsolidationSuggestions, getConsolidationSuggestionById, validateConsolidationSuggestion, rejectConsolidationSuggestion, triggerConsolidation, deleteConsolidationSuggestion, generatePruningSuggestions, confirmPruning, getBuildInfo, getConversationsCount, suggestKeywords, compressMemoryBlock, applyMemoryCompression, getMemoryOptimizationSuggestions, executeOptimizationSuggestion, getSuggestionDetails, bulkCompactMemoryBlocks, bulkGenerateKeywords, bulkApplyKeywords, mergeMemoryBlocks } = memoryService;
+export const { getMemoryBlocks, getMemoryBlockById, updateMemoryBlock, archiveMemoryBlock, deleteMemoryBlock, getArchivedMemoryBlocks, getKeywords, createKeyword, updateKeyword, deleteKeyword, addKeywordToMemoryBlock, removeKeywordFromMemoryBlock, getConsolidationSuggestions, getConsolidationSuggestionById, validateConsolidationSuggestion, rejectConsolidationSuggestion, triggerConsolidation, deleteConsolidationSuggestion, generatePruningSuggestions, confirmPruning, getBuildInfo, getConversationsCount, suggestKeywords, compressMemoryBlock, applyMemoryCompression, getMemoryOptimizationSuggestions, executeOptimizationSuggestion, getSuggestionDetails, bulkCompactMemoryBlocks, bulkGenerateKeywords, bulkApplyKeywords, mergeMemoryBlocks, contactSupport } = memoryService;

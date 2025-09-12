@@ -1,6 +1,6 @@
 import logging # Moved to top
 import os
-from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter
+from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter, Body
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -28,6 +28,7 @@ from core.api.keywords import router as keywords_router
 from core.api.memory_blocks import router as memory_blocks_router
 from core.api.audits import router as audits_router
 from core.api.bulk_operations import router as bulk_operations_router
+from core.api.notifications import router as notifications_router
 from core.api.permissions import can_read, can_write, can_manage_org
 from core.search.search_service import SearchService
 
@@ -363,6 +364,138 @@ def get_build_info():
         "version": version
     }
 
+@router.post("/support/contact")
+async def support_contact(
+    request: dict = Body(default={}),
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    """
+    Accepts a support contact request from an authenticated user and dispatches an email
+    to the configured support address with useful diagnostic context.
+
+    Expected payload (all optional except auth):
+    - message: str
+    - frontend: { service_name, version, build_sha, build_timestamp, image_tag }
+    - context: { current_url, user_agent, user_email }
+    """
+    # Identify user (required unless DEV_MODE=true, which is handled by middleware)
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+
+    if not email:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    user = get_or_create_user(db, email=email, display_name=name)
+
+    # Extract payload
+    message = (request or {}).get("message") or ""
+    frontend = (request or {}).get("frontend") or {}
+    context = (request or {}).get("context") or {}
+
+    # Compose backend build info here (trusted)
+    backend_info = {
+        "service_name": "hindsight-service",
+        "version": os.getenv("VERSION", "unknown"),
+        "build_sha": os.getenv("BUILD_SHA"),
+        "build_timestamp": os.getenv("BUILD_TIMESTAMP"),
+        "image_tag": os.getenv("IMAGE_TAG"),
+    }
+
+    # Target email
+    support_email = os.getenv("SUPPORT_EMAIL", "support@hindsight-ai.com")
+
+    # Rate limiting: restrict frequency per user
+    try:
+        interval_seconds = int(os.getenv("SUPPORT_CONTACT_MIN_INTERVAL_SECONDS", "60"))
+    except Exception:
+        interval_seconds = 60
+
+    if interval_seconds > 0:
+        try:
+            from sqlalchemy import desc
+            from core.db import models as db_models
+            last = db.query(db_models.EmailNotificationLog).filter(
+                db_models.EmailNotificationLog.user_id == user.id,
+                db_models.EmailNotificationLog.event_type == 'support_contact'
+            ).order_by(desc(db_models.EmailNotificationLog.created_at)).first()
+            if last and last.created_at is not None:
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc)
+                elapsed = (now - last.created_at).total_seconds()
+                if elapsed < interval_seconds:
+                    retry_after = int(interval_seconds - elapsed)
+                    return JSONResponse(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        content={
+                            "detail": f"Rate limit: please wait {retry_after} seconds before sending another support request.",
+                            "retry_after_seconds": retry_after
+                        }
+                    )
+        except Exception as e:
+            logger.warning(f"Rate limit check failed: {e}")
+
+    # Create email log and send using notification service facilities
+    try:
+        from core.services.notification_service import NotificationService
+
+        notification_service = NotificationService(db)
+        subject = f"Support request from {user.email} – Dashboard {frontend.get('version', 'unknown')} ({(frontend.get('build_sha') or '')[:7]})"
+
+        email_log = notification_service.create_email_notification_log(
+            notification_id=None,
+            user_id=user.id,
+            email_address=support_email,
+            event_type='support_contact',
+            subject=subject,
+        )
+
+        # Build template context
+        template_context = {
+            'user_email': user.email,
+            'user_name': user.display_name or user.email.split('@')[0],
+            'submitted_at': datetime.utcnow().isoformat() + 'Z',
+            'message': message,
+            'frontend': {
+                'service_name': frontend.get('service_name'),
+                'version': frontend.get('version'),
+                'build_sha': frontend.get('build_sha'),
+                'build_timestamp': frontend.get('build_timestamp'),
+                'image_tag': frontend.get('image_tag'),
+            },
+            'backend': backend_info,
+            'context': {
+                'current_url': context.get('current_url'),
+                'user_agent': context.get('user_agent'),
+                'reported_user_email': context.get('user_email'),
+            },
+        }
+
+        # Send email via transactional email service and update log
+        result = await notification_service.send_email_notification(
+            email_log,
+            template_name='support_contact',
+            template_context=template_context,
+        )
+
+        if not result.get('success'):
+            raise HTTPException(status_code=500, detail=f"Failed to send support email: {result.get('error', 'unknown error')}")
+
+        return { 'status': 'ok', 'email_log_id': str(email_log.id) }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Support contact failed: {e}")
+        raise HTTPException(status_code=500, detail="Support contact failed")
+
 @router.get("/user-info")
 def get_user_info(
     x_auth_request_user: Optional[str] = Header(default=None),
@@ -382,11 +515,11 @@ def get_user_info(
         email = "dev@localhost"
         user = get_or_create_user(db, email=email, display_name="Development User")
         
-        # Ensure dev user has superadmin privileges
-        if not user.is_superadmin:
-            user.is_superadmin = True
-            db.commit()
-            db.refresh(user)
+        # Comment out automatic superadmin privileges for dev user to test non-superadmin functionality
+        # if not user.is_superadmin:
+        #     user.is_superadmin = True
+        #     db.commit()
+        #     db.refresh(user)
             
         memberships = get_user_memberships(db, user.id)
         return {
@@ -1223,6 +1356,7 @@ app.include_router(keywords_router)
 app.include_router(memory_blocks_router)
 app.include_router(audits_router, prefix="/audits")
 app.include_router(bulk_operations_router, prefix="/bulk-operations")
+app.include_router(notifications_router, prefix="/notifications")
 
 # Include memory optimization router
 try:

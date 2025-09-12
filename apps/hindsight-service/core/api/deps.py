@@ -39,11 +39,11 @@ def get_current_user_context(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     user = get_or_create_user(db, email=email, display_name=name)
     
-    # Ensure dev user has superadmin privileges in dev mode
-    if is_dev_mode and email == "dev@localhost" and not user.is_superadmin:
-        user.is_superadmin = True
-        db.commit()
-        db.refresh(user)
+    # Comment out automatic superadmin privileges for dev user to test non-superadmin functionality
+    # if is_dev_mode and email == "dev@localhost" and not user.is_superadmin:
+    #     user.is_superadmin = True
+    #     db.commit()
+    #     db.refresh(user)
     
     memberships = get_user_memberships(db, user.id)
     # Normalize keys to string to align with permission helpers that cast org_id to str

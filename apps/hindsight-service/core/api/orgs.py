@@ -1,5 +1,6 @@
 from typing import Optional, List
 import uuid
+from datetime import datetime, UTC
 
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
@@ -259,11 +260,7 @@ def delete_organization(
     if has_agents or has_memories or has_keywords:
         raise HTTPException(status_code=409, detail="Organization not empty; empty it before deletion")
 
-    # Delete memberships first (ondelete=cascade for memberships but be explicit)
-    db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == org_id).delete(synchronize_session=False)
-    db.delete(org)
-    db.commit()
-
+    # Log the deletion BEFORE actually deleting the organization to avoid foreign key constraint issues
     from core.audit import log, AuditAction, AuditStatus
     log(
         db,
@@ -274,6 +271,16 @@ def delete_organization(
         actor_user_id=user.id,
         organization_id=org_id,
     )
+
+    # Delete memberships explicitly (even though they could be handled by CASCADE if configured)
+    db.query(models.OrganizationMembership).filter(models.OrganizationMembership.organization_id == org_id).delete(synchronize_session=False)
+    
+    # Delete any pending invitations explicitly (these have CASCADE but being explicit is safer)
+    db.query(models.OrganizationInvitation).filter(models.OrganizationInvitation.organization_id == org_id).delete(synchronize_session=False)
+    
+    # Now delete the organization itself
+    db.delete(org)
+    db.commit()
 
     return {"status": "deleted"}
 
@@ -358,6 +365,86 @@ def add_member(
         organization_id=org_id,
         metadata={"role": role},
     )
+
+    # Send notification to the new member
+    try:
+        from core.services.notification_service import NotificationService
+        
+        # Get organization details
+        org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
+        
+        # Create notification service with current session
+        notification_service = NotificationService(db)
+        
+        # Create in-app notification (synchronous version)
+        notification = models.Notification(
+            id=uuid.uuid4(),
+            user_id=member_user.id,
+            event_type="organization_invitation",
+            title=f"Added to {org.name}",
+            message=f"You have been added to the organization '{org.name}' with {role} role.",
+            metadata_json={
+                "organization_id": str(org_id),
+                "organization_name": org.name,
+                "invited_by": user.display_name or user.email,
+                "role": role
+            },
+            created_at=datetime.now(UTC)
+        )
+        db.add(notification)
+        
+        # Try to send email notification in background
+        import threading
+        
+        # Get data we need before starting background thread (to avoid session issues)
+        member_email = member_user.email
+        member_name = member_user.display_name or member_user.email.split('@')[0]
+        inviter_name = user.display_name or user.email
+        org_name_for_email = org.name
+        
+        def send_email_background():
+            try:
+                import asyncio
+                from core.services.transactional_email_service import get_transactional_email_service
+                
+                async def _send_email():
+                    email_service = get_transactional_email_service()
+                    
+                    # Render template
+                    template_data = {
+                        "user_name": member_name,
+                        "organization_name": org_name_for_email,
+                        "invited_by": inviter_name,
+                        "role": role,
+                        "dashboard_url": "https://hindsight-ai.com/dashboard"
+                    }
+                    
+                    html_content, text_content = email_service.render_template("organization_invitation", template_data)
+                    
+                    # Send email
+                    result = await email_service.send_email(
+                        to_email=member_email,
+                        subject=f"You've been added to {org_name_for_email}",
+                        html_content=html_content,
+                        text_content=text_content
+                    )
+                    print(f"Email sent successfully to {member_email}: {result}")
+                
+                asyncio.run(_send_email())
+            except Exception as e:
+                print(f"Background email sending failed: {e}")
+        
+        # Start background email task
+        thread = threading.Thread(target=send_email_background)
+        thread.daemon = True
+        thread.start()
+        
+        db.commit()  # Commit the notification
+        
+    except Exception as e:
+        # Log error but don't fail the member addition
+        print(f"Failed to send notification: {e}")
+        db.rollback()  # Rollback only notification, not the member addition
 
     return {"status": "added"}
 
@@ -462,6 +549,38 @@ def create_invitation(
         organization_id=org_id,
         metadata={"email": invitation.email, "role": invitation.role},
     )
+
+    # Send notification to invitee if they have an account
+    try:
+        from core.services.notification_service import NotificationService
+        
+        # Get organization details
+        organization = db.query(models.Organization).filter(models.Organization.id == org_id).first()
+        
+        # Check if invitee has an account
+        invitee_user = db.query(models.User).filter(models.User.email == invitation.email).first()
+        
+        if invitee_user and organization:
+            notification_service = NotificationService(db)
+            
+            # Generate invitation URLs (simplified for now)
+            accept_url = f"/organizations/{org_id}/invitations/{db_invitation.id}/accept"
+            decline_url = f"/organizations/{org_id}/invitations/{db_invitation.id}/decline"
+            
+            notification_service.notify_organization_invitation(
+                invitee_user_id=invitee_user.id,
+                invitee_email=invitation.email,
+                inviter_name=user.display_name or user.email,
+                organization_name=organization.name,
+                invitation_id=db_invitation.id,
+                accept_url=accept_url,
+                decline_url=decline_url
+            )
+    except Exception as e:
+        # Log error but don't fail the invitation creation
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to send notification for invitation {db_invitation.id}: {str(e)}")
 
     return db_invitation
 
