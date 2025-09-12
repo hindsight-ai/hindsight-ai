@@ -1,3 +1,9 @@
+"""
+API dependency helpers.
+
+Provides dependency-resolved current user context and compatibility shims
+used by various route modules and tests.
+"""
 import uuid
 from typing import Optional, Tuple, Dict, Any
 

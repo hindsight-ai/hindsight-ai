@@ -1,3 +1,9 @@
+"""
+Database engine and session management.
+
+Builds the SQLAlchemy engine from environment configuration with sensible
+test fallbacks (SQLite in-memory) and exposes FastAPI dependencies.
+"""
 import os
 import sys
 from sqlalchemy import create_engine, text
@@ -147,5 +153,21 @@ def get_db():
         db.close()
 
 def get_db_session_local():
-    """Return a sessionmaker factory (used by background worker threads)."""
-    return sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    """Return a generator that yields a Session instance.
+
+    Historically some test fixtures call `session = get_db_session_local()` and
+    then `db = next(session)`. Returning a sessionmaker caused a
+    TypeError: 'sessionmaker' object is not an iterator. To remain backward
+    compatible with those fixtures, return a generator object that yields a
+    Session and closes it when finished.
+    """
+    _ensure_sqlite_schema()
+
+    def _session_gen():
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    return _session_gen()

@@ -1,3 +1,9 @@
+"""
+Authentication helpers and identity resolution.
+
+Parses proxy headers, normalizes emails, and upserts users while supporting
+simple superadmin elevation via environment configuration.
+"""
 import os
 from typing import Optional, Dict, Any, List, Tuple
 from sqlalchemy.orm import Session
@@ -100,4 +106,3 @@ def get_user_memberships(db: Session, user_id) -> List[Dict[str, Any]]:
             # Ignore malformed mock rows
             continue
     return memberships
-

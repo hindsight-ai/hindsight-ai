@@ -1,3 +1,9 @@
+"""
+Keyword extraction utilities (experimental/disabled).
+
+Holds placeholder functions for spaCy-based keyword extraction; currently
+stubbed in favor of simpler heuristics elsewhere.
+"""
 # import spacy
 from typing import List, Set
 

@@ -1,3 +1,9 @@
+"""
+FastAPI application assembly and high-level routes.
+
+Wires middleware, routers, and selected endpoints that don’t fit a specific
+resource module. Also exposes health and support endpoints.
+"""
 import logging # Moved to top
 import os
 from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter, Body
@@ -30,6 +36,8 @@ from core.api.memory_blocks import router as memory_blocks_router
 from core.api.audits import router as audits_router
 from core.api.bulk_operations import router as bulk_operations_router
 from core.api.notifications import router as notifications_router
+from core.api.consolidation import router as consolidation_router
+from core.api.support import router as support_router
 from core.api.permissions import can_read, can_write, can_manage_org
 from core.search.search_service import SearchService
 
@@ -228,270 +236,9 @@ def change_memory_block_scope(
     return mb
 
 # Consolidation Trigger Endpoint
-@router.post("/consolidation/trigger/", status_code=status.HTTP_202_ACCEPTED)
-def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
-    """
-    Trigger the memory block consolidation process manually.
-    This endpoint initiates the worker process to analyze memory blocks for duplicates
-    and generate consolidation suggestions.
-    """
-    from core.core.consolidation_worker import run_consolidation_analysis
-    logger.info("Manual trigger of consolidation process received")
-    
-    # Retrieve LLM_API_KEY from environment variables
-    llm_api_key = os.getenv("LLM_API_KEY")
-    if not llm_api_key:
-        logger.warning("LLM_API_KEY is not set. LLM-based consolidation will not occur.")
-        # Optionally, you might raise an HTTPException here if LLM is strictly required
-        # raise HTTPException(status_code=500, detail="LLM_API_KEY is not set, LLM-based consolidation cannot proceed.")
+# Consolidation endpoints moved to core.api.consolidation
 
-    try:
-        # Run the consolidation process in a non-blocking way if possible
-        # For simplicity in this implementation, we run it synchronously
-        run_consolidation_analysis(llm_api_key)
-        return {"message": "Consolidation process triggered successfully"}
-    except Exception as e:
-        logger.error(f"Error triggering consolidation process: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error triggering consolidation process: {str(e)}")
-
-# Consolidation Suggestions Endpoints
-@router.get("/consolidation-suggestions/", response_model=schemas.PaginatedConsolidationSuggestions)
-def get_consolidation_suggestions_endpoint(
-    status: Optional[str] = None,
-    group_id: Optional[uuid.UUID] = None,
-    sort_by: Optional[str] = "timestamp",
-    sort_order: Optional[str] = "desc",
-    skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db)
-):
-    """
-    Retrieve all consolidation suggestions with filtering, sorting, and pagination.
-    """
-    logger.info(f"Fetching consolidation suggestions with filters: status={status}, group_id={group_id}")
-    
-    # Get paginated suggestions and total count
-    suggestions, total_items = crud.get_consolidation_suggestions(
-        db=db,
-        status=status,
-        group_id=group_id,
-        skip=skip,
-        limit=limit
-    )
-    
-    total_pages = math.ceil(total_items / limit) if limit > 0 else 0
-
-    return {
-        "items": suggestions,
-        "total_items": total_items,
-        "total_pages": total_pages
-    }
-
-@router.get("/consolidation-suggestions/{suggestion_id}", response_model=schemas.ConsolidationSuggestion)
-def get_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Retrieve a specific consolidation suggestion by ID.
-    """
-    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
-    if not suggestion:
-        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
-    return suggestion
-
-@router.post("/consolidation-suggestions/{suggestion_id}/validate/", response_model=schemas.ConsolidationSuggestion)
-def validate_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Validate a consolidation suggestion, replacing original memory blocks with the consolidated version.
-    """
-    logger.info(f"Validating consolidation suggestion {suggestion_id}")
-    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
-    if not suggestion:
-        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
-    if suggestion.status != "pending":
-        raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
-
-    try:
-        crud.apply_consolidation(db, suggestion_id=suggestion_id)
-        # Fetch the updated suggestion to return
-        updated_suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
-        if not updated_suggestion:
-            raise HTTPException(status_code=404, detail="Updated consolidation suggestion not found")
-        # Update status to 'validated' if not already set by apply_consolidation
-        if updated_suggestion.status == "pending":
-            update_schema = schemas.ConsolidationSuggestionUpdate(status="validated")
-            updated_suggestion = crud.update_consolidation_suggestion(db, suggestion_id=suggestion_id, suggestion=update_schema)
-        return updated_suggestion
-    except Exception as e:
-        logger.error(f"Error validating suggestion {suggestion_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error validating suggestion: {str(e)}")
-
-@router.post("/consolidation-suggestions/{suggestion_id}/reject/", response_model=schemas.ConsolidationSuggestion)
-def reject_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Reject a consolidation suggestion, marking it as rejected.
-    """
-    logger.info(f"Rejecting consolidation suggestion {suggestion_id}")
-    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
-    if not suggestion:
-        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
-    if suggestion.status != "pending":
-        raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
-
-    # Create a schema object for the update
-    update_schema = schemas.ConsolidationSuggestionUpdate(status="rejected")
-    updated_suggestion = crud.update_consolidation_suggestion(db, suggestion_id=suggestion_id, suggestion=update_schema)
-    return updated_suggestion
-
-@router.delete("/consolidation-suggestions/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Deletes a consolidation suggestion from the database.
-    """
-    success = crud.delete_consolidation_suggestion(db, suggestion_id=suggestion_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
-    return {"message": "Consolidation suggestion deleted successfully"}
-
-# Health check endpoint
-@router.get("/build-info")
-def get_build_info():
-    """
-    Returns build and deployment information for the current running service.
-    """
-    build_sha = os.getenv("BUILD_SHA")
-    build_timestamp = os.getenv("BUILD_TIMESTAMP")
-    image_tag = os.getenv("IMAGE_TAG")
-    version = os.getenv("VERSION", "unknown")
-    
-    # Return None for missing values instead of default strings
-    return {
-        "build_sha": build_sha if build_sha else None,
-        "build_timestamp": build_timestamp if build_timestamp else None,
-        "image_tag": image_tag if image_tag else None,
-        "service_name": "hindsight-service",
-        "version": version
-    }
-
-@router.post("/support/contact")
-async def support_contact(
-    request: dict = Body(default={}),
-    db: Session = Depends(get_db),
-    user_and_context = Depends(get_current_user_context),
-):
-    """
-    Accepts a support contact request from an authenticated user and dispatches an email
-    to the configured support address with useful diagnostic context.
-
-    Expected payload (all optional except auth):
-    - message: str
-    - frontend: { service_name, version, build_sha, build_timestamp, image_tag }
-    - context: { current_url, user_agent, user_email }
-    """
-    user, current_user_context = user_and_context
-    
-    # Extract payload
-    message = (request or {}).get("message") or ""
-    frontend = (request or {}).get("frontend") or {}
-    context = (request or {}).get("context") or {}
-
-    # Extract payload
-    message = (request or {}).get("message") or ""
-    frontend = (request or {}).get("frontend") or {}
-    context = (request or {}).get("context") or {}
-
-    # Compose backend build info here (trusted)
-    backend_info = {
-        "service_name": "hindsight-service",
-        "version": os.getenv("VERSION", "unknown"),
-        "build_sha": os.getenv("BUILD_SHA"),
-        "build_timestamp": os.getenv("BUILD_TIMESTAMP"),
-        "image_tag": os.getenv("IMAGE_TAG"),
-    }
-
-    # Target email
-    support_email = os.getenv("SUPPORT_EMAIL", "support@hindsight-ai.com")
-
-    # Rate limiting: restrict frequency per user
-    try:
-        interval_seconds = int(os.getenv("SUPPORT_CONTACT_MIN_INTERVAL_SECONDS", "60"))
-    except Exception:
-        interval_seconds = 60
-
-    if interval_seconds > 0:
-        try:
-            from sqlalchemy import desc
-            from core.db import models as db_models
-            last = db.query(db_models.EmailNotificationLog).filter(
-                db_models.EmailNotificationLog.user_id == user.id,
-                db_models.EmailNotificationLog.event_type == 'support_contact'
-            ).order_by(desc(db_models.EmailNotificationLog.created_at)).first()
-            if last and last.created_at is not None:
-                now = datetime.now(timezone.utc)
-                elapsed = (now - last.created_at).total_seconds()
-                if elapsed < interval_seconds:
-                    retry_after = int(interval_seconds - elapsed)
-                    return JSONResponse(
-                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                        content={
-                            "detail": f"Rate limit: please wait {retry_after} seconds before sending another support request.",
-                            "retry_after_seconds": retry_after
-                        }
-                    )
-        except Exception as e:
-            logger.warning(f"Rate limit check failed: {e}")
-
-    # Create email log and send using notification service facilities
-    try:
-        from core.services.notification_service import NotificationService
-
-        notification_service = NotificationService(db)
-        subject = f"Support request from {user.email} – Dashboard {frontend.get('version', 'unknown')} ({(frontend.get('build_sha') or '')[:7]})"
-
-        email_log = notification_service.create_email_notification_log(
-            notification_id=None,
-            user_id=user.id,
-            email_address=support_email,
-            event_type='support_contact',
-            subject=subject,
-        )
-
-        # Build template context
-        template_context = {
-            'user_email': user.email,
-            'user_name': user.display_name or user.email.split('@')[0],
-            'submitted_at': datetime.utcnow().isoformat() + 'Z',
-            'message': message,
-            'frontend': {
-                'service_name': frontend.get('service_name'),
-                'version': frontend.get('version'),
-                'build_sha': frontend.get('build_sha'),
-                'build_timestamp': frontend.get('build_timestamp'),
-                'image_tag': frontend.get('image_tag'),
-            },
-            'backend': backend_info,
-            'context': {
-                'current_url': context.get('current_url'),
-                'user_agent': context.get('user_agent'),
-                'reported_user_email': context.get('user_email'),
-            },
-        }
-
-        # Send email via transactional email service and update log
-        result = await notification_service.send_email_notification(
-            email_log,
-            template_name='support_contact',
-            template_context=template_context,
-        )
-
-        if not result.get('success'):
-            raise HTTPException(status_code=500, detail=f"Failed to send support email: {result.get('error', 'unknown error')}")
-
-        return { 'status': 'ok', 'email_log_id': str(email_log.id) }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Support contact failed: {e}")
-        raise HTTPException(status_code=500, detail="Support contact failed")
+"""Support and build-info endpoints moved to core.api.support"""
 
 @router.get("/user-info")
 def get_user_info(
@@ -1347,13 +1094,15 @@ def search_memory_blocks_hybrid_endpoint(
 
 # Include the main router
 app.include_router(router)
-app.include_router(orgs_router, prefix="/organizations")
+app.include_router(orgs_router)
 app.include_router(agents_router)
 app.include_router(keywords_router)
 app.include_router(memory_blocks_router)
-app.include_router(audits_router, prefix="/audits")
-app.include_router(bulk_operations_router, prefix="/bulk-operations")
-app.include_router(notifications_router, prefix="/notifications")
+app.include_router(audits_router)
+app.include_router(bulk_operations_router)
+app.include_router(notifications_router)
+app.include_router(consolidation_router)
+app.include_router(support_router)
 
 # Include memory optimization router
 try:

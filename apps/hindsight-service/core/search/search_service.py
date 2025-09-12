@@ -8,7 +8,7 @@ import time
 import uuid
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, and_, or_
+from sqlalchemy import func, text, and_, or_, String
 
 from core.db import models, schemas
 
@@ -516,7 +516,7 @@ class SearchService:
                 models.MemoryBlock.content.ilike(f"%{term}%"),
                 models.MemoryBlock.errors.ilike(f"%{term}%"),
                 models.MemoryBlock.lessons_learned.ilike(f"%{term}%"),
-                models.MemoryBlock.id.cast(models.String).ilike(f"%{term}%")
+                models.MemoryBlock.id.cast(String).ilike(f"%{term}%")
             )
             search_filters.append(term_filter)
         

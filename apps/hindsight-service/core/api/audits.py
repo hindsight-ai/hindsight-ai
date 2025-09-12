@@ -1,42 +1,21 @@
+"""
+Audit log API endpoints.
+
+Query and present audit logs with permission checks tailored for
+organization administrators.
+"""
 from typing import Optional, List
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.db.database import get_db
-from core.db import models, schemas, crud
-from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
+from core.db import schemas, crud
+from core.api.deps import get_current_user_context
 from core.api.permissions import can_manage_org
 
-router = APIRouter(tags=["audits"])
-
-def _require_current_user(db: Session,
-                          x_auth_request_user: Optional[str],
-                          x_auth_request_email: Optional[str],
-                          x_forwarded_user: Optional[str],
-                          x_forwarded_email: Optional[str]):
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    if not email:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    user = get_or_create_user(db, email=email, display_name=name)
-    # Build a compact context with memberships_by_org
-    memberships = get_user_memberships(db, user.id)
-    memberships_by_org = {m["organization_id"]: m for m in memberships}
-    current_user = {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "is_superadmin": bool(user.is_superadmin),
-        "memberships": memberships,
-        "memberships_by_org": memberships_by_org,
-    }
-    return user, current_user
+router = APIRouter(prefix="/audits", tags=["audits"])
 
 @router.get("/", response_model=List[schemas.AuditLog])
 def list_audit_logs(
@@ -45,12 +24,9 @@ def list_audit_logs(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    user, current_user = _require_current_user(db, x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email)
+    user, current_user = user_context
 
     if organization_id:
         if not can_manage_org(organization_id, current_user):

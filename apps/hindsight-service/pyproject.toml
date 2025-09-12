@@ -51,6 +51,10 @@ branch = true
 omit = [
     "core/db/migrations/*",
     "core/**/__init__.py",
+    # Glue/structure modules not valuable for coverage metrics
+    "core/db/models/*",
+    "core/db/schemas/*",
+    "core/db/sqlite_compiler_shims.py",
     # Exclude background/long-running worker & external service integration modules from unit test coverage
     # These require threads, external models, or heavy I/O not suitable for deterministic unit test runs.
     "core/bulk_operations_worker.py",

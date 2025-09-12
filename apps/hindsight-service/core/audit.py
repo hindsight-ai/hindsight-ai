@@ -1,3 +1,9 @@
+"""
+Audit logging helpers and enums.
+
+Centralized helpers to persist normalized audit records with consistent
+schema; includes convenience wrappers per target type.
+"""
 from __future__ import annotations
 import uuid
 from enum import Enum

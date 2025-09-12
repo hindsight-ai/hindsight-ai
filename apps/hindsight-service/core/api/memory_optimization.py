@@ -1,3 +1,9 @@
+"""
+Memory optimization endpoints.
+
+Analyzes memory blocks to surface compaction, keyword, archival, and
+duplicate‑merge suggestions; simple mock execution support.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional

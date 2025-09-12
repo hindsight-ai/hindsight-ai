@@ -1,2 +1,6 @@
-# Services package
-# This package contains business logic services for the Hindsight application.
+"""
+Business logic services package.
+
+Holds reusable service classes for notifications and email delivery used by
+API layers and background workers.
+"""

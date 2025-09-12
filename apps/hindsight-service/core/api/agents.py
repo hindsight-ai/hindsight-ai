@@ -1,3 +1,8 @@
+"""
+Agents API endpoints.
+
+CRUD and scope-change operations for agent resources with permission checks.
+"""
 from typing import List, Optional
 import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -7,41 +12,30 @@ from core.db import schemas, crud
 from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
 from core.api.permissions import can_read, can_write
+from core.api.deps import get_current_user_context
 
-router = APIRouter(tags=["agents"])  # No prefix to preserve existing paths
+router = APIRouter(prefix="/agents", tags=["agents"])  # normalized prefix
 
-@router.post("/agents/", response_model=schemas.Agent, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas.Agent, status_code=status.HTTP_201_CREATED)
 def create_agent_endpoint(
     agent: schemas.AgentCreate,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    if not email:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    u = get_or_create_user(db, email=email, display_name=name)
+    u, current_user = user_context
 
     scope = getattr(agent, 'visibility_scope', 'personal') or 'personal'
     owner_user_id = u.id if scope == 'personal' else None
     org_id = getattr(agent, 'organization_id', None)
     if scope == 'organization':
-        memberships = get_user_memberships(db, u.id)
-        by_org = {m['organization_id']: m for m in memberships}
+        by_org = current_user.get('memberships_by_org', {})
         key = str(org_id) if org_id else None
         m = by_org.get(key) if key else None
         role = (m or {}).get('role') if m else None
         can_write = bool((m or {}).get('can_write'))
         if not m or not (can_write or role in ('owner', 'admin', 'editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
-    if scope == 'public' and not u.is_superadmin:
+    if scope == 'public' and not current_user.get('is_superadmin'):
         raise HTTPException(status_code=403, detail="Only superadmin can create public agents")
 
     existing = crud.get_agent_by_name(
@@ -75,7 +69,7 @@ def create_agent_endpoint(
         pass
     return created
 
-@router.get("/agents/", response_model=List[schemas.Agent])
+@router.get("/", response_model=List[schemas.Agent])
 def get_all_agents_endpoint(
     skip: int = 0,
     limit: int = 100,
@@ -113,7 +107,7 @@ def get_all_agents_endpoint(
     )
     return agents
 
-@router.get("/agents/{agent_id}", response_model=schemas.Agent)
+@router.get("/{agent_id}", response_model=schemas.Agent)
 def get_agent_endpoint(
     agent_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -145,7 +139,7 @@ def get_agent_endpoint(
         raise HTTPException(status_code=404, detail="Agent not found")
     return db_agent
 
-@router.get("/agents/search/", response_model=List[schemas.Agent])
+@router.get("/search/", response_model=List[schemas.Agent])
 def search_agents_endpoint(
     query: str,
     skip: int = 0,
@@ -185,34 +179,16 @@ def search_agents_endpoint(
     )
     return agents
 
-@router.delete("/agents/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_agent_endpoint(
     agent_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     agent = crud.get_agent(db, agent_id=agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    u, current_user = user_context
     if not can_write(agent, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     crud.delete_agent(db, agent_id=agent_id)
@@ -235,35 +211,17 @@ def delete_agent_endpoint(
         pass
     return {"message": "Agent deleted successfully"}
 
-@router.put("/agents/{agent_id}", response_model=schemas.Agent)
+@router.put("/{agent_id}", response_model=schemas.Agent)
 def update_agent_endpoint(
     agent_id: uuid.UUID,
     agent_update: schemas.AgentUpdate,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     agent = crud.get_agent(db, agent_id=agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    u, current_user = user_context
     if not can_write(agent, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     if agent_update.agent_name and agent_update.agent_name != agent.agent_name:
@@ -279,35 +237,17 @@ def update_agent_endpoint(
     updated_agent = crud.update_agent(db, agent_id=agent_id, agent=agent_update)
     return updated_agent
 
-@router.post("/agents/{agent_id}/change-scope", response_model=schemas.Agent)
+@router.post("/{agent_id}/change-scope", response_model=schemas.Agent)
 def change_agent_scope(
     agent_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     agent = crud.get_agent(db, agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    if not email:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    u = get_or_create_user(db, email=email, display_name=name)
-    memberships = get_user_memberships(db, u.id)
-    current_user = {
-        "id": u.id,
-        "is_superadmin": bool(u.is_superadmin),
-        "memberships": memberships,
-        "memberships_by_org": {m["organization_id"]: m for m in memberships},
-    }
+    u, current_user = user_context
     target_scope = (payload.get("visibility_scope") or '').lower()
     if target_scope not in ("personal", "organization", "public"):
         raise HTTPException(status_code=422, detail="Invalid target visibility_scope")

@@ -102,6 +102,8 @@ def _SessionLocal(_engine):
     return sessionmaker(bind=_engine, autoflush=False, autocommit=False)
 
 _current_session: ContextVar[object] = ContextVar("_current_session", default=None)
+# Fallback for threadpool contexts where ContextVar may not propagate
+_GLOBAL_SESSION = None
 
 # Per-test transactional session (fast cleanup without truncation)
 @pytest.fixture(autouse=True)
@@ -110,10 +112,13 @@ def db_session(_engine, _SessionLocal):
     trans = connection.begin()
     session = _SessionLocal(bind=connection)
     token = _current_session.set(session)
+    global _GLOBAL_SESSION
+    _GLOBAL_SESSION = session
     try:
         yield session
     finally:
         _current_session.reset(token)
+        _GLOBAL_SESSION = None
         session.close()
         trans.rollback()
         connection.close()
@@ -124,15 +129,22 @@ from fastapi.testclient import TestClient
 from core.api.main import app
 
 def _override_get_db():
+    # Prefer ContextVar-bound session
     session = _current_session.get()
-    if session is None:  # Fallback: create ad-hoc session (should not normally happen inside tests)
-        session = _SessionLocal()
-        try:
-            yield session
-        finally:
-            session.close()
-    else:
+    if session is not None:
         yield session
+        return
+    # Fall back to module-global when running inside threadpool where ContextVar may not propagate
+    global _GLOBAL_SESSION
+    if _GLOBAL_SESSION is not None:
+        yield _GLOBAL_SESSION
+        return
+    # Last resort: ad-hoc session
+    session = _SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 app.dependency_overrides[db_module.get_db] = _override_get_db
 

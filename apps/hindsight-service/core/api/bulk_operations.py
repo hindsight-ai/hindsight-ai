@@ -1,3 +1,9 @@
+"""
+Bulk operations API endpoints.
+
+Plans and triggers bulk move/delete operations across agents, keywords, and
+memory blocks, coordinating with the async execution layer.
+"""
 from typing import Optional, List
 import uuid
 import asyncio
@@ -13,7 +19,7 @@ from core.api.permissions import can_manage_org, get_org_membership, is_member_o
 from core import async_bulk_operations  # Updated import for async system
 from core.audit import log_bulk_operation, AuditAction, AuditStatus
 
-router = APIRouter(tags=["bulk-operations"])
+router = APIRouter(prefix="/bulk-operations", tags=["bulk-operations"])
 
 
 @router.get("/organizations/{org_id}/inventory")

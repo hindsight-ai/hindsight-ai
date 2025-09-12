@@ -1,3 +1,9 @@
+"""
+Organizations API endpoints.
+
+Manage organizations and memberships with admin/owner role enforcement and
+audited lifecycle actions.
+"""
 from typing import Optional, List
 import uuid
 from datetime import datetime, UTC
@@ -12,7 +18,7 @@ from core.api.auth import get_or_create_user
 from core.api.permissions import can_manage_org
 
 
-router = APIRouter(tags=["organizations"])
+router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

@@ -17,7 +17,7 @@ from core.api.deps import get_current_user_context
 from core.services.notification_service import NotificationService
 
 
-router = APIRouter(tags=["notifications"])
+router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.get("/", response_model=schemas.NotificationListResponse)

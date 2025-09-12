@@ -1,3 +1,9 @@
+"""
+Memory blocks API endpoints.
+
+CRUD, search, archive, feedback, and related utilities for memory blocks
+with comprehensive scope and permission checks.
+"""
 from typing import List, Optional
 import uuid, os, math
 from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
@@ -9,8 +15,9 @@ from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
 from core.api.permissions import can_read, can_write
 from core.search.search_service import SearchService
+from core.api.deps import get_current_user_context
 
-router = APIRouter(tags=["memory-blocks"])  # Preserve existing paths
+router = APIRouter(prefix="/memory-blocks", tags=["memory-blocks"])  # normalized prefix
 
 def parse_optional_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
     """Convert empty strings to None, otherwise parse as UUID"""
@@ -22,32 +29,20 @@ def parse_optional_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
         raise HTTPException(status_code=422, detail=f"Invalid UUID format: {value}")
 
 
-@router.post("/memory-blocks/", response_model=schemas.MemoryBlock, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas.MemoryBlock, status_code=status.HTTP_201_CREATED)
 def create_memory_block_endpoint(
     memory_block: schemas.MemoryBlockCreate,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     agent = crud.get_agent(db, agent_id=memory_block.agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    if not email:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    u = get_or_create_user(db, email=email, display_name=name)
-    memberships = get_user_memberships(db, u.id)
-    memberships_by_org = {m["organization_id"]: m for m in memberships}
+    u, current_user = user_context
+    memberships_by_org = current_user.get('memberships_by_org', {})
     scope = memory_block.visibility_scope or 'personal'
     org_id = str(memory_block.organization_id) if getattr(memory_block, 'organization_id', None) else None
-    if scope == 'public' and not u.is_superadmin:
+    if scope == 'public' and not current_user.get('is_superadmin'):
         raise HTTPException(status_code=403, detail="Only superadmin can create public data")
     if scope == 'organization':
         if not org_id or org_id not in memberships_by_org:
@@ -63,7 +58,7 @@ def create_memory_block_endpoint(
     db_memory_block = crud.create_memory_block(db=db, memory_block=mb)
     return db_memory_block
 
-@router.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks)
+@router.get("/", response_model=schemas.PaginatedMemoryBlocks)
 def get_all_memory_blocks_endpoint(
     skip: int = 0,
     limit: int = 100,
@@ -145,7 +140,64 @@ def get_all_memory_blocks_endpoint(
         "total_pages": total_pages
     }
 
-@router.get("/memory-blocks/archived/", response_model=schemas.PaginatedMemoryBlocks)
+@router.get("/{memory_id}/keywords/", response_model=List[schemas.Keyword])
+def get_memory_block_keywords_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
+    db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
+    if not db_memory_block:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+
+    keywords = crud.get_memory_block_keywords(db, memory_id=memory_id)
+    return keywords
+
+@router.post("/{memory_id}/keywords/{keyword_id}", response_model=schemas.MemoryBlockKeywordAssociation, status_code=status.HTTP_201_CREATED)
+def associate_keyword_with_memory_block_endpoint(
+    memory_id: uuid.UUID,
+    keyword_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context),
+):
+    db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
+    if not db_memory_block:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
+    if not db_keyword:
+        raise HTTPException(status_code=404, detail="Keyword not found")
+    existing_association = db.query(models.MemoryBlockKeyword).filter(
+        models.MemoryBlockKeyword.memory_id == memory_id,
+        models.MemoryBlockKeyword.keyword_id == keyword_id
+    ).first()
+    if existing_association:
+        raise HTTPException(status_code=409, detail="Association already exists")
+    u, current_user = user_context
+    if not can_write(db_memory_block, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if db_memory_block.visibility_scope != db_keyword.visibility_scope:
+        raise HTTPException(status_code=409, detail="Keyword scope mismatch with memory block")
+    association = crud.create_memory_block_keyword(db, memory_id=memory_id, keyword_id=keyword_id)
+    return association
+
+@router.delete("/{memory_id}/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
+def disassociate_keyword_from_memory_block_endpoint(
+    memory_id: uuid.UUID,
+    keyword_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context),
+):
+    db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
+    if not db_memory_block:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
+    if not db_keyword:
+        raise HTTPException(status_code=404, detail="Keyword not found")
+    u, current_user = user_context
+    if not can_write(db_memory_block, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    success = crud.delete_memory_block_keyword(db, memory_id=memory_id, keyword_id=keyword_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Association not found")
+    return {"message": "Association deleted successfully"}
+
+@router.get("/archived/", response_model=schemas.PaginatedMemoryBlocks)
 def get_archived_memory_blocks_endpoint(
     skip: int = 0,
     limit: int = 100,
@@ -250,7 +302,7 @@ def get_archived_memory_blocks_endpoint(
         "total_pages": total_pages
     }
 
-@router.get("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
+@router.get("/{memory_id}", response_model=schemas.MemoryBlock)
 def get_memory_block_endpoint(
     memory_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -282,68 +334,32 @@ def get_memory_block_endpoint(
         raise HTTPException(status_code=403, detail="Forbidden")
     return db_memory_block
 
-@router.put("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
+@router.put("/{memory_id}", response_model=schemas.MemoryBlock)
 def update_memory_block_endpoint(
     memory_id: uuid.UUID,
     memory_block: schemas.MemoryBlockUpdate,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    u, current_user = user_context
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     updated = crud.update_memory_block(db, memory_id=memory_id, memory_block=memory_block)
     return updated
 
-@router.post("/memory-blocks/{memory_id}/archive", response_model=schemas.MemoryBlock)
+@router.post("/{memory_id}/archive", response_model=schemas.MemoryBlock)
 def archive_memory_block_endpoint(
     memory_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    u, current_user = user_context
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     db_memory_block = crud.archive_memory_block(db, memory_id=memory_id)
@@ -351,7 +367,7 @@ def archive_memory_block_endpoint(
         raise HTTPException(status_code=404, detail="Memory block not found")
     return db_memory_block
 
-@router.delete("/memory-blocks/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
 def soft_delete_memory_block_endpoint(
     memory_id: uuid.UUID,
     db: Session = Depends(get_db),
@@ -385,34 +401,16 @@ def soft_delete_memory_block_endpoint(
         crud.archive_memory_block(db, memory_id)
     return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
 
-@router.delete("/memory-blocks/{memory_id}/hard-delete", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{memory_id}/hard-delete", status_code=status.HTTP_204_NO_CONTENT)
 def hard_delete_memory_block_endpoint(
     memory_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    u, current_user = user_context
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     success = crud.delete_memory_block(db, memory_id=memory_id)
@@ -420,37 +418,19 @@ def hard_delete_memory_block_endpoint(
         raise HTTPException(status_code=404, detail="Memory block not found")
     return {"message": "Memory block hard deleted successfully"}
 
-@router.post("/memory-blocks/{memory_id}/feedback/", response_model=schemas.MemoryBlock)
+@router.post("/{memory_id}/feedback/", response_model=schemas.MemoryBlock)
 def report_memory_feedback_endpoint(
     memory_id: uuid.UUID,
     feedback: schemas.FeedbackLogCreate,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context),
 ):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
         raise HTTPException(status_code=404, detail="Memory block not found")
     if feedback.memory_id != memory_id:
         raise HTTPException(status_code=400, detail="Memory ID mismatch")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    u, current_user = user_context
     if not can_write(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     updated_memory = crud.report_memory_feedback(
@@ -461,7 +441,7 @@ def report_memory_feedback_endpoint(
     )
     return updated_memory
 
-@router.get("/memory-blocks/search/", response_model=List[schemas.MemoryBlock])
+@router.get("/search/", response_model=List[schemas.MemoryBlock])
 def search_memory_blocks_endpoint(
     keywords: str,
     agent_id: Optional[uuid.UUID] = None,
