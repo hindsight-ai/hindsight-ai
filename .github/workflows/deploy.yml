@@ -257,7 +257,7 @@ jobs:
             # Validate environment variables before deployment
             echo "Validating environment variables..."
             export DEPLOYMENT_ENV="${{ env.ENV_NAME }}"
-            if ! bash /tmp/check_env.sh; then
+            if ! bash check_env.sh; then
               echo "❌ Environment validation failed! Deployment aborted."
               exit 1
             fi
