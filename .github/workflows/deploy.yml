@@ -176,7 +176,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: "${{ env.COMPOSE_FILE }},config/,templates/,letsencrypt/,check_env.sh"
+          source: "${{ env.COMPOSE_FILE }},config/,templates/,letsencrypt/,check_env.sh,.env.example"
           target: "~/${{ env.SERVER_DIR }}"
 
       - name: Execute deployment commands on remote server
