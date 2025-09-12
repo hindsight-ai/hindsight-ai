@@ -227,6 +227,7 @@ jobs:
             POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
             POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
             HINDSIGHT_SERVICE_API_URL=${{ secrets.API_URL }}
+            REACT_APP_HINDSIGHT_SERVICE_API_URL=https://${{ secrets.REACT_APP_HINDSIGHT_SERVICE_API_URL }}
             BACKEND_BUILD_SHA=${{ github.sha }}
             FRONTEND_BUILD_SHA=${{ github.sha }}
             BUILD_TIMESTAMP=${{ env.BUILD_TIMESTAMP }}
