@@ -5,13 +5,25 @@
  * Follows the same patterns as existing services (authService, organizationService).
  */
 
-// Use the same base URL pattern as other services
+// Base URL resolution (align with other services and enforce https when needed)
 let API_BASE_URL: string = '/api';
 try {
   if (typeof window !== 'undefined' && (window as any).__ENV__?.HINDSIGHT_SERVICE_API_URL) {
     API_BASE_URL = (window as any).__ENV__.HINDSIGHT_SERVICE_API_URL;
   } else if (typeof process !== 'undefined' && process.env?.VITE_HINDSIGHT_SERVICE_API_URL) {
-    API_BASE_URL = process.env.VITE_HINDSIGHT_SERVICE_API_URL;
+    API_BASE_URL = process.env.VITE_HINDSIGHT_SERVICE_API_URL as string;
+  }
+} catch {}
+
+// Normalize protocol: if page is https and base is http, force https
+try {
+  if (typeof window !== 'undefined' && API_BASE_URL) {
+    const isHttps = window.location.protocol === 'https:';
+    const url = new URL(API_BASE_URL, window.location.origin);
+    if (isHttps && url.protocol === 'http:') {
+      url.protocol = 'https:';
+      API_BASE_URL = url.toString().replace(/\/$/, '');
+    }
   }
 } catch {}
 
@@ -19,25 +31,7 @@ const isGuest = (): boolean => {
   try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; }
 };
 
-const base = () => {
-  const relativeUrl = isGuest() ? '/guest-api' : API_BASE_URL;
-  
-  let absoluteUrl;
-  if (typeof window !== 'undefined') {
-    const currentOrigin = window.location.origin;
-    const isDev = currentOrigin.includes(':3000');
-    
-    if (isDev) {
-      absoluteUrl = `http://localhost:3000${relativeUrl}`;
-    } else {
-      absoluteUrl = `${currentOrigin}${relativeUrl}`;
-    }
-  } else {
-    absoluteUrl = relativeUrl;
-  }
-  
-  return absoluteUrl;
-};
+const base = () => (isGuest() ? '/guest-api' : API_BASE_URL);
 
 // TypeScript interfaces for notification data
 export interface Notification {
