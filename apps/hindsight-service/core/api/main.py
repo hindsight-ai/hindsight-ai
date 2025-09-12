@@ -6,7 +6,7 @@ from starlette.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi.middleware.cors import CORSMiddleware
 import math # Import math for ceil
 
@@ -22,6 +22,7 @@ from core.db.database import engine, get_db
 from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
+from core.api.deps import get_current_user_context
 from core.api.orgs import router as orgs_router
 from core.api.agents import router as agents_router
 from core.api.keywords import router as keywords_router
@@ -39,6 +40,12 @@ app = FastAPI(
     description="API for managing AI agent memories, including creation, retrieval, and feedback.",
     version="1.0.0",
 )
+
+# Avoid implicit trailing-slash redirects to keep URL handling predictable
+try:
+    app.router.redirect_slashes = False
+except Exception:
+    pass
 
 origins = [
     "http://localhost",
@@ -368,10 +375,7 @@ def get_build_info():
 async def support_contact(
     request: dict = Body(default={}),
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_and_context = Depends(get_current_user_context),
 ):
     """
     Accepts a support contact request from an authenticated user and dispatches an email
@@ -382,18 +386,12 @@ async def support_contact(
     - frontend: { service_name, version, build_sha, build_timestamp, image_tag }
     - context: { current_url, user_agent, user_email }
     """
-    # Identify user (required unless DEV_MODE=true, which is handled by middleware)
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-
-    if not email:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    user = get_or_create_user(db, email=email, display_name=name)
+    user, current_user_context = user_and_context
+    
+    # Extract payload
+    message = (request or {}).get("message") or ""
+    frontend = (request or {}).get("frontend") or {}
+    context = (request or {}).get("context") or {}
 
     # Extract payload
     message = (request or {}).get("message") or ""
@@ -427,7 +425,6 @@ async def support_contact(
                 db_models.EmailNotificationLog.event_type == 'support_contact'
             ).order_by(desc(db_models.EmailNotificationLog.created_at)).first()
             if last and last.created_at is not None:
-                from datetime import datetime, timezone
                 now = datetime.now(timezone.utc)
                 elapsed = (now - last.created_at).total_seconds()
                 if elapsed < interval_seconds:

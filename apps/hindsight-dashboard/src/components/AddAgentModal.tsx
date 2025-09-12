@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Portal from './Portal';
 import agentService from '../api/agentService';
 
 interface AddAgentModalProps {
@@ -60,6 +61,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
   if (!isOpen) return null;
 
   return (
+    <Portal>
     <div className="dialog-overlay" onClick={handleBackdropClick}>
       <div className="dialog-box" onClick={handleModalContentClick}>
         <h2>Add New Agent</h2>
@@ -104,6 +106,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
         </div>
       </div>
     </div>
+    </Portal>
   );
 };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Portal from './Portal';
 import memoryService from '../api/memoryService';
 
 interface AddKeywordModalProps { isOpen: boolean; onClose: () => void; onSuccess?: () => void; }
@@ -30,6 +31,7 @@ const AddKeywordModal: React.FC<AddKeywordModalProps> = ({ isOpen, onClose, onSu
   if (!isOpen) return null;
 
   return (
+    <Portal>
     <div className="dialog-overlay" onClick={handleBackdropClick}>
       <div className="dialog-box" onClick={handleModalContentClick}>
         <h2>Add New Keyword</h2>
@@ -48,6 +50,7 @@ const AddKeywordModal: React.FC<AddKeywordModalProps> = ({ isOpen, onClose, onSu
         </div>
       </div>
     </div>
+    </Portal>
   );
 };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Portal from './Portal';
 import memoryService, { Keyword } from '../api/memoryService';
 import notificationService from '../services/notificationService';
 import StatCard from './StatCard';
@@ -450,7 +451,8 @@ const KeywordManager: React.FC = () => {
 
       {/* Add Keyword Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <Portal>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Add New Keyword</h3>
             <div className="mb-4">
@@ -487,11 +489,13 @@ const KeywordManager: React.FC = () => {
             </div>
           </div>
         </div>
+        </Portal>
       )}
 
       {/* Memory Block Associations Modal */}
       {showAssociationsModal && selectedKeyword && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <Portal>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
@@ -616,6 +620,7 @@ const KeywordManager: React.FC = () => {
             </div>
           </div>
         </div>
+        </Portal>
       )}
     </div>
   );

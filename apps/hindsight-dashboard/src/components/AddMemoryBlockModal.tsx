@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Portal from './Portal';
 import memoryService from '../api/memoryService';
 import agentService from '../api/agentService';
 import notificationService from '../services/notificationService';
@@ -166,6 +167,7 @@ const AddMemoryBlockModal: React.FC<AddMemoryBlockModalProps> = ({ isOpen, onClo
   if (!isOpen) return null;
 
   return (
+    <Portal>
     <div className="dialog-overlay" onClick={handleBackdropClick}>
       <div className="dialog-box" onClick={handleModalContentClick}>
         <h2>Add New Memory Block</h2>
@@ -311,6 +313,7 @@ const AddMemoryBlockModal: React.FC<AddMemoryBlockModalProps> = ({ isOpen, onClo
         </div>
       </div>
     </div>
+    </Portal>
   );
 };
 

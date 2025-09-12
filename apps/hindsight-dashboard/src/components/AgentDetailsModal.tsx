@@ -88,7 +88,7 @@ const AgentDetailsModal: React.FC<AgentDetailsModalProps> = ({ isOpen, onClose, 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => { if (e.target === e.currentTarget) { onClose(); } };
 
   return createPortal(
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[9999] p-4" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', minHeight: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: 9999 }} onClick={(e) => { if (e.target === e.currentTarget) { onClose(); } }}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-start justify-center z-[9999] p-4" onClick={(e) => { if (e.target === e.currentTarget) { onClose(); } }}>
       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200 flex flex-col">
         {/* Header - Fixed at top */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">

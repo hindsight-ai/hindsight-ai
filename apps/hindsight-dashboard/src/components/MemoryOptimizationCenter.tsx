@@ -6,6 +6,7 @@ import notificationService from '../services/notificationService';
 import MemoryBlockDetailModal from './MemoryBlockDetailModal';
 import KeywordSuggestionModal from './KeywordSuggestionModal';
 import ProcessingDialog from './ProcessingDialog';
+import Portal from './Portal';
 import CompactionSettingsModal from './CompactionSettingsModal';
 
 interface Suggestion {
@@ -531,7 +532,8 @@ const MemoryOptimizationCenter: FC = () => {
     if (!isOpen || !suggestion) return null;
 
     return (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <Portal>
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm overflow-y-auto h-full w-full z-50">
         <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
           <div className="mt-3">
             {/* Header */}
@@ -684,6 +686,7 @@ const MemoryOptimizationCenter: FC = () => {
           </div>
         </div>
       </div>
+      </Portal>
     );
   };
 

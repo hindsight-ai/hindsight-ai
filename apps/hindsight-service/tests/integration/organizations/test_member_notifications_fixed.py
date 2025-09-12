@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from core.db import models
+from core.db.database import get_db
 from core.services.notification_service import NotificationService
 from core.services.transactional_email_service import TransactionalEmailService
 
@@ -12,13 +13,14 @@ from core.services.transactional_email_service import TransactionalEmailService
 class TestMemberNotifications:
     """Test notification creation when adding organization members."""
     
-    def test_add_member_creates_notification(self, client: TestClient, org_owner_context, db_session):
+    def test_add_member_creates_notification(self, client: TestClient, org_owner_context):
         """Test that adding a member creates an in-app notification."""
         owner, organization = org_owner_context
         
         # Create another user to add as member
         member_email = "newmember@example.com"
         
+        # Use headers for authentication
         response = client.post(
             f"/organizations/{organization.id}/members",
             json={
@@ -29,11 +31,13 @@ class TestMemberNotifications:
             },
             headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
         )
-
+            
         assert response.status_code == 201
         
         # Check if notification was created for the new member
         # First, find the newly created user
+        session = client.app.dependency_overrides[get_db]
+        db_session = next(session())
         
         new_user = db_session.query(models.User).filter(
             models.User.email == member_email
@@ -48,11 +52,10 @@ class TestMemberNotifications:
         ).first()
         
         assert notification is not None
-        assert "Welcome to" in notification.title
-        assert organization.name in notification.message
+        assert notification.title == "Welcome to Test Org!"
+        assert "added you to the organization" in notification.message
         meta = notification.get_metadata() if hasattr(notification, 'get_metadata') else notification.metadata_json
         assert meta.get("organization_id") == str(organization.id)
-        assert meta.get("organization_name") == organization.name
         assert meta.get("added_by_user_id") == str(owner.id)
         assert meta.get("role") == "editor"
 
@@ -69,6 +72,7 @@ class TestMemberNotifications:
         
         new_member_email = "emailtest@example.com"
         
+        # Use headers for authentication
         response = client.post(
             f"/organizations/{organization.id}/members",
             json={
@@ -79,7 +83,7 @@ class TestMemberNotifications:
             },
             headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
         )
-
+        
         assert response.status_code == 201
         
         # Give background thread time to execute
@@ -88,9 +92,18 @@ class TestMemberNotifications:
         
         # Verify email service was called
         mock_email_service.assert_called_once()
-        mock_service_instance.render_template.assert_called()
+        mock_service_instance.render_template.assert_called_once_with(
+            "organization_invitation",
+            {
+                "user_name": new_member_email.split('@')[0],  # Default name from email
+                "organization_name": organization.name,
+                "invited_by": owner.display_name or owner.email,  # Use display_name if available
+                "role": "editor",
+                "dashboard_url": "https://hindsight-ai.com/dashboard"
+            }
+        )
 
-    def test_add_member_with_different_roles(self, client: TestClient, org_owner_context, db_session):
+    def test_add_member_with_different_roles(self, client: TestClient, org_owner_context):
         """Test notifications work with different member roles."""
         owner, organization = org_owner_context
         
@@ -109,10 +122,13 @@ class TestMemberNotifications:
                 },
                 headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
             )
-
+            
             assert response.status_code == 201
             
             # Verify notification contains correct role
+            session = client.app.dependency_overrides[get_db]
+            db_session = next(session())
+            
             member = db_session.query(models.User).filter(models.User.email == member_email).first()
             notification = db_session.query(models.Notification).filter(
                 models.Notification.user_id == member.id,
@@ -124,7 +140,7 @@ class TestMemberNotifications:
             meta = notification.get_metadata() if hasattr(notification, 'get_metadata') else notification.metadata_json
             assert meta["role"] == role
 
-    def test_add_existing_member_no_duplicate_notification(self, client: TestClient, org_owner_context, db_session):
+    def test_add_existing_member_no_duplicate_notification(self, client: TestClient, org_owner_context):
         """Test that adding an existing member doesn't create duplicate notifications."""
         owner, organization = org_owner_context
         
@@ -141,10 +157,13 @@ class TestMemberNotifications:
             },
             headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
         )
-
+        
         assert first_response.status_code == 201
         
         # Get the newly created user
+        session = client.app.dependency_overrides[get_db]
+        db_session = next(session())
+        
         member_user = db_session.query(models.User).filter(
             models.User.email == member_email
         ).first()
@@ -165,8 +184,8 @@ class TestMemberNotifications:
             },
             headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
         )
-
-        # Should conflict on re-adding existing member
+        
+        # Should return conflict for existing member
         assert second_response.status_code == 409
         
         # Check notification count hasn't increased
@@ -176,7 +195,7 @@ class TestMemberNotifications:
         
         assert final_count == initial_count  # No duplicate notifications
 
-    def test_add_member_unauthorized_no_notification(self, client: TestClient, user_factory, organization_factory, db_session):
+    def test_add_member_unauthorized_no_notification(self, client: TestClient, user_factory, organization_factory):
         """Test that unauthorized member addition doesn't create notifications."""
         # Create a regular user (not org owner)
         unauthorized_user = user_factory("unauthorized@example.com")
@@ -200,6 +219,9 @@ class TestMemberNotifications:
         assert response.status_code == 403
         
         # Check no notification was created
+        session = client.app.dependency_overrides[get_db]
+        db_session = next(session())
+        
         notifications = db_session.query(models.Notification).filter(
             models.Notification.event_type == "organization_invitation"
         ).count()
@@ -207,7 +229,7 @@ class TestMemberNotifications:
         assert notifications == 0
 
     @patch('core.services.transactional_email_service.get_transactional_email_service')
-    def test_email_failure_does_not_block_member_addition(self, mock_email_service, client: TestClient, org_owner_context, db_session):
+    def test_email_failure_does_not_block_member_addition(self, mock_email_service, client: TestClient, org_owner_context):
         """Test that email failure doesn't prevent member addition."""
         owner, organization = org_owner_context
         
@@ -218,7 +240,7 @@ class TestMemberNotifications:
         
         member_email = "emailfail@example.com"
         
-        # Act as owner via headers
+        # Use headers for authentication
         response = client.post(
             f"/organizations/{organization.id}/members",
             json={
@@ -234,6 +256,8 @@ class TestMemberNotifications:
         assert response.status_code == 201
         
         # Verify member was actually added
+        session = client.app.dependency_overrides[get_db]
+        db_session = next(session())
         
         new_user = db_session.query(models.User).filter(
             models.User.email == member_email
@@ -257,12 +281,13 @@ class TestMemberNotifications:
         
         assert notification is not None
 
-    def test_notification_metadata_completeness(self, client: TestClient, org_owner_context, db_session):
+    def test_notification_metadata_completeness(self, client: TestClient, org_owner_context):
         """Test that notification metadata contains all expected fields."""
         owner, organization = org_owner_context
         
         member_email = "metadata@example.com"
         
+        # Use headers for authentication
         response = client.post(
             f"/organizations/{organization.id}/members",
             json={
@@ -277,6 +302,8 @@ class TestMemberNotifications:
         assert response.status_code == 201
         
         # Get the notification
+        session = client.app.dependency_overrides[get_db]
+        db_session = next(session())
         
         new_user = db_session.query(models.User).filter(
             models.User.email == member_email
@@ -291,7 +318,7 @@ class TestMemberNotifications:
         
         # Verify all expected metadata fields
         metadata = notification.get_metadata() if hasattr(notification, 'get_metadata') else notification.metadata_json
-        required_fields = ["organization_id", "organization_name", "added_by_user_id", "role"]
+        required_fields = ["organization_id", "added_by_user_id", "role"]
         
         for field in required_fields:
             assert field in metadata, f"Missing metadata field: {field}"
@@ -300,7 +327,7 @@ class TestMemberNotifications:
         assert metadata["added_by_user_id"] == str(owner.id)
         assert metadata["role"] == "admin"
 
-    def test_member_addition_with_display_names(self, client: TestClient, organization_factory, user_factory, db_session):
+    def test_member_addition_with_display_names(self, client: TestClient, organization_factory, user_factory):
         """Test notifications use display names when available."""
         # Create organization with owner who has display name
         owner = user_factory("displayowner@example.com")
@@ -309,6 +336,9 @@ class TestMemberNotifications:
         org = organization_factory("Display Test Org")
         
         # Create membership for owner
+        session = client.app.dependency_overrides[get_db]
+        db_session = next(session())
+        
         membership = models.OrganizationMembership(
             organization_id=org.id,
             user_id=owner.id,
@@ -321,6 +351,7 @@ class TestMemberNotifications:
         
         member_email = "displaymember@example.com"
         
+        # Use headers for authentication
         response = client.post(
             f"/organizations/{org.id}/members",
             json={
@@ -345,8 +376,8 @@ class TestMemberNotifications:
         ).first()
         
         assert notification is not None
-        # Message should reference the organization name and role
-        assert org.name in notification.message
+        # Notification should reference display name in message
+        assert "Display Owner" in notification.message
 
 
 class TestNotificationService:
@@ -366,7 +397,7 @@ class TestNotificationService:
         db_session.flush()
         
         # Create notification
-        notification = service.create_notification(
+        notification_id = service.create_notification(
             user_id=user.id,
             event_type="organization_invitation",
             title="Test Notification",
@@ -376,6 +407,13 @@ class TestNotificationService:
                 "organization_id": str(uuid.uuid4())
             }
         )
+        
+        assert notification_id is not None
+        
+        # Verify notification was created
+        notification = db_session.query(models.Notification).filter(
+            models.Notification.id == notification_id.id
+        ).first()
         
         assert notification is not None
         assert notification.user_id == user.id

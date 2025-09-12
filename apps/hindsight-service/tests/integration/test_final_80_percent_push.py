@@ -168,7 +168,7 @@ class TestFinalCoveragePush:
         """Test audit log filtering edge cases"""
         # Test with invalid date ranges
         response = client.get(
-            "/audits",
+            "/audits/",
             params={
                 "start_date": "invalid-date",
                 "end_date": "2024-01-01T00:00:00Z"
@@ -300,7 +300,7 @@ class TestFinalCoveragePush:
         """Test pagination with edge case parameters"""
         # Test with invalid pagination parameters
         response = client.get(
-            "/memory-blocks",
+            "/memory-blocks/",
             params={
                 "page": -1,  # Negative page
                 "per_page": 0  # Zero per_page

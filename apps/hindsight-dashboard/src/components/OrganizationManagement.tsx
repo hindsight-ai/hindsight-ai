@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Portal from './Portal';
 import { useAuth } from '../context/AuthContext';
 import { useOrganization } from '../context/OrganizationContext';
 import organizationService, { Organization, OrganizationMember, CreateOrganizationData, AddMemberData } from '../api/organizationService';
@@ -107,7 +108,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
         setSelectedOrg(orgs[0]);
       }
     } catch (error) {
-      notificationService.showError('Failed to fetch organizations');
+      // Error notifications are now handled by the API service
       console.error('Error fetching organizations:', error);
     } finally {
       setLoading(false);
@@ -153,9 +154,10 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
       setSelectedOrg(newOrg);
       setCreateMode(false);
       setNewOrgData({ name: '', slug: '' });
-      notificationService.showSuccess(`Organization "${newOrg.name}" created successfully`);
+      // Success notification is now handled by the API service
     } catch (error) {
-      notificationService.showError(`Failed to create organization: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Error notifications are now handled by the API service
+      console.error('Failed to create organization:', error);
     }
   };
 
@@ -246,40 +248,45 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-            <span className="ml-2">Loading organizations...</span>
+      <Portal>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              <span className="ml-2">Loading organizations...</span>
+            </div>
           </div>
         </div>
-      </div>
+      </Portal>
     );
   }
 
   if (!hasAccess) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">Access Denied</h2>
-            <button
-              onClick={handleClose}
-              className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
-            >
-              ×
-            </button>
-          </div>
-                    <div className="text-center py-8">
-            <p className="text-gray-600">You need to be authenticated to access organization management.</p>
+      <Portal>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Access Denied</h2>
+              <button
+                onClick={handleClose}
+                className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+            <div className="text-center py-8">
+              <p className="text-gray-600">You need to be authenticated to access organization management.</p>
+            </div>
           </div>
         </div>
-      </div>
+      </Portal>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <Portal>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-800">Organization Management</h2>
@@ -580,7 +587,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
 
       {/* Mode Switch Confirmation Dialog */}
       {showModeConfirmation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-60">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <div className="flex items-center mb-4">
               <div className="flex-shrink-0 w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
@@ -617,7 +624,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
 
       {/* Delete Organization Confirmation Dialog */}
       {showDeleteConfirmation && selectedOrg && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-60">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <div className="flex items-center mb-4">
               <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -652,6 +659,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
         </div>
       )}
     </div>
+    </Portal>
   );
 };
 

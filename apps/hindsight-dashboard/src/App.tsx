@@ -15,6 +15,7 @@ import MemoryOptimizationCenter from './components/MemoryOptimizationCenter';
 import SupportPage from './components/SupportPage';
 import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
+import DebugPanel from './components/DebugPanel';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { OrgProvider } from './context/OrgContext';
 import { OrganizationProvider } from './context/OrganizationContext';
@@ -29,6 +30,7 @@ function AppContent() {
   const location = useLocation();
   const { user, loading, guest } = useAuth() as any; // Will type AuthContext after migration
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
 
   useEffect(() => { document.title = 'Hindsight-AI'; }, []);
   useEffect(() => { try { window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch {} }, [location.pathname, location.search, (user as UserInfo)?.authenticated, guest]);
@@ -82,7 +84,8 @@ function AppContent() {
   return (
     <div className="App" data-testid="dashboard-container">
       <NotificationContainer />
-      <Layout title={getPageTitle(location.pathname)} onOpenAbout={() => setShowAboutModal(true)}>
+      <DebugPanel visible={showDebugPanel} />
+      <Layout title={getPageTitle(location.pathname)} onOpenAbout={() => setShowAboutModal(true)} onToggleDebugPanel={() => setShowDebugPanel(prev => !prev)}>
         <Routes>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/memory-blocks" element={<MemoryBlocksPage key={location.pathname} />} />

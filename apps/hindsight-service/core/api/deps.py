@@ -60,3 +60,21 @@ def get_current_user_context(
 
 # Backwards compatible alias name some modules used internally.
 _require_current_user = get_current_user_context
+
+# Backwards-compat shim used by some integration tests and older routes.
+# Historically returned only the ORM user; keep that behavior here.
+def get_current_user_or_oauth(
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    user, _ctx = get_current_user_context(
+        db=db,
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    return user

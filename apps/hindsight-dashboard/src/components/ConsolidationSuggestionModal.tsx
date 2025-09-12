@@ -91,17 +91,7 @@ const ConsolidationSuggestionModal: React.FC<ConsolidationSuggestionModalProps> 
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[9999] p-4"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        minHeight: '100vh',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        zIndex: 9999
-      }}
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-start justify-center z-[9999] p-4"
       onClick={handleBackdropClick}
     >
       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200 flex flex-col">

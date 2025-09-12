@@ -61,19 +61,6 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
               <OrganizationSwitcher />
             </div>
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-              {/* Support / Buy me a coffee */}
-              <a
-                href="/support"
-                title="Support Hindsight AI"
-                aria-label="Support Hindsight AI"
-                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-400 hover:bg-amber-500 text-white shadow-sm hover:shadow transition-all duration-150"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 8h13a4 4 0 010 8H16a5 5 0 01-5 5H8a5 5 0 01-5-5V8z" />
-                  <path d="M16 8h2a3 3 0 010 6h-2" />
-                  <path d="M6 1s1 1 0 2 1 1 0 2 1 1 0 2" />
-                </svg>
-              </a>
               <select className="border border-gray-300 rounded-md px-2 py-1 text-xs sm:text-sm bg-white" value={String(scale)} onChange={e => updateScale(parseFloat(e.target.value))} aria-label="Display scale" title="Display scale">
                 <option value="1">100%</option>
                 <option value="0.75">75%</option>

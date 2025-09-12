@@ -136,9 +136,8 @@ const MemoryBlockDetailModal: React.FC<MemoryBlockDetailModalProps> = ({ blockId
 
   return createPortal(
     <div 
-      className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-start justify-center p-4"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm overflow-y-auto h-full w-full z-[9999] flex items-start justify-center p-4"
       onClick={handleBackdropClick}
-      style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(75, 85, 99, 0.5)', zIndex: 9999 }}
     >
       <div className="relative mt-8 mx-auto p-5 border border-gray-200 w-11/12 max-w-4xl shadow-xl rounded-lg bg-white animate-in fade-in-0 zoom-in-95 duration-200"
            onClick={(e) => e.stopPropagation()}

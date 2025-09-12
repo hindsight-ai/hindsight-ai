@@ -3,7 +3,14 @@ import organizationService from '../organizationService';
 // Mock notificationService to verify 401 handling
 jest.mock('../../services/notificationService', () => ({
   __esModule: true,
-  default: { show401Error: jest.fn(), showWarning: jest.fn() },
+  default: { 
+    show401Error: jest.fn(), 
+    showWarning: jest.fn(),
+    showError: jest.fn(),
+    showSuccess: jest.fn(),
+    showNetworkError: jest.fn(),
+    showApiError: jest.fn()
+  },
 }));
 
 describe('organizationService', () => {

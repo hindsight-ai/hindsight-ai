@@ -5,6 +5,7 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onCollapseChange?: (collapsed: boolean) => void;
+  onToggleDebugPanel?: () => void;
 }
 
 interface NavItem {
@@ -13,7 +14,7 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onCollapseChange }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onCollapseChange, onToggleDebugPanel }) => {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -32,14 +33,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onCollapseChange }) 
     { name: 'Consolidation', path: '/consolidation-suggestions', icon: (<svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>) },
     { name: 'Archived', path: '/archived-memory-blocks', icon: (<svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>) },
     { name: 'AI Optimization', path: '/memory-optimization-center', icon: (<svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>) },
-    { name: 'Pruning', path: '/pruning-suggestions', icon: (<svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>) }
+    { name: 'Pruning', path: '/pruning-suggestions', icon: (<svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>) },
+    { name: 'Debug Panel', path: '#', icon: (<svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>) }
   ];
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
 
   return (
     <>
-      {isOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={onClose} />}
+      {isOpen && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} />}
       <aside className={`fixed top-0 left-0 h-screen z-50 ${isCollapsed ? 'w-16' : 'w-64'} flex-shrink-0 bg-[#0F172A] text-gray-300 flex flex-col overflow-y-auto transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
         <div className="h-16 flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-700">
           <div className={`flex flex-col transition-all duration-200 ${isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'}`}>
@@ -53,14 +55,34 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onCollapseChange }) 
           </button>
         </div>
         <nav className="flex-1 px-3 py-6 space-y-1">
-          {navigationItems.map(item => (
-            <Link key={item.path} to={item.path} className={`flex items-center ${isCollapsed ? 'justify-center px-3' : 'px-3'} py-3 text-sm font-medium rounded-lg transition-all duration-200 relative overflow-hidden ${isActive(item.path) ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-gray-700 text-gray-300 hover:text-white'}`} onClick={onClose} title={isCollapsed ? item.name : ''}>
-              <div className="flex items-center flex-1 min-w-0">
-                <div className="flex-shrink-0">{item.icon}</div>
-                <span className={`ml-3 transition-all duration-200 whitespace-nowrap ${isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'}`}>{item.name}</span>
-              </div>
-            </Link>
-          ))}
+          {navigationItems.map(item => {
+            if (item.name === 'Debug Panel') {
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => {
+                    onToggleDebugPanel?.();
+                    onClose();
+                  }}
+                  className={`flex items-center ${isCollapsed ? 'justify-center px-3' : 'px-3'} py-3 text-sm font-medium rounded-lg transition-all duration-200 relative overflow-hidden hover:bg-gray-700 text-gray-300 hover:text-white`}
+                  title={isCollapsed ? item.name : ''}
+                >
+                  <div className="flex items-center flex-1 min-w-0">
+                    <div className="flex-shrink-0">{item.icon}</div>
+                    <span className={`ml-3 transition-all duration-200 whitespace-nowrap ${isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'}`}>{item.name}</span>
+                  </div>
+                </button>
+              );
+            }
+            return (
+              <Link key={item.path} to={item.path} className={`flex items-center ${isCollapsed ? 'justify-center px-3' : 'px-3'} py-3 text-sm font-medium rounded-lg transition-all duration-200 relative overflow-hidden ${isActive(item.path) ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-gray-700 text-gray-300 hover:text-white'}`} onClick={onClose} title={isCollapsed ? item.name : ''}>
+                <div className="flex items-center flex-1 min-w-0">
+                  <div className="flex-shrink-0">{item.icon}</div>
+                  <span className={`ml-3 transition-all duration-200 whitespace-nowrap ${isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'}`}>{item.name}</span>
+                </div>
+              </Link>
+            );
+          })}
         </nav>
         <div className={`px-4 py-4 border-t border-gray-700 transition-all duration-200 ${isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'}`}>
           <p className="text-xs text-gray-400 leading-tight">AI-Powered Memory Dashboard</p>

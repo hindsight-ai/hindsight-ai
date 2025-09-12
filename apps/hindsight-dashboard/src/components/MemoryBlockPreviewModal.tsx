@@ -135,17 +135,7 @@ const MemoryBlockPreviewModal: React.FC<MemoryBlockPreviewModalProps> = ({ isOpe
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[9999] p-4"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        minHeight: '100vh',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        zIndex: 9999
-      }}
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-start justify-center z-[9999] p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();

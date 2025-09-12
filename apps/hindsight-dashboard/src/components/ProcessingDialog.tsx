@@ -1,4 +1,5 @@
 import React from 'react';
+import Portal from './Portal';
 
 const formatDuration = (ms: number): string => {
   if (!ms || ms < 0) return '';
@@ -39,7 +40,8 @@ const ProcessingDialog: React.FC<ProcessingDialogProps> = ({
   const percent = Math.min(100, Math.max(0, Math.round(progress * 100)));
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-[100]">
+    <Portal>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100]">
       <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-xl p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -99,6 +101,7 @@ const ProcessingDialog: React.FC<ProcessingDialogProps> = ({
         )}
       </div>
     </div>
+    </Portal>
   );
 };
 

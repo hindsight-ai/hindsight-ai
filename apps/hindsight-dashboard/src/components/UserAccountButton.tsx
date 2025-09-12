@@ -65,7 +65,7 @@ const UserAccountButton: React.FC = () => {
             className="fixed inset-0 z-10"
             onClick={() => setShowDropdown(false)}
           ></div>
-          <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+          <div className="absolute right-0 mt-2 w-60 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
             <div className="px-4 py-3 border-b border-gray-200">
               <p className="text-sm font-medium text-gray-900">
                 {user.email || user.display_name || 'User'}
@@ -81,14 +81,40 @@ const UserAccountButton: React.FC = () => {
                   setShowOrgManagement(true);
                   setShowDropdown(false);
                 }}
-                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
+                className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
               >
+                {/* Organization icon */}
+                <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-6 9 6v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <path d="M9 22V12h6v10" />
+                </svg>
                 Manage Organizations
               </button>
+              <a
+                href="https://buymeacoffee.com/jeanibarz"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setShowDropdown(false)}
+                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
+              >
+                {/* Coffee icon */}
+                <svg className="w-4 h-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 8h13a4 4 0 010 8H16a5 5 0 01-5 5H8a5 5 0 01-5-5V8z" />
+                  <path d="M16 8h2a3 3 0 010 6h-2" />
+                  <path d="M6 1s1 1 0 2 1 1 0 2 1 1 0 2" />
+                </svg>
+                Support / Buy me a coffee
+              </a>
               <button
                 onClick={handleLogout}
-                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
+                className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
               >
+                {/* Sign out icon */}
+                <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <path d="M16 17l5-5-5-5" />
+                  <path d="M21 12H9" />
+                </svg>
                 Sign Out
               </button>
             </div>

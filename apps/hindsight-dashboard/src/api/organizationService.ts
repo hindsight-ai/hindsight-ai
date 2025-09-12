@@ -1,42 +1,6 @@
 import authService from './authService';
-
-// Prefer runtime env first; fall back to process env or relative '/api'
-let API_BASE_URL: string = '/api';
-try {
-  if (typeof window !== 'undefined' && (window as any).__ENV__?.HINDSIGHT_SERVICE_API_URL) {
-    API_BASE_URL = (window as any).__ENV__.HINDSIGHT_SERVICE_API_URL;
-  } else if (typeof process !== 'undefined' && process.env?.VITE_HINDSIGHT_SERVICE_API_URL) {
-    API_BASE_URL = process.env.VITE_HINDSIGHT_SERVICE_API_URL;
-  }
-} catch {}
-
-const isGuest = (): boolean => {
-  try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; }
-};
-
-const base = () => {
-  const relativeUrl = isGuest() ? '/guest-api' : API_BASE_URL;
-  
-  // Convert to absolute URL to avoid browser base URL resolution issues
-  let absoluteUrl;
-  if (typeof window !== 'undefined') {
-    // In development, ensure we use the correct port
-    const currentOrigin = window.location.origin;
-    const isDev = currentOrigin.includes(':3000');
-    
-    if (isDev) {
-      absoluteUrl = `http://localhost:3000${relativeUrl}`;
-    } else {
-      // In production, use current origin
-      absoluteUrl = `${currentOrigin}${relativeUrl}`;
-    }
-  } else {
-    absoluteUrl = relativeUrl; // Fallback for server-side rendering
-  }
-  
-  console.log('[DEBUG] organizationService base URL:', absoluteUrl, 'original:', relativeUrl, 'origin:', typeof window !== 'undefined' ? window.location.origin : 'N/A');
-  return absoluteUrl;
-};
+import notificationService from '../services/notificationService';
+import { apiFetch } from './http';
 
 export interface Organization {
   id: string;
@@ -76,18 +40,29 @@ const organizationService = {
   // Get all organizations for current user
   getOrganizations: async (): Promise<Organization[]> => {
     try {
-      const response = await fetch(`${base()}/organizations/`, {
-        method: 'GET',
-        credentials: 'include',
-      });
+      const response = await apiFetch('/organizations/', { ensureTrailingSlash: true });
       
       if (!response.ok) {
+        console.error('Error fetching organizations:', `HTTP error ${response.status}`);
+        
+        // Handle specific error cases without showing notifications for 401
+        // (401 is handled by auth interceptor and shows its own notification)
+        if (response.status !== 401) {
+          notificationService.showApiError(response.status, undefined, 'fetch organizations');
+        }
+        
         throw new Error(`HTTP error ${response.status}`);
       }
       
       return await response.json();
     } catch (error) {
       console.error('Error fetching organizations:', error);
+      
+      // Handle network errors
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        notificationService.showNetworkError();
+      }
+      
       throw error;
     }
   },
@@ -95,10 +70,7 @@ const organizationService = {
   // Get organizations that the user can manage (own/admin role for regular users, all for superadmins)
   getManageableOrganizations: async (): Promise<Organization[]> => {
     try {
-      const response = await fetch(`${base()}/organizations/manageable`, {
-        method: 'GET',
-        credentials: 'include',
-      });
+      const response = await apiFetch('/organizations/manageable');
       
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);
@@ -114,10 +86,7 @@ const organizationService = {
   // Get all organizations for administration (superadmin only)
   getOrganizationsAdmin: async (): Promise<Organization[]> => {
     try {
-      const response = await fetch(`${base()}/organizations/admin`, {
-        method: 'GET',
-        credentials: 'include',
-      });
+      const response = await apiFetch('/organizations/admin');
       
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);
@@ -133,10 +102,7 @@ const organizationService = {
   // Get specific organization
   getOrganization: async (orgId: string): Promise<Organization> => {
     try {
-      const response = await fetch(`${base()}/organizations/${orgId}`, {
-        method: 'GET',
-        credentials: 'include',
-      });
+      const response = await apiFetch(`/organizations/${orgId}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);
@@ -152,23 +118,38 @@ const organizationService = {
   // Create new organization
   createOrganization: async (data: CreateOrganizationData): Promise<Organization> => {
     try {
-      const response = await fetch(`${base()}/organizations/`, {
+      const response = await apiFetch('/organizations/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify(data),
       });
       
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`HTTP error ${response.status}: ${error}`);
+        const errorText = await response.text();
+        console.error('Error creating organization:', errorText);
+        
+        // Show appropriate toast notification based on status
+        notificationService.showApiError(response.status, errorText, 'create organization');
+        
+        throw new Error(`HTTP error ${response.status}: ${errorText}`);
       }
       
+      // Show success notification
+      notificationService.showSuccess('Organization created successfully!');
       return await response.json();
     } catch (error) {
       console.error('Error creating organization:', error);
+      
+      // Handle network errors
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        notificationService.showNetworkError();
+      } else if (error instanceof Error && !error.message.includes('HTTP error')) {
+        // Only show generic error if we haven't already shown a specific one
+        notificationService.showError('Failed to create organization. Please try again.');
+      }
+      
       throw error;
     }
   },
@@ -176,12 +157,11 @@ const organizationService = {
   // Update organization
   updateOrganization: async (orgId: string, data: Partial<CreateOrganizationData>): Promise<Organization> => {
     try {
-      const response = await fetch(`${base()}/organizations/${orgId}`, {
+      const response = await apiFetch(`/organizations/${orgId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify(data),
       });
       
@@ -200,10 +180,7 @@ const organizationService = {
   // Delete organization
   deleteOrganization: async (orgId: string): Promise<void> => {
     try {
-      const response = await fetch(`${base()}/organizations/${orgId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+      const response = await apiFetch(`/organizations/${orgId}`, { method: 'DELETE' });
       
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);
@@ -217,10 +194,7 @@ const organizationService = {
   // Get organization members
   getMembers: async (orgId: string): Promise<OrganizationMember[]> => {
     try {
-      const response = await fetch(`${base()}/organizations/${orgId}/members`, {
-        method: 'GET',
-        credentials: 'include',
-      });
+      const response = await apiFetch(`/organizations/${orgId}/members`);
       
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);
@@ -236,12 +210,11 @@ const organizationService = {
   // Add member to organization
   addMember: async (orgId: string, memberData: { email: string; role: string }): Promise<OrganizationMember> => {
     try {
-      const response = await fetch(`${base()}/organizations/${orgId}/members`, {
+      const response = await apiFetch(`/organizations/${orgId}/members`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify(memberData),
       });
       
@@ -260,12 +233,11 @@ const organizationService = {
   // Update member role/permissions
   updateMember: async (orgId: string, userId: string, data: UpdateMemberData): Promise<void> => {
     try {
-      const response = await fetch(`${base()}/organizations/${orgId}/members/${userId}`, {
+      const response = await apiFetch(`/organizations/${orgId}/members/${userId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify(data),
       });
       
@@ -282,10 +254,7 @@ const organizationService = {
   // Remove member from organization
   removeMember: async (orgId: string, userId: string): Promise<void> => {
     try {
-      const response = await fetch(`${base()}/organizations/${orgId}/members/${userId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+      const response = await apiFetch(`/organizations/${orgId}/members/${userId}`, { method: 'DELETE' });
       
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);

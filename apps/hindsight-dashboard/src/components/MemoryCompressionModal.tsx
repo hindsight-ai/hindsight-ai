@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Portal from './Portal';
 import memoryService, { MemoryBlock } from '../api/memoryService';
 import { UIMemoryBlock } from '../types/domain';
 import { MemoryCompactionResult } from './MemoryCompactionModal';
@@ -83,8 +84,9 @@ const MemoryCompressionModal: React.FC<MemoryCompressionModalProps> = ({
     Math.round((1 - compactionResult.compression_ratio) * 100) : 0;
 
   return (
+    <Portal>
     <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div 
@@ -372,6 +374,7 @@ const MemoryCompressionModal: React.FC<MemoryCompressionModalProps> = ({
         </div>
       </div>
     </div>
+    </Portal>
   );
 };
 

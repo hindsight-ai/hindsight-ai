@@ -14,8 +14,8 @@ const NotificationContainer: React.FC = () => {
 
   return (
     <div className="notification-container">
-      {notifications.slice().reverse().map((n, index) => (
-        <div key={n.id} className="notification-wrapper" style={{ position: 'relative', zIndex: 10000 - index, marginBottom: index < notifications.length - 1 ? '10px' : '0' }}>
+      {notifications.map((n, index) => (
+        <div key={n.id} className="notification-wrapper" style={{ zIndex: 99999 - index }}>
           <Notification message={n.message} type={n.type} duration={n.duration} onRefresh={n.onRefresh} onClose={() => notificationService.removeNotification(n.id)} />
         </div>
       ))}

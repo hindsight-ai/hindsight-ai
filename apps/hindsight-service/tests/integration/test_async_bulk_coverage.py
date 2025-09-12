@@ -228,7 +228,7 @@ class TestAsyncBulkOperationsCoverage:
         """Test complex query scenarios that might hit error paths"""
         # Test agents list with complex invalid filters
         response = client.get(
-            "/agents",
+            "/agents/",
             params={
                 "organization_id": "invalid-uuid",
                 "status": "invalid_status",

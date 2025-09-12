@@ -342,6 +342,7 @@ def add_member(
         models.OrganizationMembership.user_id == member_user.id,
     ).first()
     if exists:
+        # For legacy /organizations endpoints, preserve behavior: conflict on duplicate add
         raise HTTPException(status_code=409, detail="User already a member")
 
     m = models.OrganizationMembership(
@@ -381,12 +382,12 @@ def add_member(
             id=uuid.uuid4(),
             user_id=member_user.id,
             event_type="organization_invitation",
-            title=f"Added to {org.name}",
-            message=f"You have been added to the organization '{org.name}' with {role} role.",
+            title=f"Welcome to {org.name}!",
+            message=f"{user.display_name or user.email} added you to the organization '{org.name}' as {role}.",
             metadata_json={
                 "organization_id": str(org_id),
                 "organization_name": org.name,
-                "invited_by": user.display_name or user.email,
+                "added_by_user_id": str(user.id),
                 "role": role
             },
             created_at=datetime.now(UTC)

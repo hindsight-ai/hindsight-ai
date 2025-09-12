@@ -1,25 +1,37 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import notificationService from '../services/notificationService';
 
 const LoginPage: React.FC = () => {
-  const { enterGuestMode } = useAuth();
+  const { enterGuestMode, exitGuestMode } = useAuth();
   const location = useLocation();
 
   const handleSignIn = async () => {
-    // Check if we're in dev mode by testing the user-info endpoint
-    try {
-      const response = await fetch('/api/user-info');
-      if (response.ok) {
-        const userInfo = await response.json();
-        if (userInfo.authenticated && userInfo.email === 'dev@localhost') {
-          // We're in dev mode and already authenticated, just redirect
-          window.location.href = '/dashboard';
-          return;
+    const host = window.location.hostname;
+    const isLocal = host === 'localhost' || host === '127.0.0.1';
+
+    if (isLocal) {
+      // Ensure we are not in guest mode for auth checks
+      try { exitGuestMode(); } catch {}
+      // Dev experience: try backend dev user; if unavailable, guide the user
+      try {
+        const response = await fetch('/api/user-info', { credentials: 'include' });
+        if (response.ok) {
+          const userInfo = await response.json();
+          if (userInfo?.authenticated) {
+            window.location.href = '/dashboard';
+            return;
+          }
         }
+        // Backend reachable but not authenticated: suggest running with dev compose or use Guest
+        notificationService.showInfo('Authentication required. Use Guest mode in local dev, or start oauth2-proxy for full login.');
+        return;
+      } catch (error) {
+        // Likely backend is not running or unreachable
+        notificationService.showError('Backend unavailable (Bad Gateway). Start the backend: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d');
+        return;
       }
-    } catch (error) {
-      // Continue with OAuth flow if dev check fails
     }
 
     // Production OAuth flow

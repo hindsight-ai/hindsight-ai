@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import Portal from './Portal';
 import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import useModal from '../hooks/useModal';
@@ -106,6 +107,7 @@ const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({ i
   if (!isOpen) return null;
 
   return (
+    <Portal>
     <div className={backdropClasses} onClick={handleBackdropClick}>
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
@@ -264,6 +266,7 @@ const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({ i
         </div>
       </div>
     </div>
+    </Portal>
   );
 };
 

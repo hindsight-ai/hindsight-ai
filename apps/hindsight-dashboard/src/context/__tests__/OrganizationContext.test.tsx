@@ -40,8 +40,15 @@ describe('OrganizationContext', () => {
     });
   });
 
-  test('starts in personal mode by default', () => {
+  test('starts in personal mode by default', async () => {
+    mockOrganizationService.getOrganizations.mockResolvedValue([]); // Mock initial call
+    
     const { result } = renderHook(() => useOrganization(), { wrapper });
+
+    // Wait for initial loading to complete
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
 
     expect(result.current.isPersonalMode).toBe(true);
     expect(result.current.currentOrganization).toBeNull();
@@ -114,9 +121,15 @@ describe('OrganizationContext', () => {
 
   test('handles organization switching errors gracefully', async () => {
     const mockError = new Error('Organization not found');
+    mockOrganizationService.getOrganizations.mockResolvedValue([]); // Mock initial call
     mockOrganizationService.getOrganization.mockRejectedValue(mockError);
 
     const { result } = renderHook(() => useOrganization(), { wrapper });
+
+    // Wait for initial loading to complete
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
 
     await act(async () => {
       await result.current.switchToOrganization('invalid-org');

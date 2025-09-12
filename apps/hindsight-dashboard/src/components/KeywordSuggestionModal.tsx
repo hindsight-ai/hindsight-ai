@@ -242,7 +242,7 @@ const KeywordSuggestionModal: React.FC<KeywordSuggestionModalProps> = ({ isOpen,
   ) || false;
 
   return createPortal(
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm overflow-y-auto h-full w-full z-50">
       {/* Apply Processing dialog */}
       <ProcessingDialog
         isOpen={processing}
