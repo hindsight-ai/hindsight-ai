@@ -7,7 +7,8 @@ interface DebugPanelProps {
 
 const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
   // Only show in development mode OR when explicitly made visible
-  if (!import.meta.env.DEV && !visible) {
+  const isDevMode = import.meta.env.VITE_DEV_MODE === 'true' || import.meta.env.DEV;
+  if (!isDevMode && !visible) {
     return null;
   }
 

@@ -16,6 +16,14 @@ services:
       BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}
       IMAGE_TAG: ${BACKEND_IMAGE_TAG}
       VERSION: ${BACKEND_VERSION}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME}
+      CONSOLIDATION_BATCH_SIZE: ${CONSOLIDATION_BATCH_SIZE}
+      FALLBACK_SIMILARITY_THRESHOLD: ${FALLBACK_SIMILARITY_THRESHOLD}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL}
+      SUPPORT_CONTACT_MIN_INTERVAL_SECONDS: ${SUPPORT_CONTACT_MIN_INTERVAL_SECONDS}
+      PRUNING_BATCH_SIZE: ${PRUNING_BATCH_SIZE}
+      PRUNING_MAX_ITERATIONS: ${PRUNING_MAX_ITERATIONS}
     develop:
       watch:
         - path: ./apps/hindsight-service
@@ -26,6 +34,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:80"
+    environment:
+      VITE_DEV_MODE: "true"
     develop:
       watch:
         - path: ./apps/hindsight-dashboard
@@ -41,7 +51,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      GOOGLE_API_KEY: ${LLM_API_KEY}
+      LLM_API_KEY: ${LLM_API_KEY}
     networks:
       - hindsight-ai
     develop:

@@ -20,7 +20,12 @@ const Layout: React.FC<LayoutProps> = ({ children, title, onOpenAbout, onToggleD
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
       <div className="fixed left-0 top-0 h-full z-10">
-        <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} onCollapseChange={handleSidebarCollapse} onToggleDebugPanel={onToggleDebugPanel} />
+        <Sidebar 
+          isOpen={sidebarOpen} 
+          onClose={closeSidebar} 
+          onCollapseChange={handleSidebarCollapse} 
+          onToggleDebugPanel={import.meta.env.VITE_DEV_MODE === 'true' || import.meta.env.DEV ? onToggleDebugPanel : undefined} 
+        />
       </div>
       <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-16 ml-0' : 'lg:ml-64 ml-0'}`}>
         <MainContent title={title} toggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} onOpenAbout={onOpenAbout}>

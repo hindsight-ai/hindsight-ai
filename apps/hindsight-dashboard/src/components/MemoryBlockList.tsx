@@ -674,44 +674,48 @@ const MemoryBlockList = () => {
                 )}
               </button>
 
-              {/* Test buttons for feedback system - kept for development */}
-              <button
-                className="test-save-button"
-                data-testid="save-button"
-                onClick={() => notificationService.showSuccess('Item saved successfully')}
-                style={{
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  padding: '6px 10px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '11px',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                }}
-              >
-                Test Save
-              </button>
+              {/* Test buttons for feedback system - only show in development mode */}
+              {import.meta.env.DEV && (
+                <>
+                  <button
+                    className="test-save-button"
+                    data-testid="save-button"
+                    onClick={() => notificationService.showSuccess('Item saved successfully')}
+                    style={{
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      padding: '6px 10px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
+                    }}
+                  >
+                    Test Save
+                  </button>
 
-              <button
-                className="test-invalid-button"
-                data-testid="invalid-action"
-                onClick={() => notificationService.showError('Invalid action performed')}
-                style={{
-                  backgroundColor: '#dc3545',
-                  color: 'white',
-                  border: 'none',
-                  padding: '6px 10px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '11px',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                }}
-              >
-                Test Error
-              </button>
+                  <button
+                    className="test-invalid-button"
+                    data-testid="invalid-action"
+                    onClick={() => notificationService.showError('Invalid action performed')}
+                    style={{
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      padding: '6px 10px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0
+                    }}
+                  >
+                    Test Error
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
