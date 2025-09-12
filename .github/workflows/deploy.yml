@@ -223,6 +223,9 @@ jobs:
             EMAIL_RATE_LIMIT_DAY=${{ secrets.EMAIL_RATE_LIMIT_DAY }}
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+            POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
+            POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
             HINDSIGHT_SERVICE_API_URL=${{ secrets.API_URL }}
             BACKEND_BUILD_SHA=${{ github.sha }}
             FRONTEND_BUILD_SHA=${{ github.sha }}

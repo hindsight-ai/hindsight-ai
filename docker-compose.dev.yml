@@ -10,7 +10,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://user:password@db:5432/hindsight_db
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
       DEV_MODE: "true"
       BUILD_SHA: ${BACKEND_BUILD_SHA}
       BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}

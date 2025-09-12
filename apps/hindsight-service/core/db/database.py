@@ -6,8 +6,31 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Database connection URL
-# This should ideally come from environment variables for production
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/hindsight_db")
+# Generate dynamically from individual components if DATABASE_URL is not provided
+def _get_database_url() -> str:
+    # If DATABASE_URL is explicitly set, use it
+    if os.getenv("DATABASE_URL"):
+        return os.getenv("DATABASE_URL")
+
+    # Otherwise, generate from individual components (all must be set)
+    db_user = os.getenv("POSTGRES_USER")
+    db_password = os.getenv("POSTGRES_PASSWORD")
+    db_host = os.getenv("POSTGRES_HOST")
+    db_port = os.getenv("POSTGRES_PORT")
+    db_name = os.getenv("POSTGRES_DB")
+
+    if not all([db_user, db_password, db_host, db_port, db_name]):
+        missing = []
+        if not db_user: missing.append("POSTGRES_USER")
+        if not db_password: missing.append("POSTGRES_PASSWORD")
+        if not db_host: missing.append("POSTGRES_HOST")
+        if not db_port: missing.append("POSTGRES_PORT")
+        if not db_name: missing.append("POSTGRES_DB")
+        raise ValueError(f"Missing required database environment variables: {', '.join(missing)}")
+
+    return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+
+DATABASE_URL = _get_database_url()
 
 # Test override strategy:
 # 1. If HINDSIGHT_TEST_DB is set, use it.
