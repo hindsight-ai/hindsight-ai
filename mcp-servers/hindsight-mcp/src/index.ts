@@ -15,6 +15,9 @@ import { MemoryServiceClient, CreateMemoryBlockPayload, RetrieveMemoriesPayload,
 const MEMORY_SERVICE_BASE_URL = process.env.MEMORY_SERVICE_BASE_URL || 'http://localhost:8000'; // Default to localhost:8000
 const DEFAULT_AGENT_ID = process.env.DEFAULT_AGENT_ID;
 const DEFAULT_CONVERSATION_ID = process.env.DEFAULT_CONVERSATION_ID;
+const API_TOKEN = process.env.HINDSIGHT_API_TOKEN || process.env.HINDSIGHT_API_KEY;
+const API_HEADER: 'Authorization' | 'X-API-Key' = process.env.HINDSIGHT_API_KEY ? 'X-API-Key' : 'Authorization';
+const DEFAULT_ORGANIZATION_ID = process.env.HINDSIGHT_ORGANIZATION_ID;
 
 if (!MEMORY_SERVICE_BASE_URL) {
   throw new Error('MEMORY_SERVICE_BASE_URL environment variable is required');
@@ -116,7 +119,7 @@ const server = new Server(
 );
 
 // --- MemoryServiceClient Instance ---
-const memoryServiceClient = new MemoryServiceClient(MEMORY_SERVICE_BASE_URL);
+const memoryServiceClient = new MemoryServiceClient(MEMORY_SERVICE_BASE_URL, API_TOKEN, API_HEADER);
 
 // --- Tool Handlers ---
 
@@ -326,6 +329,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["search_query"],
         },
       },
+      {
+        name: "whoami",
+        description: "Return the authenticated user and memberships as seen by the backend (works with PAT or OAuth)",
+        inputSchema: { type: "object", properties: {}, required: [] },
+      },
     ],
   };
 });
@@ -356,8 +364,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: typedArgs.content,
         lessons_learned: typedArgs.lessons_learned,
         errors: typedArgs.errors,
-        metadata: typedArgs.metadata,
+        metadata_col: typedArgs.metadata,
       };
+      if (DEFAULT_ORGANIZATION_ID) {
+        payload.visibility_scope = 'organization';
+        payload.organization_id = DEFAULT_ORGANIZATION_ID;
+      }
 
       if (!isValidCreateMemoryBlockPayload(payload)) {
         throw new McpError(
@@ -376,6 +388,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const payload: CreateAgentPayload = {
         agent_name: typedArgs.agent_name,
       };
+      if (DEFAULT_ORGANIZATION_ID) {
+        payload.visibility_scope = 'organization';
+        payload.organization_id = DEFAULT_ORGANIZATION_ID;
+      }
 
       if (typeof payload.agent_name !== 'string' || payload.agent_name.trim() === '') {
         throw new McpError(
@@ -398,7 +414,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new McpError(ErrorCode.InvalidParams, "Agent ID is required for retrieve_all_memory_blocks and not provided via arguments or DEFAULT_AGENT_ID environment variable.");
       }
 
-      const response = await memoryServiceClient.getAllMemoryBlocks(agent_id, limit);
+      const response = await memoryServiceClient.getAllMemoryBlocks(
+        agent_id,
+        limit,
+        DEFAULT_ORGANIZATION_ID ? { scope: 'organization', organization_id: DEFAULT_ORGANIZATION_ID } : undefined
+      );
       // The API returns an object with an 'items' array
       const memories = Array.isArray(response.items) ? response.items : [];
       const filteredResult = memories.map(block => ({
@@ -421,7 +441,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new McpError(ErrorCode.InvalidParams, "Conversation ID is required for retrieve_memory_blocks_by_conversation_id and not provided via arguments or DEFAULT_CONVERSATION_ID environment variable.");
       }
 
-      const result = await memoryServiceClient.getMemoryBlocksByConversationId(conversation_id, agent_id, limit);
+      const result = await memoryServiceClient.getMemoryBlocksByConversationId(
+        conversation_id,
+        agent_id,
+        limit,
+        DEFAULT_ORGANIZATION_ID ? { scope: 'organization', organization_id: DEFAULT_ORGANIZATION_ID } : undefined
+      );
       const filteredResult = result.map(block => ({
         content: block.content,
         errors: block.errors,
@@ -452,8 +477,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         .filter((keyword: string) => keyword.length > 0); // Filter out empty strings
 
       const payload: RetrieveMemoriesPayload = {
-        query_text: typedArgs.query_text,
-        keywords: processedKeywords.join(','), // Join processed keywords into a comma-separated string
+        keywords: processedKeywords.join(','),
         agent_id: agent_id,
         conversation_id: conversation_id,
         limit: typedArgs.limit,
@@ -503,9 +527,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for search_agents. Requires 'query' (string).");
         }
         const query: string = typedArgs.query;
-        const response = await axios.get(`${MEMORY_SERVICE_BASE_URL}/agents/search/?query=${encodeURIComponent(query)}`);
+        const agents = await memoryServiceClient.searchAgents(query);
         return {
-          content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }]
+          content: [{ type: "text", text: JSON.stringify(agents, null, 2) }]
         };
       }
 
@@ -523,41 +547,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new McpError(ErrorCode.InvalidParams, "Agent ID is required for advanced_search_memories and not provided via DEFAULT_AGENT_ID environment variable.");
         }
         
-        const payload: AdvancedSearchPayload = {
-          search_query: typedArgs.search_query,
-          search_type: typedArgs.search_type || 'fulltext',  // Default to fulltext for more predictable results
-          agent_id: agent_id,
-          conversation_id: conversation_id,
-          limit: typedArgs.limit || 10,
-          min_score: typedArgs.min_score || 0.1,
-          // Set sensible defaults for other parameters
-          similarity_threshold: 0.7,
-          fulltext_weight: 0.7,
-          semantic_weight: 0.3,
-          min_combined_score: 0.1,
-          include_archived: false
-        };
-        
-        const response = await memoryServiceClient.advancedSearch(payload);
-        
-        // Format response for the AI - show only the most relevant fields
-        const formattedResults = response.items.map(block => ({
+        const st: string = typedArgs.search_type || 'fulltext';
+        const q: string = typedArgs.search_query;
+        const limit: number = typedArgs.limit || 10;
+        const min_score: number = typedArgs.min_score || 0.1;
+
+        let results: any[] = [];
+        if (st === 'fulltext') {
+          results = await memoryServiceClient.searchFulltext({ query: q, agent_id, conversation_id, limit, min_score, include_archived: false });
+        } else if (st === 'semantic') {
+          results = await memoryServiceClient.searchSemantic({ query: q, agent_id, conversation_id, limit, similarity_threshold: 0.7, include_archived: false });
+        } else {
+          results = await memoryServiceClient.searchHybrid({ query: q, agent_id, conversation_id, limit, fulltext_weight: 0.7, semantic_weight: 0.3, min_combined_score: 0.1, include_archived: false });
+        }
+
+        const formattedResults = results.map((block: any) => ({
           content: block.content,
           lessons_learned: block.lessons_learned,
           timestamp: block.timestamp,
           feedback_score: block.feedback_score
         }));
-        
+
+        return { content: [{ type: 'text', text: JSON.stringify({ results: formattedResults, search_type: st, query: q }, null, 2) }] };
+      }
+
+      // --- whoami ---
+      else if (toolName === "whoami") {
+        const info = await memoryServiceClient.whoAmI();
         return {
-          content: [{ 
-            type: "text", 
-            text: JSON.stringify({
-              results: formattedResults,
-              total_found: response.total_items,
-              search_type: payload.search_type,
-              query: payload.search_query
-            }, null, 2) 
-          }]
+          content: [{ type: 'text', text: JSON.stringify(info, null, 2) }]
         };
       }
 

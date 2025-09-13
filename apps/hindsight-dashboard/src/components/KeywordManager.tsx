@@ -32,6 +32,15 @@ const KeywordManager: React.FC = () => {
     fetchKeywords();
   }, []);
 
+  // Refresh keywords when organization scope changes
+  useEffect(() => {
+    const handler = () => {
+      fetchKeywords();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, []);
+
   useEffect(() => {
     if (keywords.length > 0) {
       fetchKeywordUsageCounts();

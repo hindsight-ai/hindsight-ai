@@ -525,7 +525,9 @@ def search_memory_blocks_fulltext(
     conversation_id: Optional[uuid.UUID] = None,
     limit: int = 50,
     min_score: float = 0.1,
-    include_archived: bool = False
+    include_archived: bool = False,
+    *,
+    current_user: Optional[dict] = None,
 ):
     """
     Full-text search using PostgreSQL's built-in capabilities.
@@ -541,7 +543,8 @@ def search_memory_blocks_fulltext(
         conversation_id=conversation_id,
         limit=limit,
         min_score=min_score,
-        include_archived=include_archived
+        include_archived=include_archived,
+        current_user=current_user,
     )
 
 def search_memory_blocks_semantic(
@@ -551,7 +554,9 @@ def search_memory_blocks_semantic(
     conversation_id: Optional[uuid.UUID] = None,
     limit: int = 50,
     similarity_threshold: float = 0.7,
-    include_archived: bool = False
+    include_archived: bool = False,
+    *,
+    current_user: Optional[dict] = None,
 ):
     """
     Semantic search using embeddings (placeholder implementation).
@@ -567,7 +572,8 @@ def search_memory_blocks_semantic(
         conversation_id=conversation_id,
         limit=limit,
         similarity_threshold=similarity_threshold,
-        include_archived=include_archived
+        include_archived=include_archived,
+        current_user=current_user,
     )
 
 def search_memory_blocks_hybrid(
@@ -579,7 +585,9 @@ def search_memory_blocks_hybrid(
     fulltext_weight: float = 0.7,
     semantic_weight: float = 0.3,
     min_combined_score: float = 0.1,
-    include_archived: bool = False
+    include_archived: bool = False,
+    *,
+    current_user: Optional[dict] = None,
 ):
     """
     Hybrid search combining full-text and semantic search.
@@ -597,7 +605,8 @@ def search_memory_blocks_hybrid(
         fulltext_weight=fulltext_weight,
         semantic_weight=semantic_weight,
         min_combined_score=min_combined_score,
-        include_archived=include_archived
+        include_archived=include_archived,
+        current_user=current_user,
     )
 # CRUD for Organization and related entities (facade delegates to repository)
 def create_organization(db: Session, organization: schemas.OrganizationCreate, user_id: uuid.UUID):

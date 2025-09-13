@@ -21,7 +21,12 @@ from core.utils.scopes import (
     SCOPE_PERSONAL,
 )
 from core.services.search_service import SearchService
-from core.api.deps import get_current_user_context, get_current_user_context_or_pat, ensure_pat_allows_write
+from core.api.deps import (
+    get_current_user_context,
+    get_current_user_context_or_pat,
+    ensure_pat_allows_write,
+    ensure_pat_allows_read,
+)
 
 router = APIRouter(prefix="/memory-blocks", tags=["memory-blocks"])  # normalized prefix
 
@@ -85,28 +90,59 @@ def get_all_memory_blocks_endpoint(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     # Convert empty string parameters to None to handle frontend behavior
     agent_uuid = parse_optional_uuid(agent_id)
     conversation_uuid = parse_optional_uuid(conversation_id)
     organization_uuid = parse_optional_uuid(organization_id)
     
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
+    # Prefer PAT when provided; otherwise use oauth2-proxy headers. Guest permitted.
     current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    if authorization or x_api_key:
+        try:
+            _u, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+        except HTTPException:
+            # Invalid PAT/token provided
+            raise
+    else:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
+
+    # Enforce PAT organization narrowing if present
+    effective_org_uuid = organization_uuid
+    if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+        try:
+            pat_org_uuid = uuid.UUID(str(current_user["pat"]["organization_id"]))
+        except Exception:
+            pat_org_uuid = None
+        if pat_org_uuid:
+            if organization_uuid and organization_uuid != pat_org_uuid:
+                raise HTTPException(status_code=403, detail="Token organization restriction mismatch")
+            effective_org_uuid = pat_org_uuid
+            ensure_pat_allows_read(current_user, effective_org_uuid)
 
     # Get total count
     _, total_items = crud.get_all_memory_blocks(
@@ -122,7 +158,7 @@ def get_all_memory_blocks_endpoint(
         include_archived=include_archived,
         current_user=current_user,
         filter_scope=scope,
-        filter_organization_id=organization_uuid,
+        filter_organization_id=effective_org_uuid,
     )
 
     # Get paginated results
@@ -139,7 +175,7 @@ def get_all_memory_blocks_endpoint(
         include_archived=include_archived,
         current_user=current_user,
         filter_scope=scope,
-        filter_organization_id=organization_uuid,
+        filter_organization_id=effective_org_uuid,
     )
 
     total_pages = math.ceil(total_items / limit) if limit and limit > 0 else 0
@@ -191,7 +227,7 @@ def disassociate_keyword_from_memory_block_endpoint(
     memory_id: uuid.UUID,
     keyword_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
@@ -200,6 +236,8 @@ def disassociate_keyword_from_memory_block_endpoint(
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
     u, current_user = user_context
+    # If PAT present, enforce write scope and optional org restriction
+    ensure_pat_allows_write(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_write(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     success = crud.delete_memory_block_keyword(db, memory_id=memory_id, keyword_id=keyword_id)
@@ -239,6 +277,8 @@ def get_archived_memory_blocks_endpoint(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     """
     Get archived memory blocks with all the parameters the frontend sends.
@@ -249,26 +289,53 @@ def get_archived_memory_blocks_endpoint(
     conversation_uuid = parse_optional_uuid(conversation_id)
     organization_uuid = parse_optional_uuid(organization_id)
     
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
     current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    if authorization or x_api_key:
+        try:
+            _u, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+        except HTTPException:
+            raise
+    else:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
 
     # For archived endpoint, we want to show archived blocks more liberally
     # If no specific scope is requested, default to public archived blocks
     effective_scope = scope or SCOPE_PUBLIC
+
+    # PAT org restriction for archived queries
+    effective_org_uuid = organization_uuid
+    if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+        try:
+            pat_org_uuid = uuid.UUID(str(current_user["pat"]["organization_id"]))
+        except Exception:
+            pat_org_uuid = None
+        if pat_org_uuid:
+            if organization_uuid and organization_uuid != pat_org_uuid:
+                raise HTTPException(status_code=403, detail="Token organization restriction mismatch")
+            effective_org_uuid = pat_org_uuid
+            ensure_pat_allows_read(current_user, effective_org_uuid)
     
     # Get total count of archived items
     _, total_items = crud.get_all_memory_blocks(
@@ -284,7 +351,7 @@ def get_archived_memory_blocks_endpoint(
         is_archived=True,  # Explicitly filter for archived=True only
         current_user=current_user,
         filter_scope=effective_scope,
-        filter_organization_id=organization_uuid,
+        filter_organization_id=effective_org_uuid,
     )
 
     # Get paginated archived results
@@ -301,7 +368,7 @@ def get_archived_memory_blocks_endpoint(
         is_archived=True,  # Explicitly filter for archived=True only
         current_user=current_user,
         filter_scope=effective_scope,
-        filter_organization_id=organization_uuid,
+        filter_organization_id=effective_org_uuid,
     )
 
     total_pages = math.ceil(total_items / limit) if limit and limit > 0 else 0
@@ -320,26 +387,44 @@ def get_memory_block_endpoint(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
     current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    if authorization or x_api_key:
+        try:
+            _u, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+        except HTTPException:
+            raise
+        # Enforce read scope and org restriction, if PAT present
+        ensure_pat_allows_read(current_user, getattr(db_memory_block, 'organization_id', None))
+    else:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
     if not can_read(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     return db_memory_block
@@ -349,7 +434,7 @@ def update_memory_block_endpoint(
     memory_id: uuid.UUID,
     memory_block: schemas.MemoryBlockUpdate,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     current = crud.get_memory_block(db, memory_id)
     if not current:

@@ -156,6 +156,20 @@ const ArchivedMemoryBlockList = () => {
     fetchAgentIds();
   }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchArchivedMemoryBlocks, fetchKeywords, fetchAgentIds]);
 
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      setPagination(prev => ({ ...prev, page: 1 }));
+      setMemoryBlocks([]);
+      setLoading(true);
+      fetchArchivedMemoryBlocks();
+      fetchKeywords();
+      fetchAgentIds();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, [fetchArchivedMemoryBlocks, fetchKeywords, fetchAgentIds]);
+
   // Update URL parameters when pagination state changes
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);

@@ -117,6 +117,50 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      # Production public API
+      - "traefik.http.routers.api-prod.rule=Host(`api.hindsight-ai.com`)"
+      - "traefik.http.routers.api-prod.entrypoints=websecure"
+      - "traefik.http.routers.api-prod.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-prod.middlewares=cors-headers@file,secure-headers@file,rate-limit-anon@file"
+      - "traefik.http.routers.api-prod.service=hindsight-api-svc@docker"
+      # Bearer PAT router (higher priority) on prod
+      - "traefik.http.routers.api-prod-pat-bearer.rule=Host(`api.hindsight-ai.com`) && HeadersRegexp(`Authorization`,`^Bearer\\s+.+`)"
+      - "traefik.http.routers.api-prod-pat-bearer.priority=15"
+      - "traefik.http.routers.api-prod-pat-bearer.entrypoints=websecure"
+      - "traefik.http.routers.api-prod-pat-bearer.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-prod-pat-bearer.middlewares=cors-headers@file,secure-headers@file,rate-limit-bearer@file"
+      - "traefik.http.routers.api-prod-pat-bearer.service=hindsight-api-svc@docker"
+      # API key router (higher priority) on prod
+      - "traefik.http.routers.api-prod-pat-key.rule=Host(`api.hindsight-ai.com`) && HeadersRegexp(`X-API-Key`,`. +`)"
+      - "traefik.http.routers.api-prod-pat-key.priority=15"
+      - "traefik.http.routers.api-prod-pat-key.entrypoints=websecure"
+      - "traefik.http.routers.api-prod-pat-key.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-prod-pat-key.middlewares=cors-headers@file,secure-headers@file,rate-limit-apikey@file"
+      - "traefik.http.routers.api-prod-pat-key.service=hindsight-api-svc@docker"
+      # Staging public API
+      - "traefik.http.routers.api-staging.rule=Host(`api-staging.hindsight-ai.com`)"
+      - "traefik.http.routers.api-staging.entrypoints=websecure"
+      - "traefik.http.routers.api-staging.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-staging.middlewares=cors-headers@file,secure-headers@file,rate-limit-anon@file"
+      - "traefik.http.routers.api-staging.service=hindsight-api-svc@docker"
+      # Bearer PAT router (higher priority) on staging
+      - "traefik.http.routers.api-staging-pat-bearer.rule=Host(`api-staging.hindsight-ai.com`) && HeadersRegexp(`Authorization`,`^Bearer\\s+.+`)"
+      - "traefik.http.routers.api-staging-pat-bearer.priority=15"
+      - "traefik.http.routers.api-staging-pat-bearer.entrypoints=websecure"
+      - "traefik.http.routers.api-staging-pat-bearer.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-staging-pat-bearer.middlewares=cors-headers@file,secure-headers@file,rate-limit-bearer@file"
+      - "traefik.http.routers.api-staging-pat-bearer.service=hindsight-api-svc@docker"
+      # API key router (higher priority) on staging
+      - "traefik.http.routers.api-staging-pat-key.rule=Host(`api-staging.hindsight-ai.com`) && HeadersRegexp(`X-API-Key`,`. +`)"
+      - "traefik.http.routers.api-staging-pat-key.priority=15"
+      - "traefik.http.routers.api-staging-pat-key.entrypoints=websecure"
+      - "traefik.http.routers.api-staging-pat-key.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-staging-pat-key.middlewares=cors-headers@file,secure-headers@file,rate-limit-apikey@file"
+      - "traefik.http.routers.api-staging-pat-key.service=hindsight-api-svc@docker"
+      # Backend service port
+      - "traefik.http.services.hindsight-api-svc.loadbalancer.server.port=8000"
 
   hindsight-dashboard:
     image: ${HINDSIGHT_DASHBOARD_IMAGE}

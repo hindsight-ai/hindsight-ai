@@ -27,6 +27,15 @@ const AnalyticsPage: React.FC = () => {
     fetchAnalyticsData();
   }, []);
 
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      fetchAnalyticsData();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, []);
+
   const fetchAnalyticsData = async () => {
     setLoading(true);
     setError(null);

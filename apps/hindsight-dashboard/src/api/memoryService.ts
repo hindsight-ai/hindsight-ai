@@ -118,7 +118,18 @@ const memoryService = {
   getKeywordMemoryBlocksCount: async (keywordId: string) => jsonOrThrow(await fetch(`${base()}/keywords/${keywordId}/memory-blocks/count`, { credentials: 'include' })),
   addKeywordToMemoryBlock: async (memoryBlockId: string, keywordId: string) => { guardGuest('Sign in to add keywords.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/keywords/${keywordId}`, { method: 'POST', credentials: 'include' })); },
   removeKeywordFromMemoryBlock: async (memoryBlockId: string, keywordId: string) => { guardGuest('Sign in to remove keywords.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/keywords/${keywordId}`, { method: 'DELETE', credentials: 'include' })); },
-  getConsolidationSuggestions: async (filters: Record<string, any> = {}, signal?: AbortSignal) => { const { skip, limit, status, group_id, start_date, end_date, sort_by, sort_order } = filters; const params = new URLSearchParams({ skip: String(skip || 0), limit: String(limit || 50) }); if (status) params.set('status', status); if (group_id) params.set('group_id', group_id); if (start_date) params.set('start_date', start_date); if (end_date) params.set('end_date', end_date); if (sort_by) params.set('sort_by', sort_by); if (sort_order) params.set('sort_order', sort_order); return jsonOrThrow(await fetch(`${base()}/consolidation-suggestions/?${params.toString()}`, { credentials: 'include', signal })); },
+  getConsolidationSuggestions: async (filters: Record<string, any> = {}, signal?: AbortSignal) => {
+    const { skip, limit, status, group_id, start_date, end_date, sort_by, sort_order } = filters;
+    const params = new URLSearchParams({ skip: String(skip || 0), limit: String(limit || 50) });
+    if (status) params.set('status', status);
+    if (group_id) params.set('group_id', group_id);
+    if (start_date) params.set('start_date', start_date);
+    if (end_date) params.set('end_date', end_date);
+    if (sort_by) params.set('sort_by', sort_by);
+    if (sort_order) params.set('sort_order', sort_order);
+    try { const scope = sessionStorage.getItem('ACTIVE_SCOPE'); const orgId = sessionStorage.getItem('ACTIVE_ORG_ID'); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}
+    return jsonOrThrow(await fetch(`${base()}/consolidation-suggestions/?${params.toString()}`, { credentials: 'include', signal }));
+  },
   getConsolidationSuggestionById: async (id: string) => jsonOrThrow(await fetch(`${base()}/consolidation-suggestions/${id}`, { credentials: 'include' })),
   validateConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to validate suggestions.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}/validate/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' })); },
   rejectConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to reject suggestions.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/consolidation-suggestions/${id}/reject/`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' })); },
@@ -127,11 +138,24 @@ const memoryService = {
   generatePruningSuggestions: async (params: Record<string, any> = {}) => jsonOrThrow(await fetch(`${API_BASE_URL}/memory/prune/suggest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params), credentials: 'include' })),
   confirmPruning: async (memoryBlockIds: string[]) => jsonOrThrow(await fetch(`${API_BASE_URL}/memory/prune/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memory_block_ids: memoryBlockIds }), credentials: 'include' })),
   getBuildInfo: async () => jsonOrThrow(await fetch(`${base()}/build-info`, { credentials: 'include' })),
-  getConversationsCount: async () => jsonOrThrow(await fetch(`${base()}/conversations/count`, { credentials: 'include' })),
+  getConversationsCount: async () => {
+    const params = new URLSearchParams();
+    try { const scope = sessionStorage.getItem('ACTIVE_SCOPE'); const orgId = sessionStorage.getItem('ACTIVE_ORG_ID'); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}
+    const url = `${base()}/conversations/count${params.toString() ? `?${params.toString()}` : ''}`;
+    return jsonOrThrow(await fetch(url, { credentials: 'include' }));
+  },
   suggestKeywords: async (memoryBlockId: string) => { guardGuest('Sign in to generate keyword suggestions.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/suggest-keywords`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' })); },
   compressMemoryBlock: async (memoryBlockId: string, userInstructions: Record<string, any> = {}) => { guardGuest('Sign in to compress memory blocks.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/compress`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(userInstructions), credentials: 'include' })); },
   applyMemoryCompression: async (memoryBlockId: string, compressionData: Record<string, any>) => { guardGuest('Sign in to apply compression.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/memory-blocks/${memoryBlockId}/compress/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(compressionData), credentials: 'include' })); },
-  getMemoryOptimizationSuggestions: async (filters: Record<string, any> = {}) => { const params = new URLSearchParams(); if (filters.agentId) params.append('agent_id', filters.agentId); if (filters.priority) params.append('priority', filters.priority); if (filters.dateRange) params.append('date_range', filters.dateRange); const url = `${base()}/memory-optimization/suggestions${params.toString() ? `?${params.toString()}` : ''}`; return jsonOrThrow(await fetch(url, { credentials: 'include' })); },
+  getMemoryOptimizationSuggestions: async (filters: Record<string, any> = {}) => {
+    const params = new URLSearchParams();
+    if (filters.agentId) params.append('agent_id', filters.agentId);
+    if (filters.priority) params.append('priority', filters.priority);
+    if (filters.dateRange) params.append('date_range', filters.dateRange);
+    try { const scope = sessionStorage.getItem('ACTIVE_SCOPE'); const orgId = sessionStorage.getItem('ACTIVE_ORG_ID'); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}
+    const url = `${base()}/memory-optimization/suggestions${params.toString() ? `?${params.toString()}` : ''}`;
+    return jsonOrThrow(await fetch(url, { credentials: 'include' }));
+  },
   executeOptimizationSuggestion: async (suggestionId: string, signal?: AbortSignal) => { guardGuest('Sign in to execute optimization suggestions.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/memory-optimization/suggestions/${suggestionId}/execute`, { method: 'POST', credentials: 'include', signal })); },
   getSuggestionDetails: async (suggestionId: string) => jsonOrThrow(await fetch(`${base()}/memory-optimization/suggestions/${suggestionId}`, { credentials: 'include' })),
   bulkCompactMemoryBlocks: async (memoryBlockIds: string[], userInstructions = '', maxConcurrent = 4, signal?: AbortSignal) => { guardGuest('Sign in to bulk compact.'); return jsonOrThrow(await fetch(`${API_BASE_URL}/memory-blocks/bulk-compact`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memory_block_ids: memoryBlockIds, user_instructions: userInstructions, max_concurrent: maxConcurrent }), credentials: 'include', signal })); },

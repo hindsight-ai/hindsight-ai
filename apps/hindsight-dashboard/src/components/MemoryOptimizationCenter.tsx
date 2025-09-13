@@ -142,6 +142,16 @@ const MemoryOptimizationCenter: FC = () => {
     fetchSuggestions();
   }, [filters]);
 
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      fetchSuggestions();
+      fetchAvailableAgents();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, []);
+
   // Fetch agents only once on component mount
   useEffect(() => {
     fetchAvailableAgents();

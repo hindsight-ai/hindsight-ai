@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import notificationService from '../services/notificationService';
 
 interface CopyToClipboardButtonProps {
   textToCopy: string;
@@ -12,6 +13,7 @@ export const CopyToClipboardButton: React.FC<CopyToClipboardButtonProps> = ({ te
     try {
       await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
+      try { notificationService.showSuccess('Copied to clipboard'); } catch {}
       setTimeout(() => setCopied(false), 2000); // Reset "Copied!" message after 2 seconds
     } catch (err) {
       console.error('Failed to copy text: ', err);

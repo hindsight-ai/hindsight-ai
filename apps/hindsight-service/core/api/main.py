@@ -238,6 +238,8 @@ def get_user_info(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     db: Session = Depends(get_db),
 ):
     """
@@ -267,6 +269,33 @@ def get_user_info(
             "memberships": memberships,
         }
 
+    # If a PAT is provided, authenticate via PAT first
+    if authorization or x_api_key:
+        try:
+            from core.api.deps import get_current_user_context_or_pat
+            user, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+            memberships = current_user.get("memberships") or []
+            return {
+                "authenticated": True,
+                "user_id": str(user.id),
+                "email": user.email,
+                "display_name": user.display_name,
+                "is_superadmin": bool(getattr(user, "is_superadmin", False)),
+                "memberships": memberships,
+                "pat": current_user.get("pat") or None,
+            }
+        except HTTPException as e:
+            return JSONResponse({"authenticated": False, "detail": e.detail}, status_code=e.status_code)
+
+    # Otherwise, fallback to oauth2-proxy headers
     name, email = resolve_identity_from_headers(
         x_auth_request_user=x_auth_request_user,
         x_auth_request_email=x_auth_request_email,
@@ -274,11 +303,9 @@ def get_user_info(
         x_forwarded_email=x_forwarded_email,
     )
     if not name and not email:
-        # Signal unauthenticated for dashboard guest-mode handling
         return JSONResponse({"authenticated": False}, status_code=status.HTTP_401_UNAUTHORIZED)
 
     if not email:
-        # Without an email, we cannot upsert; return minimal info
         return {"authenticated": True, "user": name or None, "email": None}
 
     user = get_or_create_user(db, email=email, display_name=name)
@@ -892,6 +919,8 @@ def search_memory_blocks_fulltext_endpoint(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     """
     Perform BM25-like full-text search on memory blocks using PostgreSQL's full-text search capabilities.
@@ -911,22 +940,48 @@ def search_memory_blocks_fulltext_endpoint(
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
     
     try:
-        name, email = resolve_identity_from_headers(
-            x_auth_request_user=x_auth_request_user,
-            x_auth_request_email=x_auth_request_email,
-            x_forwarded_user=x_forwarded_user,
-            x_forwarded_email=x_forwarded_email,
-        )
         current_user = None
-        if email:
-            u = get_or_create_user(db, email=email, display_name=name)
-            memberships = get_user_memberships(db, u.id)
-            current_user = {
-                "id": u.id,
-                "is_superadmin": bool(u.is_superadmin),
-                "memberships": memberships,
-                "memberships_by_org": {m["organization_id"]: m for m in memberships},
-            }
+        if authorization or x_api_key:
+            try:
+                _u, current_user = get_current_user_context_or_pat(
+                    db=db,
+                    authorization=authorization,
+                    x_api_key=x_api_key,
+                    x_auth_request_user=x_auth_request_user,
+                    x_auth_request_email=x_auth_request_email,
+                    x_forwarded_user=x_forwarded_user,
+                    x_forwarded_email=x_forwarded_email,
+                )
+            except HTTPException:
+                raise
+        else:
+            name, email = resolve_identity_from_headers(
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+            if email:
+                u = get_or_create_user(db, email=email, display_name=name)
+                memberships = get_user_memberships(db, u.id)
+                current_user = {
+                    "id": u.id,
+                    "is_superadmin": bool(u.is_superadmin),
+                    "memberships": memberships,
+                    "memberships_by_org": {m["organization_id"]: m for m in memberships},
+                }
+
+        # Narrow memberships to PAT org if present
+        if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+            pat_org = str(current_user["pat"]["organization_id"])  # string key
+            m = (current_user.get("memberships_by_org") or {}).get(pat_org)
+            if m:
+                current_user = {
+                    **current_user,
+                    "memberships": [m],
+                    "memberships_by_org": {pat_org: m},
+                }
+
         results, metadata = crud.search_memory_blocks_fulltext(
             db=db,
             query=query.strip(),
@@ -935,6 +990,7 @@ def search_memory_blocks_fulltext_endpoint(
             limit=limit,
             min_score=min_score,
             include_archived=include_archived,
+            current_user=current_user,
         )
         
         logger.info(f"Full-text search for '{query}' returned {len(results)} results")
@@ -957,6 +1013,8 @@ def search_memory_blocks_semantic_endpoint(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     """
     Perform semantic search on memory blocks using embeddings (placeholder implementation).
@@ -976,22 +1034,47 @@ def search_memory_blocks_semantic_endpoint(
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
     
     try:
-        name, email = resolve_identity_from_headers(
-            x_auth_request_user=x_auth_request_user,
-            x_auth_request_email=x_auth_request_email,
-            x_forwarded_user=x_forwarded_user,
-            x_forwarded_email=x_forwarded_email,
-        )
         current_user = None
-        if email:
-            u = get_or_create_user(db, email=email, display_name=name)
-            memberships = get_user_memberships(db, u.id)
-            current_user = {
-                "id": u.id,
-                "is_superadmin": bool(u.is_superadmin),
-                "memberships": memberships,
-                "memberships_by_org": {m["organization_id"]: m for m in memberships},
-            }
+        if authorization or x_api_key:
+            try:
+                _u, current_user = get_current_user_context_or_pat(
+                    db=db,
+                    authorization=authorization,
+                    x_api_key=x_api_key,
+                    x_auth_request_user=x_auth_request_user,
+                    x_auth_request_email=x_auth_request_email,
+                    x_forwarded_user=x_forwarded_user,
+                    x_forwarded_email=x_forwarded_email,
+                )
+            except HTTPException:
+                raise
+        else:
+            name, email = resolve_identity_from_headers(
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+            current_user = None
+            if email:
+                u = get_or_create_user(db, email=email, display_name=name)
+                memberships = get_user_memberships(db, u.id)
+                current_user = {
+                    "id": u.id,
+                    "is_superadmin": bool(u.is_superadmin),
+                    "memberships": memberships,
+                    "memberships_by_org": {m["organization_id"]: m for m in memberships},
+                }
+
+        if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+            pat_org = str(current_user["pat"]["organization_id"])  # string key
+            m = (current_user.get("memberships_by_org") or {}).get(pat_org)
+            if m:
+                current_user = {
+                    **current_user,
+                    "memberships": [m],
+                    "memberships_by_org": {pat_org: m},
+                }
         results, metadata = crud.search_memory_blocks_semantic(
             db=db,
             query=query.strip(),
@@ -1000,6 +1083,7 @@ def search_memory_blocks_semantic_endpoint(
             limit=limit,
             similarity_threshold=similarity_threshold,
             include_archived=include_archived,
+            current_user=current_user,
         )
         
         logger.info(f"Semantic search for '{query}' returned {len(results)} results (placeholder)")
@@ -1024,6 +1108,8 @@ def search_memory_blocks_hybrid_endpoint(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     """
     Perform hybrid search combining full-text and semantic search with weighted scoring.
@@ -1049,22 +1135,46 @@ def search_memory_blocks_hybrid_endpoint(
         raise HTTPException(status_code=400, detail="Fulltext and semantic weights must sum to 1.0")
     
     try:
-        name, email = resolve_identity_from_headers(
-            x_auth_request_user=x_auth_request_user,
-            x_auth_request_email=x_auth_request_email,
-            x_forwarded_user=x_forwarded_user,
-            x_forwarded_email=x_forwarded_email,
-        )
         current_user = None
-        if email:
-            u = get_or_create_user(db, email=email, display_name=name)
-            memberships = get_user_memberships(db, u.id)
-            current_user = {
-                "id": u.id,
-                "is_superadmin": bool(u.is_superadmin),
-                "memberships": memberships,
-                "memberships_by_org": {m["organization_id"]: m for m in memberships},
-            }
+        if authorization or x_api_key:
+            try:
+                _u, current_user = get_current_user_context_or_pat(
+                    db=db,
+                    authorization=authorization,
+                    x_api_key=x_api_key,
+                    x_auth_request_user=x_auth_request_user,
+                    x_auth_request_email=x_auth_request_email,
+                    x_forwarded_user=x_forwarded_user,
+                    x_forwarded_email=x_forwarded_email,
+                )
+            except HTTPException:
+                raise
+        else:
+            name, email = resolve_identity_from_headers(
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+            if email:
+                u = get_or_create_user(db, email=email, display_name=name)
+                memberships = get_user_memberships(db, u.id)
+                current_user = {
+                    "id": u.id,
+                    "is_superadmin": bool(u.is_superadmin),
+                    "memberships": memberships,
+                    "memberships_by_org": {m["organization_id"]: m for m in memberships},
+                }
+
+        if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+            pat_org = str(current_user["pat"]["organization_id"])  # string key
+            m = (current_user.get("memberships_by_org") or {}).get(pat_org)
+            if m:
+                current_user = {
+                    **current_user,
+                    "memberships": [m],
+                    "memberships_by_org": {pat_org: m},
+                }
         results, metadata = crud.search_memory_blocks_hybrid(
             db=db,
             query=query.strip(),
@@ -1075,6 +1185,7 @@ def search_memory_blocks_hybrid_endpoint(
             semantic_weight=semantic_weight,
             min_combined_score=min_combined_score,
             include_archived=include_archived,
+            current_user=current_user,
         )
         
         logger.info(f"Hybrid search for '{query}' returned {len(results)} results")

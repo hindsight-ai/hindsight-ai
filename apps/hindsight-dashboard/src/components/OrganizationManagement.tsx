@@ -495,6 +495,16 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                       <div>
                         <div className="font-medium">{org.name}</div>
                         {org.slug && <div className="text-sm text-gray-500">{org.slug}</div>}
+                        <div className="text-[10px] text-gray-400 flex items-center gap-2 mt-0.5">
+                          <span>{org.id}</span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(org.id); notificationService.showSuccess('Organization ID copied'); }}
+                            className="px-1 py-0.5 border rounded hover:bg-gray-100"
+                            title="Copy Organization ID"
+                          >
+                            Copy
+                          </button>
+                        </div>
                       </div>
                       <div className={`text-xs px-2 py-1 rounded ${
                         isMember 
@@ -519,7 +529,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
           <div className="lg:col-span-2">
             {selectedOrg ? (
               <>
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-semibold">Members of {selectedOrg.name}</h3>
                   {(user?.is_superadmin || isUserMember(selectedOrg.id)) ? (
                     <div className="flex gap-2">
@@ -547,6 +557,16 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                   ) : (
                     <span className="text-sm text-gray-500 italic">Read-only (not a member)</span>
                   )}
+                </div>
+                <div className="text-xs text-gray-500 mb-3 flex items-center gap-2">
+                  <span>Org ID: {selectedOrg.id}</span>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(selectedOrg.id); notificationService.showSuccess('Organization ID copied'); }}
+                    className="px-2 py-0.5 border rounded hover:bg-gray-100"
+                    title="Copy Organization ID"
+                  >
+                    Copy
+                  </button>
                 </div>
                 
 

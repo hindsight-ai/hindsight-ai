@@ -18,7 +18,12 @@ from core.utils.scopes import (
     SCOPE_ORGANIZATION,
     SCOPE_PERSONAL,
 )
-from core.api.deps import get_current_user_context, get_current_user_context_or_pat, ensure_pat_allows_write
+from core.api.deps import (
+    get_current_user_context,
+    get_current_user_context_or_pat,
+    ensure_pat_allows_write,
+    ensure_pat_allows_read,
+)
 
 router = APIRouter(prefix="/agents", tags=["agents"])  # normalized prefix
 
@@ -89,30 +94,56 @@ def get_all_agents_endpoint(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
     current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    if authorization or x_api_key:
+        try:
+            _u, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+        except HTTPException:
+            raise
+    else:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
+
+    # Apply PAT org restriction if present
+    effective_org_id = organization_id
+    if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+        pat_org = current_user["pat"]["organization_id"]
+        if organization_id and str(organization_id) != str(pat_org):
+            raise HTTPException(status_code=403, detail="Token organization restriction mismatch")
+        effective_org_id = pat_org
+        ensure_pat_allows_read(current_user, effective_org_id)
+
     agents = crud.get_agents(
         db,
         skip=skip,
         limit=limit,
         current_user=current_user,
         scope=scope,
-        organization_id=organization_id,
+        organization_id=effective_org_id,
     )
     return agents
 
@@ -124,26 +155,44 @@ def get_agent_endpoint(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     db_agent = crud.get_agent(db, agent_id=agent_id)
     if not db_agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
     current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    if authorization or x_api_key:
+        try:
+            _u, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+        except HTTPException:
+            raise
+        # Enforce PAT read scope and optional org restriction
+        ensure_pat_allows_read(current_user, getattr(db_agent, 'organization_id', None))
+    else:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
     if not can_read(db_agent, current_user):
         raise HTTPException(status_code=404, detail="Agent not found")
     return db_agent
@@ -160,23 +209,48 @@ def search_agents_endpoint(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
     current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    if authorization or x_api_key:
+        try:
+            _u, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+        except HTTPException:
+            raise
+    else:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
+
+    effective_org_id = organization_id
+    if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+        pat_org = current_user["pat"]["organization_id"]
+        if organization_id and str(organization_id) != str(pat_org):
+            raise HTTPException(status_code=403, detail="Token organization restriction mismatch")
+        effective_org_id = pat_org
+        ensure_pat_allows_read(current_user, effective_org_id)
+
     agents = crud.search_agents(
         db,
         query=query,
@@ -184,7 +258,7 @@ def search_agents_endpoint(
         limit=limit,
         current_user=current_user,
         scope=scope,
-        organization_id=organization_id,
+        organization_id=effective_org_id,
     )
     return agents
 

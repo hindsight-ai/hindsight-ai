@@ -35,6 +35,15 @@ const AgentManagementPage = () => {
     fetchAgents();
   }, [fetchAgents]);
 
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      fetchAgents();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, [fetchAgents]);
+
   const handleAgentAdded = () => {
     fetchAgents(); // Refresh the list when a new agent is added
     setShowAddModal(false);

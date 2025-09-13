@@ -201,6 +201,20 @@ const MemoryBlockList = () => {
     fetchAgentIds(); // Fetch agent IDs
   }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchKeywords, fetchAgentIds]); // Remove fetchMemoryBlocks from dependencies to prevent infinite loop
 
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      setPagination(prev => ({ ...prev, page: 1 }));
+      setMemoryBlocks([]);
+      setLoading(true);
+      fetchMemoryBlocks();
+      fetchKeywords();
+      fetchAgentIds();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, [fetchMemoryBlocks, fetchKeywords, fetchAgentIds]);
+
   // Update URL parameters when pagination state changes
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);

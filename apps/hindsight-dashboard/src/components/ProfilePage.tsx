@@ -176,6 +176,12 @@ const ProfilePage: React.FC = () => {
                 <option value="">— None —</option>
                 {orgOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
+              {createForm.organization_id && (
+                <div className="mt-1 text-xs text-gray-500 flex items-center gap-2">
+                  <span>Org ID: {createForm.organization_id}</span>
+                  <CopyToClipboardButton textToCopy={createForm.organization_id} displayId="CopyOrgId" />
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">Expires At (optional)</label>

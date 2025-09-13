@@ -115,19 +115,22 @@ Under `/users/me/tokens`:
   - Captured goals, data model, API, UI, auth integration, hashing, audit, tests & rollout.
 
 ### Phase 1 — DB Schema & Model
-- Status: In Progress
-- Actions:
-  - Add SQLAlchemy model `PersonalAccessToken`
-  - Add Alembic migration for `personal_access_tokens`
-- Acceptance:
-  - Migrations apply; model imported in `core.db.models`
+- Status: Completed (migration + model present)
+- Actions completed:
+  - SQLAlchemy model `PersonalAccessToken` implemented in `apps/hindsight-service/core/db/models/tokens.py`.
+  - Alembic migration `migrations/versions/7c1a2b3c4d5e_add_personal_access_tokens_table.py` added.
+  - Indexes and constraints created in the migration (ix_pat_token_id, idx_pat_user_created, idx_pat_status).
+- Next verification tasks:
+  - Ensure the migration is applied in target environments (dev/staging) during rollout.
+  - Confirm `core.db.models` aggregator imports `PersonalAccessToken` so the model is available via imports used across the codebase.
 
 ### Phase 2 — Hashing Utilities
-- Status: Planned
-- Actions:
-  - Implement Argon2id hashing/verification; fallback to PBKDF2; constants
-- Acceptance:
-  - Unit tests cover hash/verify + constant‑time compare
+- Status: Partial (utilities implemented; confirm runtime deps)
+- What exists today:
+  - `apps/hindsight-service/core/utils/token_crypto.py` implements token parsing/generation, `hash_secret`, and `verify_secret` with Argon2id preferred and PBKDF2 as fallback.
+- Remaining tasks:
+  - Verify Argon2 runtime dependency (`argon2-cffi`) is present in the Python environment and declared in `pyproject.toml`/lockfile; if not, add it.
+  - Add unit tests to exercise both Argon2 and PBKDF2 verification paths and a constant-time compare assertion for the verification function.
 
 ### Phase 3 — Repositories & CRUD
 - Status: Planned
@@ -138,19 +141,22 @@ Under `/users/me/tokens`:
   - Unit tests for CRUD and audit
 
 ### Phase 4 — Auth Integration
-- Status: Planned
-- Actions:
-  - Add `get_current_user_context_or_pat` dependency
-  - Enforce scopes/organization gating; update route dependencies where appropriate
-- Acceptance:
-  - Integration tests: valid PAT can read/write as per scopes, org scoping enforced
+- Status: In Progress (core pieces present)
+- What exists today:
+  - `apps/hindsight-service/core/api/deps.py` contains `get_current_user_context_or_pat` that accepts `Authorization: Bearer <token>` and `X-API-Key`, parses tokens, looks up token by `token_id`, validates status/expiry, verifies secret via `token_crypto.verify_secret`, loads the token's user, and builds a `current_user` context similar to the oauth2-proxy flow.
+  - `core/db/repositories/tokens.py` provides `get_by_token_id`, `mark_used_now`, `create_token`, `rotate_token`, `revoke_token`, and list/update helpers.
+- Remaining tasks:
+  - Audit `get_current_user_context_or_pat` thoroughly and add unit tests covering valid token, invalid secret, revoked, expired, and org mismatch cases.
+  - Ensure `mark_used_now` (last_used_at) is invoked for successful PAT authentication (ideally inside the dependency so all routes benefit).
+  - Confirm the dependency returns the same shaped `current_user` as the oauth2-proxy flow so permission helpers work unchanged.
 
 ### Phase 5 — API Endpoints for Tokens
-- Status: Planned
-- Actions:
-  - `/users/me/tokens` endpoints per above
-- Acceptance:
-  - Postman/curl tests; unit/integration tests
+- Status: Implemented (endpoints present)
+- What exists today:
+  - `apps/hindsight-service/core/api/users.py` exposes `GET /users/me/tokens`, `POST /users/me/tokens`, `DELETE /users/me/tokens/{id}`, `POST /users/me/tokens/{id}/rotate`, and `PATCH /users/me/tokens/{id}` wired to repository functions and audit logging in most flows.
+- Remaining tasks:
+  - Add unit and integration tests for these endpoints (create returns one-time token, rotate returns new token once, revoke marks token revoked, patch preserves no scope widening).
+  - Validate responses and error codes match the plan (401, 403, 400 where appropriate).
 
 ### Phase 6 — UI: Profile → API Tokens
 - Status: Planned
@@ -160,11 +166,36 @@ Under `/users/me/tokens`:
   - Jest/react‑testing‑library tests for render and actions
 
 ### Phase 7 — Hardening & Rate Limit
-- Status: Planned
-- Actions:
-  - Optional rate limits; error telemetry; secure logging
-- Acceptance:
-  - No secrets in logs; automated checks pass
+- Status: Planned (not implemented)
+- Recommended next steps:
+  - Implement optional per-token rate limiting or platform-side limits (e.g., Redis sliding window, Traefik rate-limits) and alerts for repeated invalid token attempts.
+  - Audit logging to ensure token secrets are never written; audit entries should include metadata only (no secret).
+## Interim findings and immediate actions
+
+- Summary of what is present (confirmed by a code scan):
+  - Model + migration: `core/db/models/tokens.py`, migration exists.
+  - Crypto: `core/utils/token_crypto.py` implements parse/generate/hash/verify with Argon2 preferred and PBKDF2 fallback.
+  - Repositories: `core/db/repositories/tokens.py` CRUD implemented.
+  - API endpoints: `core/api/users.py` includes management endpoints.
+  - Auth dependency: `core/api/deps.py` includes `get_current_user_context_or_pat` (PAT-aware dependency).
+  - Frontend: token UI in the dashboard exists (`apps/hindsight-dashboard/src/components/ProfilePage.tsx` and `src/api/tokenService.ts`).
+
+- Shortcomings discovered (these must be addressed to make the API public via PATs):
+  1. Middleware that enforces read-only for unauthenticated mutating requests may block requests authenticated only by PAT headers; middleware must detect PAT header presence and allow those requests through to route deps.
+ 2. Many API routes still use the oauth-only `get_current_user_context` dependency; they must be switched to `get_current_user_context_or_pat` or otherwise accept PATs where appropriate.
+ 3. Global enforcement of scopes (read/write) across endpoints needs audit and explicit checks added where missing (helpers exist, but not necessarily used at every route).
+ 4. Argon2 runtime package presence needs verification and tests for both hashing modes must be added.
+ 5. Tests (unit + integration) for token flows are missing or incomplete: hashing, repo CRUD, dependency verification, route-level integration.
+
+## Updated short-term roadmap (next milestones)
+
+1. Verify Argon2 availability and add token_crypto unit tests (fast, low-risk). (Phase 2)
+2. Update ASGI middleware to allow PAT-authenticated mutating requests (important blocker). (Phase 4/5)
+3. Replace or augment route dependencies so PAT is accepted across intended endpoints; add scope checks. (Phase 4/5)
+4. Add tests covering dependency behavior and a representative set of endpoints (read/write + org scoping). (Phase 8)
+5. Update docs and CI to validate migrations and run token tests in pipeline. (Phase 9/11)
+
+If you want, I will start with step 1 (verify Argon2 presence and add token_crypto tests) and then proceed to the middleware fix. Indicate "go" to begin and I'll implement the first change and run the tests locally.
 
 ### Phase 8 — Docs & Rollout
 - Status: Planned

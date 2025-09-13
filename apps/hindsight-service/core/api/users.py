@@ -4,6 +4,7 @@ Users API endpoints.
 Currently exposes self-profile update for display name.
 """
 from typing import Optional
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 

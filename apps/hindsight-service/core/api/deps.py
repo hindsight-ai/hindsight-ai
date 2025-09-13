@@ -183,3 +183,24 @@ def ensure_pat_allows_write(current_user: Dict[str, Any], target_org_id=None):
     pat_org = pat.get("organization_id")
     if pat_org and target_org_id and str(pat_org) != str(target_org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token organization restriction mismatch")
+
+
+def ensure_pat_allows_read(current_user: Dict[str, Any], target_org_id=None, *, write_implies_read: bool = True):
+    """Raise 403 if a PAT is present and does not allow read to the target org.
+
+    - Requires `read` scope, or `write` if `write_implies_read=True`.
+    - If PAT has `organization_id`, enforce it matches the target org (when provided).
+    - If no PAT present, this is a no-op.
+    """
+    if not current_user:
+        return
+    pat = current_user.get("pat")
+    if not pat:
+        return
+    scopes = set((pat.get("scopes") or []))
+    has_read = ("read" in scopes) or (write_implies_read and "write" in scopes)
+    if not has_read:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token lacks read scope")
+    pat_org = pat.get("organization_id")
+    if pat_org and target_org_id and str(pat_org) != str(target_org_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token organization restriction mismatch")

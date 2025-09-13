@@ -75,7 +75,9 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
       "env": {
         "MEMORY_SERVICE_BASE_URL": "http://localhost:8000",
         "DEFAULT_AGENT_ID": "7a229550-d8ad-4726-a529-6380949e878c",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab",
+        "HINDSIGHT_API_TOKEN": "hs_pat_xxx", // or use HINDSIGHT_API_KEY for X-API-Key header
+        "HINDSIGHT_ORGANIZATION_ID": "00000000-0000-0000-0000-000000000000" // optional: force org scope for creates/reads
       },
       "transportType": "stdio"
     }
@@ -92,3 +94,38 @@ npm run inspector
 ```
 
 The Inspector will provide a URL to access debugging tools in your browser.
+
+### Smoke Test (curl)
+
+Verify your token and org setup quickly:
+
+```bash
+# Health
+curl -sS $MEMORY_SERVICE_BASE_URL/health
+
+# Who am I (works with PAT)
+curl -sS -H "Authorization: Bearer $HINDSIGHT_API_TOKEN" \
+  $MEMORY_SERVICE_BASE_URL/user-info | jq .
+
+# List memory blocks (narrow to org if PAT is org-restricted)
+curl -sS -H "Authorization: Bearer $HINDSIGHT_API_TOKEN" \
+  "$MEMORY_SERVICE_BASE_URL/memory-blocks/?limit=1" | jq .
+```
+
+## Authentication & Scoping
+
+- Provide one of:
+  - `HINDSIGHT_API_TOKEN`: will be sent as `Authorization: Bearer <token>`
+  - `HINDSIGHT_API_KEY`: will be sent as `X-API-Key: <token>`
+
+- Scopes required by tools:
+  - Read tools (`retrieve_*`, `search_*`, `get_memory_details`): token with `read` (or `write`) scope
+  - Write tools (`create_memory_block`, `create_agent`, `report_memory_feedback`): token with `write` scope
+
+- Organization scoping:
+  - If you want the MCP to always operate within a specific organization, set `HINDSIGHT_ORGANIZATION_ID`.
+    - Creates will use `visibility_scope=organization` and this `organization_id` by default.
+    - List tools will include `scope=organization` and the same `organization_id`.
+  - Stronger enforcement: issue a PAT restricted to that `organization_id` in the backend. The MCP works with either approach, but PAT org restriction is authoritative.
+
+If neither `HINDSIGHT_ORGANIZATION_ID` nor an org-restricted PAT is provided, creation defaults to personal scope, and reads filter by the authenticated user’s memberships.

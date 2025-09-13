@@ -7,10 +7,12 @@ interface OrganizationContextType {
   userOrganizations: Organization[];
   currentUserMembership: OrganizationMember | null;
   isPersonalMode: boolean;
+  isPublicMode: boolean;
   loading: boolean;
   error: string | null;
   switchToPersonal: () => void;
   switchToOrganization: (orgId: string) => void;
+  switchToPublic: () => void;
   refreshOrganizations: () => Promise<void>;
 }
 
@@ -34,6 +36,7 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
   const [userOrganizations, setUserOrganizations] = useState<Organization[]>([]);
   const [currentUserMembership, setCurrentUserMembership] = useState<OrganizationMember | null>(null);
   const [isPersonalMode, setIsPersonalMode] = useState(true);
+  const [isPublicMode, setIsPublicMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,12 +50,14 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
       const organizations = await organizationService.getOrganizations();
       setUserOrganizations(organizations);
       
-      // Check if we have a saved organization preference
+      // Restore scope preference
+      const savedScope = localStorage.getItem('selectedScope');
       const savedOrgId = localStorage.getItem('selectedOrganizationId');
-      if (savedOrgId && organizations.find(org => org.id === savedOrgId)) {
+      if (savedScope === 'public') {
+        switchToPublic();
+      } else if (savedOrgId && organizations.find(org => org.id === savedOrgId)) {
         await switchToOrganization(savedOrgId);
       } else {
-        // Default to personal mode
         switchToPersonal();
       }
     } catch (err) {
@@ -68,7 +73,14 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
     setCurrentOrganization(null);
     setCurrentUserMembership(null);
     setIsPersonalMode(true);
+    setIsPublicMode(false);
     localStorage.removeItem('selectedOrganizationId');
+    localStorage.setItem('selectedScope', 'personal');
+    try {
+      sessionStorage.setItem('ACTIVE_SCOPE', 'personal');
+      sessionStorage.removeItem('ACTIVE_ORG_ID');
+    } catch {}
+    try { window.dispatchEvent(new Event('orgScopeChanged')); } catch {}
   };
 
   const switchToOrganization = async (orgId: string) => {
@@ -91,7 +103,14 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
       setCurrentOrganization(organization);
       setCurrentUserMembership(membership);
       setIsPersonalMode(false);
+      setIsPublicMode(false);
       localStorage.setItem('selectedOrganizationId', orgId);
+      localStorage.setItem('selectedScope', 'organization');
+      try {
+        sessionStorage.setItem('ACTIVE_SCOPE', 'organization');
+        sessionStorage.setItem('ACTIVE_ORG_ID', orgId);
+      } catch {}
+      try { window.dispatchEvent(new Event('orgScopeChanged')); } catch {}
     } catch (err) {
       console.error('Failed to switch to organization:', err);
       setError(`Failed to switch to organization: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -111,18 +130,35 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
       setUserOrganizations([]);
       setCurrentUserMembership(null);
       setIsPersonalMode(true);
+      setIsPublicMode(false);
     }
   }, [user?.authenticated, authLoading]);
+
+  const switchToPublic = () => {
+    setCurrentOrganization(null);
+    setCurrentUserMembership(null);
+    setIsPersonalMode(false);
+    setIsPublicMode(true);
+    localStorage.removeItem('selectedOrganizationId');
+    localStorage.setItem('selectedScope', 'public');
+    try {
+      sessionStorage.setItem('ACTIVE_SCOPE', 'public');
+      sessionStorage.removeItem('ACTIVE_ORG_ID');
+    } catch {}
+    try { window.dispatchEvent(new Event('orgScopeChanged')); } catch {}
+  };
 
   const value: OrganizationContextType = {
     currentOrganization,
     userOrganizations,
     currentUserMembership,
     isPersonalMode,
+    isPublicMode,
     loading,
     error,
     switchToPersonal,
     switchToOrganization,
+    switchToPublic,
     refreshOrganizations,
   };
 

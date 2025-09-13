@@ -97,6 +97,16 @@ const ConsolidationSuggestions: React.FC = () => {
     };
   }, [fetchSuggestions]); // Dependency for useEffect
 
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      const abortController = new AbortController();
+      fetchSuggestions(abortController.signal);
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, [fetchSuggestions]);
+
   const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>): void => {
     if (event.target.checked) {
       const allSuggestionIds = suggestions.map(s => s.suggestion_id);

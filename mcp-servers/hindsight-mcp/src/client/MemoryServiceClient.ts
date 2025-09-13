@@ -7,18 +7,21 @@ export interface CreateMemoryBlockPayload {
   content: string; // Main content of the memory block
   errors?: string;
   lessons_learned: string;
-  metadata?: Record<string, any>; // JSON
+  metadata_col?: Record<string, any>; // JSON (aligns with backend field name)
+  visibility_scope?: 'personal' | 'organization' | 'public';
+  organization_id?: string;
 }
 
 export interface MemoryBlock {
-  memory_id: string; // UUID - Changed from 'id' to 'memory_id'
+  // Note: backend returns `id` (UUID). Keep other fields that tools actually use.
+  id?: string;
   agent_id: string; // UUID
   conversation_id: string; // UUID
   timestamp: string; // TIMESTAMP
   content: string;
   errors: string | null;
   lessons_learned: string;
-  metadata: Record<string, any> | null;
+  metadata_col?: Record<string, any> | null;
   feedback_score: number;
   created_at: string; // TIMESTAMP
   updated_at: string; // TIMESTAMP
@@ -33,11 +36,13 @@ export interface Agent {
 
 export interface CreateAgentPayload {
   agent_name: string;
+  visibility_scope?: 'personal' | 'organization' | 'public';
+  organization_id?: string;
 }
 
 export interface RetrieveMemoriesPayload {
-  query_text: string;
-  keywords: string; // Keywords for search
+  query_text?: string;
+  keywords: string; // CSV keywords for search
   agent_id: string;
   conversation_id?: string;
   limit?: number;
@@ -72,13 +77,21 @@ export interface GetAllMemoryBlocksResponse {
 export class MemoryServiceClient {
   private client: AxiosInstance;
 
-  constructor(baseURL: string) {
-    this.client = axios.create({
-      baseURL,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+  constructor(baseURL: string, apiToken?: string, headerName: 'Authorization' | 'X-API-Key' = 'Authorization') {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiToken) {
+      if (headerName === 'Authorization') {
+        headers['Authorization'] = `Bearer ${apiToken}`;
+      } else {
+        headers['X-API-Key'] = apiToken;
+      }
+    }
+    this.client = axios.create({ baseURL, headers });
+  }
+
+  async whoAmI(): Promise<any> {
+    const response = await this.client.get('/user-info');
+    return response.data;
   }
 
   /**
@@ -98,7 +111,7 @@ export class MemoryServiceClient {
    */
   async createMemoryBlock(payload: CreateMemoryBlockPayload): Promise<{ id: string }> {
     const response = await this.client.post<{ id: string }>(
-      '/memory-blocks',
+      '/memory-blocks/',
       payload
     );
     return response.data;
@@ -124,7 +137,7 @@ export class MemoryServiceClient {
    * @param limit Optional maximum number of memories to retrieve.
    * @returns An array of memory blocks matching the criteria.
    */
-  async getMemoryBlocksByConversationId(conversation_id: string, agent_id?: string, limit?: number): Promise<MemoryBlock[]> {
+  async getMemoryBlocksByConversationId(conversation_id: string, agent_id?: string, limit?: number, opts?: { scope?: string; organization_id?: string }): Promise<MemoryBlock[]> {
     const params: any = { conversation_id };
     if (agent_id) {
       params.agent_id = agent_id;
@@ -132,8 +145,10 @@ export class MemoryServiceClient {
     if (limit) {
       params.limit = limit;
     }
-    const response = await this.client.get<MemoryBlock[]>('/memory-blocks', { params });
-    return response.data;
+    if (opts?.scope) params.scope = opts.scope;
+    if (opts?.organization_id) params.organization_id = opts.organization_id;
+    const response = await this.client.get<GetAllMemoryBlocksResponse>('/memory-blocks/', { params });
+    return response.data.items || [];
   }
 
   /**
@@ -142,7 +157,7 @@ export class MemoryServiceClient {
    * @param limit Optional maximum number of memories to retrieve.
    * @returns An object containing an array of memory blocks and pagination info.
    */
-  async getAllMemoryBlocks(agent_id?: string, limit?: number): Promise<GetAllMemoryBlocksResponse> {
+  async getAllMemoryBlocks(agent_id?: string, limit?: number, opts?: { scope?: string; organization_id?: string }): Promise<GetAllMemoryBlocksResponse> {
     const params: any = {};
     if (agent_id) {
       params.agent_id = agent_id;
@@ -150,7 +165,9 @@ export class MemoryServiceClient {
     if (limit) {
       params.limit = limit;
     }
-    const response = await this.client.get<GetAllMemoryBlocksResponse>('/memory-blocks', { params });
+    if (opts?.scope) params.scope = opts.scope;
+    if (opts?.organization_id) params.organization_id = opts.organization_id;
+    const response = await this.client.get<GetAllMemoryBlocksResponse>('/memory-blocks/', { params });
     return response.data;
   }
 
@@ -160,33 +177,28 @@ export class MemoryServiceClient {
    * @returns An array of relevant memory blocks.
    */
   async retrieveRelevantMemories(payload: RetrieveMemoriesPayload): Promise<MemoryBlock[]> {
-    const response = await this.client.get<MemoryBlock[]>('/memory-blocks/search', { params: payload });
+    const response = await this.client.get<MemoryBlock[]>('/memory-blocks/search/', { params: payload });
     return response.data;
   }
 
-  /**
-   * Performs advanced search on memory blocks with support for multiple search types.
-   * @param payload The advanced search parameters.
-   * @returns An object containing search results and pagination info.
-   */
-  async advancedSearch(payload: AdvancedSearchPayload): Promise<GetAllMemoryBlocksResponse> {
-    const params: any = {
-      search_query: payload.search_query,
-      search_type: payload.search_type || 'basic',
-    };
-    
-    // Add optional parameters only if they're provided
-    if (payload.agent_id) params.agent_id = payload.agent_id;
-    if (payload.conversation_id) params.conversation_id = payload.conversation_id;
-    if (payload.limit) params.limit = payload.limit;
-    if (payload.min_score !== undefined) params.min_score = payload.min_score;
-    if (payload.similarity_threshold !== undefined) params.similarity_threshold = payload.similarity_threshold;
-    if (payload.fulltext_weight !== undefined) params.fulltext_weight = payload.fulltext_weight;
-    if (payload.semantic_weight !== undefined) params.semantic_weight = payload.semantic_weight;
-    if (payload.min_combined_score !== undefined) params.min_combined_score = payload.min_combined_score;
-    if (payload.include_archived !== undefined) params.include_archived = payload.include_archived;
-    
-    const response = await this.client.get<GetAllMemoryBlocksResponse>('/memory-blocks/', { params });
+  // Search endpoints returning scored memory blocks
+  async searchFulltext(params: { query: string; agent_id?: string; conversation_id?: string; limit?: number; min_score?: number; include_archived?: boolean; }): Promise<MemoryBlock[]> {
+    const response = await this.client.get<MemoryBlock[]>('/memory-blocks/search/fulltext', { params });
+    return response.data;
+  }
+
+  async searchSemantic(params: { query: string; agent_id?: string; conversation_id?: string; limit?: number; similarity_threshold?: number; include_archived?: boolean; }): Promise<MemoryBlock[]> {
+    const response = await this.client.get<MemoryBlock[]>('/memory-blocks/search/semantic', { params });
+    return response.data;
+  }
+
+  async searchHybrid(params: { query: string; agent_id?: string; conversation_id?: string; limit?: number; fulltext_weight?: number; semantic_weight?: number; min_combined_score?: number; include_archived?: boolean; }): Promise<MemoryBlock[]> {
+    const response = await this.client.get<MemoryBlock[]>('/memory-blocks/search/hybrid', { params });
+    return response.data;
+  }
+
+  async searchAgents(query: string): Promise<Agent[]> {
+    const response = await this.client.get<Agent[]>(`/agents/search/`, { params: { query } });
     return response.data;
   }
 
@@ -196,7 +208,7 @@ export class MemoryServiceClient {
    * @returns A success message.
    */
   async reportMemoryFeedback(payload: ReportFeedbackPayload): Promise<string> {
-    const response = await this.client.post<string>(`/memory-blocks/${payload.memory_block_id}/feedback`, payload);
+    const response = await this.client.post<string>(`/memory-blocks/${payload.memory_block_id}/feedback/`, payload);
     return response.data;
   }
 }
