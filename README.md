@@ -28,7 +28,7 @@ These components are designed to integrate seamlessly. The `hindsight-service` (
 
 ### Knowledge Distillation Process
 
-Knowledge distillation within Hindsight AI is primarily performed by a background worker (`consolidation_worker.py`) that consolidates similar or duplicate memory blocks into single, refined suggestions. The process involves:
+Knowledge distillation within Hindsight AI is primarily performed by a background worker (`core.workers.consolidation_worker`) that consolidates similar or duplicate memory blocks into single, refined suggestions. The process involves:
 1.  **Fetching Memory Blocks:** Retrieving memory blocks from the database in batches.
 2.  **Analyzing Duplicates:** This is done primarily using an LLM-based analysis (Google Gemini API). The LLM is prompted to act as an AI assistant, identify semantically similar or duplicate memory blocks, group them, and then generate a consolidated version of the `content`, `lessons_learned`, and `keywords` for each group. The goal is to increase quality and information density while reducing overall size. A fallback similarity analysis (TF-IDF vectorization and cosine similarity) is used if the LLM is unavailable, but it *only* identifies groups and does not generate consolidated suggestions.
 3.  **Storing Suggestions:** Only LLM-generated consolidation suggestions are stored in the `consolidation_suggestions` table with a "pending" status, awaiting user review.

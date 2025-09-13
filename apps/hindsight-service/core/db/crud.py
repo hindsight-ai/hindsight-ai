@@ -16,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import or_, and_, func, Text # Import func, and_, and Text
 from .repositories import memory_blocks as repo_memories
 from typing import List, Optional
+from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
 
 # CRUD for BulkOperation (facade delegates to repository)
 def create_bulk_operation(
@@ -336,15 +337,15 @@ def delete_feedback_log(db: Session, feedback_id: uuid.UUID):
         db.commit()
     return db_feedback_log
 
-def _get_or_create_keyword(db: Session, keyword_text: str, *, visibility_scope: str = 'personal', owner_user_id=None, organization_id=None):
+def _get_or_create_keyword(db: Session, keyword_text: str, *, visibility_scope: str = SCOPE_PERSONAL, owner_user_id=None, organization_id=None):
     # Remove leading/trailing whitespace and then trailing periods from the keyword text
     processed_keyword_text = keyword_text.strip().rstrip('.')
     
     q = db.query(models.Keyword).filter(models.Keyword.keyword_text == processed_keyword_text,
                                         models.Keyword.visibility_scope == visibility_scope)
-    if visibility_scope == 'organization' and organization_id is not None:
+    if visibility_scope == SCOPE_ORGANIZATION and organization_id is not None:
         q = q.filter(models.Keyword.organization_id == organization_id)
-    elif visibility_scope == 'personal' and owner_user_id is not None:
+    elif visibility_scope == SCOPE_PERSONAL and owner_user_id is not None:
         q = q.filter(models.Keyword.owner_user_id == owner_user_id)
     keyword = q.first()
     if not keyword:
@@ -652,8 +653,15 @@ def get_organization_invitation(db: Session, invitation_id: uuid.UUID):
     return repo_orgs.get_organization_invitation(db, invitation_id)
 
 
-def get_organization_invitations(db: Session, organization_id: uuid.UUID, skip: int = 0, limit: int = 100):
-    return repo_orgs.get_organization_invitations(db, organization_id, skip, limit)
+def get_organization_invitations(
+    db: Session,
+    organization_id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 100,
+    *,
+    status: str | None = None,
+):
+    return repo_orgs.get_organization_invitations(db, organization_id, skip, limit, status=status)
 
 
 def update_organization_invitation(

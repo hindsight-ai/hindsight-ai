@@ -349,13 +349,15 @@ class NotificationService:
     
     def notify_organization_invitation(
         self,
-        invitee_user_id: uuid.UUID,
+        invitee_user_id: Optional[uuid.UUID],
         invitee_email: str,
         inviter_name: str,
+        inviter_user_id: Optional[uuid.UUID],
         organization_name: str,
         invitation_id: uuid.UUID,
         accept_url: str,
-        decline_url: str
+        decline_url: str,
+        role: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Send both in-app and email notifications for organization invitations.
@@ -363,14 +365,17 @@ class NotificationService:
         Returns:
             Dict with 'in_app_notification' and 'email_log' keys if created
         """
-        # Check user preferences
-        preferences = self.get_user_preferences(invitee_user_id)
-        org_invite_prefs = preferences.get('org_invitation', {'email_enabled': True, 'in_app_enabled': True})
+        # Check preferences if invitee user exists; otherwise, email-only fallback
+        if invitee_user_id is not None:
+            preferences = self.get_user_preferences(invitee_user_id)
+            org_invite_prefs = preferences.get('org_invitation', {'email_enabled': True, 'in_app_enabled': True})
+        else:
+            org_invite_prefs = {'email_enabled': True, 'in_app_enabled': False}
         
         result = {}
         
         # Create in-app notification if enabled
-        if org_invite_prefs['in_app_enabled']:
+        if invitee_user_id is not None and org_invite_prefs['in_app_enabled']:
             notification = self.create_notification(
                 user_id=invitee_user_id,
                 event_type='org_invitation',
@@ -390,25 +395,68 @@ class NotificationService:
         
         # Create email notification log if email enabled
         if org_invite_prefs['email_enabled']:
+            # Choose a user_id for logging: invitee if exists, else inviter
+            log_user_id = invitee_user_id or inviter_user_id
             email_log = self.create_email_notification_log(
                 notification_id=result.get('in_app_notification', {}).id if 'in_app_notification' in result else None,
-                user_id=invitee_user_id,
+                user_id=log_user_id,
                 email_address=invitee_email,
                 event_type='org_invitation',
                 subject=f"You're invited to join {organization_name}"
             )
             result['email_log'] = email_log
             
+            # Build robust inviter identity (always non-empty for template rendering)
+            inviter_name_safe = (inviter_name or "").strip()
+            inviter_email_safe = ""
+            inviter_display = inviter_name_safe
+
+            try:
+                if inviter_user_id:
+                    inv_user = self.db.query(models.User).filter(models.User.id == inviter_user_id).first()
+                    if inv_user:
+                        inv_name = (inv_user.display_name or "").strip()
+                        inv_email = (inv_user.email or "").strip()
+                        inviter_email_safe = inv_email
+                        if inv_name and inv_email:
+                            inviter_display = f"{inv_name} ({inv_email})"
+                            inviter_name_safe = inv_name
+                        elif inv_name:
+                            inviter_display = inv_name
+                            inviter_name_safe = inv_name
+                        elif inv_email:
+                            inviter_display = inv_email
+                            inviter_name_safe = inv_email
+            except Exception:
+                # If lookup fails, fall back to passed-in inviter_name
+                pass
+
+            if not inviter_name_safe:
+                # Absolute fallback to avoid empty placeholders in templates
+                inviter_name_safe = "A team member"
+                if inviter_display:
+                    inviter_name_safe = inviter_display
+
+            # Normalize role for templates
+            try:
+                from enum import Enum as _Enum
+                role_value = role.value if isinstance(role, _Enum) else str(role)
+            except Exception:
+                role_value = str(role)
+
             # Send the actual email
             try:
                 import asyncio
                 template_context = {
                     'organization_name': organization_name,
-                    'inviter_name': inviter_name,
+                    'inviter_name': inviter_name_safe,
+                    'inviter_display': inviter_display,
+                    'inviter_email': inviter_email_safe,
                     'accept_url': accept_url,
                     'decline_url': decline_url,
                     'invitation_id': str(invitation_id),
-                    'current_year': datetime.now().year
+                    'current_year': datetime.now().year,
+                    'role': role_value,
                 }
                 
                 # Send email asynchronously
@@ -474,14 +522,16 @@ class NotificationService:
             # Send the actual email
             try:
                 import asyncio
+                from core.utils.urls import get_app_base_url
+                base_url = get_app_base_url()
                 template_context = {
                     'organization_name': organization_name,
                     'role': role,
                     'added_by_name': added_by_name,
                     'date_added': datetime.now().strftime('%B %d, %Y'),
                     'current_year': datetime.now().year,
-                    'dashboard_url': 'https://hindsight-ai.com/dashboard',  # TODO: Make configurable
-                    'organization_url': 'https://hindsight-ai.com/organizations'  # TODO: Make configurable
+                    'dashboard_url': f'{base_url}/dashboard',
+                    'organization_url': f'{base_url}/organizations'
                 }
                 
                 # Send email asynchronously
@@ -500,6 +550,116 @@ class NotificationService:
                     error_message=f"Email sending failed: {str(e)}"
                 )
         
+        return result
+
+    # === Invitation Outcome Notifications (to inviter) ===
+
+    def notify_invitation_accepted(
+        self,
+        inviter_user_id: uuid.UUID,
+        inviter_email: str,
+        organization_name: str,
+        invitee_email: str,
+    ) -> Dict[str, Any]:
+        prefs = self.get_user_preferences(inviter_user_id).get(
+            'org_invitation_accepted', {'email_enabled': True, 'in_app_enabled': True}
+        )
+        result: Dict[str, Any] = {}
+        title = f"Invitation accepted"
+        message = f"{invitee_email} accepted your invitation to join {organization_name}."
+
+        if prefs.get('in_app_enabled'):
+            n = self.create_notification(
+                user_id=inviter_user_id,
+                event_type='org_invitation_accepted',
+                title=title,
+                message=message,
+                metadata={'organization_name': organization_name, 'invitee_email': invitee_email},
+            )
+            result['in_app_notification'] = n
+
+        if prefs.get('email_enabled'):
+            log = self.create_email_notification_log(
+                notification_id=result.get('in_app_notification', {}).id if 'in_app_notification' in result else None,
+                user_id=inviter_user_id,
+                email_address=inviter_email,
+                event_type='org_invitation_accepted',
+                subject=f"{organization_name}: Invitation accepted"
+            )
+            result['email_log'] = log
+            try:
+                import asyncio
+                html = (
+                    f"<p>{invitee_email} accepted your invitation to join <strong>{organization_name}</strong>.</p>"
+                )
+                text = f"{invitee_email} accepted your invitation to join {organization_name}."
+                send_res = asyncio.run(self.email_service.send_email(
+                    to_email=inviter_email,
+                    subject=f"{organization_name}: Invitation accepted",
+                    html_content=html,
+                    text_content=text,
+                ))
+                if send_res.get('success'):
+                    self.update_email_status(log.id, 'sent', provider_message_id=send_res.get('message_id'))
+                else:
+                    self.update_email_status(log.id, 'failed', error_message=send_res.get('error'))
+            except Exception as e:
+                self.update_email_status(log.id, 'failed', error_message=str(e))
+
+        return result
+
+    def notify_invitation_declined(
+        self,
+        inviter_user_id: uuid.UUID,
+        inviter_email: str,
+        organization_name: str,
+        invitee_email: str,
+    ) -> Dict[str, Any]:
+        prefs = self.get_user_preferences(inviter_user_id).get(
+            'org_invitation_declined', {'email_enabled': False, 'in_app_enabled': True}
+        )
+        result: Dict[str, Any] = {}
+        title = f"Invitation declined"
+        message = f"{invitee_email} declined the invitation to join {organization_name}."
+
+        if prefs.get('in_app_enabled'):
+            n = self.create_notification(
+                user_id=inviter_user_id,
+                event_type='org_invitation_declined',
+                title=title,
+                message=message,
+                metadata={'organization_name': organization_name, 'invitee_email': invitee_email},
+            )
+            result['in_app_notification'] = n
+
+        if prefs.get('email_enabled'):
+            log = self.create_email_notification_log(
+                notification_id=result.get('in_app_notification', {}).id if 'in_app_notification' in result else None,
+                user_id=inviter_user_id,
+                email_address=inviter_email,
+                event_type='org_invitation_declined',
+                subject=f"{organization_name}: Invitation declined"
+            )
+            result['email_log'] = log
+            try:
+                import asyncio
+                html = (
+                    f"<p>{invitee_email} declined the invitation to join <strong>{organization_name}</strong>.</p>"
+                )
+                text = f"{invitee_email} declined the invitation to join {organization_name}."
+                send_res = asyncio.run(self.email_service.send_email(
+                    to_email=inviter_email,
+                    subject=f"{organization_name}: Invitation declined",
+                    html_content=html,
+                    text_content=text,
+                ))
+                if send_res.get('success'):
+                    self.update_email_status(log.id, 'sent', provider_message_id=send_res.get('message_id'))
+                else:
+                    self.update_email_status(log.id, 'failed', error_message=send_res.get('error'))
+            except Exception as e:
+                self.update_email_status(log.id, 'failed', error_message=str(e))
+
         return result
     
     # === Cleanup Methods ===

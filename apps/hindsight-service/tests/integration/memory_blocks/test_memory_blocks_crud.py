@@ -12,7 +12,8 @@ def test_create_memory_block_with_keywords(monkeypatch, db_session):
     # Stub keyword extractor to return deterministic set
     def fake_extract(text):
         return ["alpha", "beta", "alpha"]  # duplicate to test set logic
-    monkeypatch.setattr("core.core.keyword_extraction.extract_keywords", fake_extract)
+    # Patch the simple heuristic extractor
+    monkeypatch.setattr("core.utils.keywords.simple_extract_keywords", fake_extract)
 
     payload = schemas.MemoryBlockCreate(
         agent_id=agent.agent_id,

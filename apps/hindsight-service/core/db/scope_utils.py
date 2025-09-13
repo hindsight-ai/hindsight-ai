@@ -10,6 +10,12 @@ from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 
 from . import models
+from core.utils.scopes import (
+    SCOPE_PUBLIC,
+    SCOPE_ORGANIZATION,
+    SCOPE_PERSONAL,
+    ALL_SCOPES,
+)
 
 
 def get_user_organization_ids(current_user: Optional[Dict[str, Any]]) -> List[uuid.UUID]:
@@ -46,7 +52,7 @@ def apply_scope_filter(query, current_user: Optional[Dict[str, Any]], model_clas
     """
     if current_user is None:
         # Guests can only see public data
-        return query.filter(model_class.visibility_scope == 'public')
+        return query.filter(model_class.visibility_scope == SCOPE_PUBLIC)
 
     # Superadmin sees everything
     if current_user.get('is_superadmin'):
@@ -57,10 +63,10 @@ def apply_scope_filter(query, current_user: Optional[Dict[str, Any]], model_clas
 
     return query.filter(
         or_(
-            model_class.visibility_scope == 'public',
+            model_class.visibility_scope == SCOPE_PUBLIC,
             model_class.owner_user_id == user_id,
             and_(
-                model_class.visibility_scope == 'organization',
+                model_class.visibility_scope == SCOPE_ORGANIZATION,
                 model_class.organization_id.in_(org_ids) if org_ids else False,
             ),
         )
@@ -80,7 +86,7 @@ def apply_optional_scope_narrowing(query, scope: Optional[str], organization_id:
     Returns:
         Filtered query
     """
-    if scope in ('personal', 'organization', 'public'):
+    if scope in ALL_SCOPES:
         query = query.filter(model_class.visibility_scope == scope)
 
     if organization_id is not None:
@@ -106,18 +112,18 @@ def validate_scope_access(current_user: Optional[Dict[str, Any]],
         True if access is allowed
     """
     if current_user is None:
-        return visibility_scope == 'public'
+        return visibility_scope == SCOPE_PUBLIC
 
     if current_user.get('is_superadmin'):
         return True
 
     user_id = current_user.get('id')
 
-    if visibility_scope == 'public':
+    if visibility_scope == SCOPE_PUBLIC:
         return True
-    elif visibility_scope == 'personal':
+    elif visibility_scope == SCOPE_PERSONAL:
         return owner_user_id == user_id
-    elif visibility_scope == 'organization':
+    elif visibility_scope == SCOPE_ORGANIZATION:
         if not organization_id:
             return False
         org_ids = get_user_organization_ids(current_user)

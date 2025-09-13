@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
+from core.utils.scopes import VisibilityScopeEnum
 
 
 class AgentBase(BaseModel):
     agent_name: str
-    visibility_scope: str | None = 'personal'
+    visibility_scope: VisibilityScopeEnum | None = VisibilityScopeEnum.personal
     owner_user_id: uuid.UUID | None = None
     organization_id: uuid.UUID | None = None
 
@@ -43,4 +44,3 @@ class AgentTranscript(AgentTranscriptBase):
     transcript_id: uuid.UUID
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
-

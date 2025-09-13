@@ -16,6 +16,7 @@ from core.db import models, schemas
 from core.api.deps import get_current_user_context
 from core.api.auth import get_or_create_user
 from core.api.permissions import can_manage_org
+from core.utils.role_permissions import get_allowed_roles, get_manage_roles
 
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -131,7 +132,7 @@ def list_manageable_organizations(
             models.Organization.id == models.OrganizationMembership.organization_id
         ).filter(
             models.OrganizationMembership.user_id == user.id,
-            models.OrganizationMembership.role.in_(['owner', 'admin'])
+            models.OrganizationMembership.role.in_(list(get_manage_roles()))
         ).all()
     
     return [
@@ -338,7 +339,7 @@ def add_member(
     if not email:
         raise HTTPException(status_code=422, detail="Email is required")
     # Pre-validate role against allowed set to avoid DB integrity errors
-    allowed_roles = {"owner", "admin", "editor", "viewer"}
+    allowed_roles = get_allowed_roles()
     if role not in allowed_roles:
         raise HTTPException(status_code=422, detail="Invalid role")
 
@@ -543,6 +544,25 @@ def create_invitation(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     from core.db import crud
+    # Prevent duplicate pending invitation for the same email/org
+    # Strong duplicate guard at DB level
+    dup = db.query(models.OrganizationInvitation).filter(
+        models.OrganizationInvitation.organization_id == org_id,
+        models.OrganizationInvitation.email == (invitation.email or '').lower(),
+        models.OrganizationInvitation.status == 'pending',
+    ).first()
+    if dup:
+        raise HTTPException(status_code=409, detail="Pending invitation already exists for this email")
+    # Prevent invite for users who are already members
+    # Find user by email and check membership
+    existing_user = db.query(models.User).filter(models.User.email == (invitation.email or '').lower()).first()
+    if existing_user:
+        membership = db.query(models.OrganizationMembership).filter(
+            models.OrganizationMembership.organization_id == org_id,
+            models.OrganizationMembership.user_id == existing_user.id,
+        ).first()
+        if membership:
+            raise HTTPException(status_code=409, detail="User is already a member of this organization")
     db_invitation = crud.create_organization_invitation(db, organization_id=org_id, invitation=invitation, invited_by_user_id=user.id)
 
     from core.audit import log, AuditAction, AuditStatus
@@ -557,7 +577,7 @@ def create_invitation(
         metadata={"email": invitation.email, "role": invitation.role},
     )
 
-    # Send notification to invitee if they have an account
+    # Send notification to invitee (email always; in-app if user exists)
     try:
         from core.services.notification_service import NotificationService
         
@@ -566,22 +586,27 @@ def create_invitation(
         
         # Check if invitee has an account
         invitee_user = db.query(models.User).filter(models.User.email == invitation.email).first()
-        
-        if invitee_user and organization:
+
+        if organization:
+            from core.utils.urls import build_login_invite_link
+            accept_url = build_login_invite_link(
+                invitation_id=str(db_invitation.id), org_id=str(org_id), email=invitation.email, action="accept", token=db_invitation.token
+            )
+            decline_url = build_login_invite_link(
+                invitation_id=str(db_invitation.id), org_id=str(org_id), email=invitation.email, action="decline", token=db_invitation.token
+            )
+
             notification_service = NotificationService(db)
-            
-            # Generate invitation URLs (simplified for now)
-            accept_url = f"/organizations/{org_id}/invitations/{db_invitation.id}/accept"
-            decline_url = f"/organizations/{org_id}/invitations/{db_invitation.id}/decline"
-            
             notification_service.notify_organization_invitation(
-                invitee_user_id=invitee_user.id,
+                invitee_user_id=invitee_user.id if invitee_user else None,
                 invitee_email=invitation.email,
                 inviter_name=user.display_name or user.email,
+                inviter_user_id=user.id,
                 organization_name=organization.name,
                 invitation_id=db_invitation.id,
                 accept_url=accept_url,
-                decline_url=decline_url
+                decline_url=decline_url,
+                role=invitation.role
             )
     except Exception as e:
         # Log error but don't fail the invitation creation
@@ -591,18 +616,81 @@ def create_invitation(
 
     return db_invitation
 
+@router.post("/{org_id}/invitations/{invitation_id}/decline")
+def decline_invitation(
+    org_id: uuid.UUID,
+    invitation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context),
+    token: str | None = None,
+):
+    user, current_user = user_context
+
+    from core.db import crud
+    from datetime import datetime, timezone
+
+    db_invitation = crud.get_organization_invitation(db, invitation_id=invitation_id)
+    if not db_invitation or db_invitation.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    # Allow decline either by email match or valid token
+    if not (token and db_invitation.token and token == db_invitation.token):
+        if (db_invitation.email or '').lower() != (user.email or '').lower():
+            raise HTTPException(status_code=403, detail="Invitation is for a different user")
+
+    if (db_invitation.status or '').lower() != 'pending':
+        raise HTTPException(status_code=400, detail=f"Invitation is already {db_invitation.status}")
+
+    from datetime import datetime, timezone as _tz
+    db_invitation.status = 'revoked'
+    try:
+        db_invitation.revoked_at = datetime.now(_tz.utc)
+    except Exception:
+        pass
+    db.commit()
+
+    # Notify inviter
+    try:
+        from core.services.notification_service import NotificationService
+        inviter = db.query(models.User).filter(models.User.id == db_invitation.invited_by_user_id).first()
+        org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
+        if inviter and org:
+            NotificationService(db).notify_invitation_declined(
+                inviter_user_id=inviter.id,
+                inviter_email=inviter.email,
+                organization_name=org.name,
+                invitee_email=(db_invitation.email or ''),
+            )
+    except Exception:
+        pass
+
+    from core.audit import log, AuditAction, AuditStatus
+    actor_id = user.id
+    log(
+        db,
+        action=AuditAction.INVITATION_DECLINE,
+        status=AuditStatus.SUCCESS,
+        target_type="invitation",
+        target_id=invitation_id,
+        actor_user_id=actor_id,
+        organization_id=org_id,
+    )
+    return {"status": "revoked"}
+
 @router.get("/{org_id}/invitations", response_model=List[schemas.OrganizationInvitation])
 def list_invitations(
     org_id: uuid.UUID,
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
+    status: Optional[str] = 'pending',
 ):
     user, current_user = user_context
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     from core.db import crud
-    invitations = crud.get_organization_invitations(db, organization_id=org_id)
+    effective_status = None if (status is None or str(status).lower() == 'all') else status
+    invitations = crud.get_organization_invitations(db, organization_id=org_id, status=effective_status)
     return invitations
 
 @router.post("/{org_id}/invitations/{invitation_id}/resend", response_model=schemas.OrganizationInvitation)
@@ -624,6 +712,12 @@ def resend_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
 
     db_invitation.expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    # rotate token on resend to invalidate old links
+    try:
+        import uuid as _uuid
+        db_invitation.token = _uuid.uuid4().hex
+    except Exception:
+        pass
     db.commit()
     db.refresh(db_invitation)
     from core.audit import log, AuditAction, AuditStatus
@@ -678,25 +772,23 @@ def accept_invitation(
     invitation_id: uuid.UUID,
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
+    token: str | None = None,
 ):
     user, current_user = user_context
 
     from core.db import crud
     from datetime import datetime, timezone
+    from core.api.auth import get_or_create_user
 
     db_invitation = crud.get_organization_invitation(db, invitation_id=invitation_id)
     if not db_invitation or db_invitation.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Invitation not found")
 
-    if db_invitation.email.lower() != user.email.lower():
-        raise HTTPException(status_code=403, detail="Invitation is for a different user")
-
-    if db_invitation.status != 'pending':
+    # Validate status and expiry first
+    if (db_invitation.status or '').lower() != 'pending':
         raise HTTPException(status_code=400, detail=f"Invitation is already {db_invitation.status}")
-
     now_utc = datetime.now(timezone.utc)
     expires_at = db_invitation.expires_at
-    # If expires_at is naive (can happen under SQLite or legacy data), assume UTC
     if expires_at is not None and expires_at.tzinfo is None:
         try:
             from datetime import timezone as _tz
@@ -708,15 +800,40 @@ def accept_invitation(
         db.commit()
         raise HTTPException(status_code=400, detail="Invitation has expired")
 
+    # Determine acceptance mode
+    accept_user_id = None
+    if token and db_invitation.token and token == db_invitation.token:
+        invited_user = get_or_create_user(db, email=db_invitation.email)
+        accept_user_id = invited_user.id
+    else:
+        if (db_invitation.email or '').lower() != (user.email or '').lower():
+            raise HTTPException(status_code=403, detail="Invitation is for a different user")
+        accept_user_id = user.id
+
     # Add member
     from core.db import schemas
-    member_data = schemas.OrganizationMemberCreate(user_id=user.id, role=db_invitation.role)
+    member_data = schemas.OrganizationMemberCreate(user_id=accept_user_id, role=db_invitation.role)
     db_member = crud.create_organization_member(db, organization_id=org_id, member=member_data)
 
     # Update invitation
     db_invitation.status = 'accepted'
     db_invitation.accepted_at = now_utc
     db.commit()
+
+    # Notify inviter
+    try:
+        from core.services.notification_service import NotificationService
+        inviter = db.query(models.User).filter(models.User.id == db_invitation.invited_by_user_id).first()
+        org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
+        if inviter and org:
+            NotificationService(db).notify_invitation_accepted(
+                inviter_user_id=inviter.id,
+                inviter_email=inviter.email,
+                organization_name=org.name,
+                invitee_email=(db_invitation.email or ''),
+            )
+    except Exception:
+        pass
 
     from core.audit import log, AuditAction, AuditStatus
     log(
@@ -725,7 +842,7 @@ def accept_invitation(
         status=AuditStatus.SUCCESS,
         target_type="invitation",
         target_id=invitation_id,
-        actor_user_id=user.id,
+        actor_user_id=accept_user_id,
         organization_id=org_id,
     )
 

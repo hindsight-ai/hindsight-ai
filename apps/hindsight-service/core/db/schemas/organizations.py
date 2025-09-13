@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
+from core.utils.role_permissions import RoleEnum
 
 
 class OrganizationBase(BaseModel):
@@ -27,7 +28,7 @@ class Organization(OrganizationBase):
 
 class OrganizationMemberBase(BaseModel):
     user_id: uuid.UUID
-    role: str
+    role: RoleEnum
     can_read: bool | None = True
     can_write: bool | None = False
 
@@ -37,7 +38,7 @@ class OrganizationMemberCreate(OrganizationMemberBase):
 
 
 class OrganizationMemberUpdate(BaseModel):
-    role: str | None = None
+    role: RoleEnum | None = None
     can_read: bool | None = None
     can_write: bool | None = None
 
@@ -50,7 +51,7 @@ class OrganizationMember(OrganizationMemberBase):
 
 class OrganizationInvitationBase(BaseModel):
     email: str
-    role: str
+    role: RoleEnum
 
 
 class OrganizationInvitationCreate(OrganizationInvitationBase):
@@ -59,7 +60,7 @@ class OrganizationInvitationCreate(OrganizationInvitationBase):
 
 class OrganizationInvitationUpdate(BaseModel):
     status: str | None = None
-    role: str | None = None
+    role: RoleEnum | None = None
 
 
 class OrganizationInvitation(OrganizationInvitationBase):
@@ -73,4 +74,3 @@ class OrganizationInvitation(OrganizationInvitationBase):
     accepted_at: datetime | None = None
     revoked_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
-

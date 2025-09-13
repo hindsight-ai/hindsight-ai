@@ -18,6 +18,7 @@ from core.api.deps import get_current_user_context
 from core.api.permissions import can_manage_org, get_org_membership, is_member_of_org, can_manage_org_effective
 from core import async_bulk_operations  # Updated import for async system
 from core.audit import log_bulk_operation, AuditAction, AuditStatus
+from core.utils.scopes import SCOPE_ORGANIZATION, SCOPE_PERSONAL
 
 router = APIRouter(prefix="/bulk-operations", tags=["bulk-operations"])
 
@@ -99,7 +100,7 @@ async def bulk_move(
             existing = crud.get_agent_by_name(
                 db,
                 agent_name=agent.agent_name,
-                visibility_scope="organization" if destination_organization_id else "personal",
+                visibility_scope=SCOPE_ORGANIZATION if destination_organization_id else SCOPE_PERSONAL,
                 organization_id=destination_organization_id,
                 owner_user_id=destination_owner_user_id,
             )
@@ -121,7 +122,7 @@ async def bulk_move(
                 plan["resources_to_move"]["keywords"] = 0
 
         # Detect true conflicts by checking destination scope presence per keyword
-        destination_scope = "organization" if destination_organization_id else "personal"
+        destination_scope = SCOPE_ORGANIZATION if destination_organization_id else SCOPE_PERSONAL
         for keyword in keywords:
             existing = crud.get_scoped_keyword_by_text(
                 db,

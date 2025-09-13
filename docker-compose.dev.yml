@@ -10,6 +10,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      APP_BASE_URL: ${APP_BASE_URL}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
       DEV_MODE: "true"
       BUILD_SHA: ${BACKEND_BUILD_SHA}

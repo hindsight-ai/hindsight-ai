@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from core.db import models, schemas, scope_utils
+from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
 
 
 def create_keyword(db: Session, keyword: schemas.KeywordCreate):
     db_keyword = models.Keyword(
         keyword_text=keyword.keyword_text,
-        visibility_scope=getattr(keyword, 'visibility_scope', 'personal') or 'personal',
+        visibility_scope=getattr(keyword, 'visibility_scope', SCOPE_PERSONAL) or SCOPE_PERSONAL,
         owner_user_id=getattr(keyword, 'owner_user_id', None),
         organization_id=getattr(keyword, 'organization_id', None),
     )
@@ -60,9 +61,9 @@ def get_scoped_keyword_by_text(
         models.Keyword.visibility_scope == visibility_scope,
         func.lower(models.Keyword.keyword_text) == func.lower(keyword_text),
     )
-    if visibility_scope == 'organization' and org_uuid is not None:
+    if visibility_scope == SCOPE_ORGANIZATION and org_uuid is not None:
         q = q.filter(models.Keyword.organization_id == org_uuid)
-    elif visibility_scope == 'personal' and owner_uuid is not None:
+    elif visibility_scope == SCOPE_PERSONAL and owner_uuid is not None:
         q = q.filter(models.Keyword.owner_user_id == owner_uuid)
     return q.first()
 

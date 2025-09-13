@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, Text
 
 from core.db import models, schemas, scope_utils
+from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def _get_or_create_keyword_scoped(
     db: Session,
     keyword_text: str,
     *,
-    visibility_scope: str = 'personal',
+    visibility_scope: str = SCOPE_PERSONAL,
     owner_user_id=None,
     organization_id=None,
 ):
@@ -31,9 +32,9 @@ def _get_or_create_keyword_scoped(
         models.Keyword.keyword_text == processed,
         models.Keyword.visibility_scope == visibility_scope,
     )
-    if visibility_scope == 'organization' and organization_id is not None:
+    if visibility_scope == SCOPE_ORGANIZATION and organization_id is not None:
         q = q.filter(models.Keyword.organization_id == organization_id)
-    elif visibility_scope == 'personal' and owner_user_id is not None:
+    elif visibility_scope == SCOPE_PERSONAL and owner_user_id is not None:
         q = q.filter(models.Keyword.owner_user_id == owner_user_id)
     kw = q.first()
     if not kw:
@@ -57,24 +58,20 @@ def create_memory_block(db: Session, memory_block: schemas.MemoryBlockCreate):
         lessons_learned=memory_block.lessons_learned,
         metadata_col=memory_block.metadata_col,
         feedback_score=memory_block.feedback_score or 0,
-        visibility_scope=getattr(memory_block, 'visibility_scope', 'personal') or 'personal',
+        visibility_scope=getattr(memory_block, 'visibility_scope', SCOPE_PERSONAL) or SCOPE_PERSONAL,
         owner_user_id=getattr(memory_block, 'owner_user_id', None),
         organization_id=getattr(memory_block, 'organization_id', None),
     )
     db.add(db_memory_block)
     db.flush()
 
-    # Basic keyword extraction (fallback heuristics)
-    extracted_keywords = set()
+    # Basic keyword extraction using lightweight heuristic extractor
     try:
-        from core.core.keyword_extraction import extract_keywords  # type: ignore
-        extracted_keywords = set(extract_keywords(memory_block.content)) or set()
-    except Exception:  # pragma: no cover
-        extracted_keywords = set()
-    if not extracted_keywords:
-        import re
-        tokens = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", (memory_block.content or '').lower())
-        extracted_keywords = set(tokens[:10])
+        from core.utils.keywords import simple_extract_keywords
+        tokens = simple_extract_keywords(memory_block.content)
+    except Exception:
+        tokens = []
+    extracted_keywords = set(tokens)
 
     for keyword_text in extracted_keywords:
         keyword = _get_or_create_keyword_scoped(

@@ -13,7 +13,12 @@ from core.db import schemas, crud, models
 from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user
 from core.api.permissions import can_read, can_write
-from core.api.deps import get_current_user_context
+from core.utils.scopes import (
+    SCOPE_PUBLIC,
+    SCOPE_ORGANIZATION,
+    SCOPE_PERSONAL,
+)
+from core.api.deps import get_current_user_context, get_current_user_context_or_pat, ensure_pat_allows_write
 
 router = APIRouter(prefix="/keywords", tags=["keywords"])  # normalized prefix
 
@@ -21,12 +26,13 @@ router = APIRouter(prefix="/keywords", tags=["keywords"])  # normalized prefix
 def create_keyword_endpoint(
     keyword: schemas.KeywordCreate,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     u, current_user = user_context
-    scope = (keyword.visibility_scope or 'personal')
+    _scope_in = (keyword.visibility_scope or SCOPE_PERSONAL)
+    scope = getattr(_scope_in, 'value', _scope_in)
     org_id = getattr(keyword, 'organization_id', None)
-    if scope == 'organization':
+    if scope == SCOPE_ORGANIZATION:
         by_org = current_user.get('memberships_by_org', {})
         key = str(org_id) if org_id else None
         m = by_org.get(key) if key else None
@@ -34,20 +40,22 @@ def create_keyword_endpoint(
         can_write_flag = bool((m or {}).get('can_write'))
         if not m or not (can_write_flag or role in ('owner', 'admin', 'editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
-    if scope == 'public' and not current_user.get('is_superadmin'):
+    if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
         raise HTTPException(status_code=403, detail="Only superadmin can create public keywords")
     existing = crud.get_scoped_keyword_by_text(
         db,
         keyword_text=keyword.keyword_text,
         visibility_scope=scope,
-        owner_user_id=u.id if scope == 'personal' else None,
-        organization_id=org_id if scope == 'organization' else None,
+        owner_user_id=u.id if scope == SCOPE_PERSONAL else None,
+        organization_id=org_id if scope == SCOPE_ORGANIZATION else None,
     )
     if existing:
         raise HTTPException(status_code=409, detail="Keyword already exists in this scope")
     kw_for_create = keyword.model_copy(update={
-        'owner_user_id': u.id if scope == 'personal' else getattr(keyword, 'owner_user_id', None),
+        'owner_user_id': u.id if scope == SCOPE_PERSONAL else getattr(keyword, 'owner_user_id', None),
     })
+    # PAT scope enforcement
+    ensure_pat_allows_write(current_user, org_id if scope == SCOPE_ORGANIZATION else None)
     created = crud.create_keyword(db=db, keyword=kw_for_create)
     try:
         from core.audit import log_keyword, AuditAction, AuditStatus
@@ -141,12 +149,13 @@ def update_keyword_endpoint(
     keyword_id: uuid.UUID,
     keyword: schemas.KeywordUpdate,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     existing = crud.get_keyword(db, keyword_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Keyword not found")
     u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(existing, 'organization_id', None))
     if not can_write(existing, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     db_keyword = crud.update_keyword(db, keyword_id=keyword_id, keyword=keyword)
@@ -169,12 +178,13 @@ def update_keyword_endpoint(
 def delete_keyword_endpoint(
     keyword_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     existing = crud.get_keyword(db, keyword_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Keyword not found")
     u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(existing, 'organization_id', None))
     if not can_write(existing, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     success = crud.delete_keyword(db, keyword_id=keyword_id)

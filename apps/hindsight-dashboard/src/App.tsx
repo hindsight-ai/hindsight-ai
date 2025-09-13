@@ -21,6 +21,9 @@ import { OrgProvider } from './context/OrgContext';
 import { OrganizationProvider } from './context/OrganizationContext';
 import { NotificationProvider } from './context/NotificationContext';
 import LoginPage from './components/LoginPage';
+import ProfilePage from './components/ProfilePage';
+import organizationService from './api/organizationService';
+import notificationService from './services/notificationService';
 
 interface UserInfo {
   authenticated?: boolean;
@@ -42,10 +45,47 @@ function AppContent() {
     }
   }, [loading, guest, user, location.pathname]);
   useEffect(() => {
-    if (!loading && user && (user as UserInfo).authenticated && location.pathname === '/login') {
+    const processInviteParams = async () => {
+      const params = new URLSearchParams(location.search);
+      const acceptId = params.get('accept_invite');
+      const declineId = params.get('decline_invite');
+      const org = params.get('org');
+      const token = params.get('token') || undefined;
+      if (org && (acceptId || declineId)) {
+        try {
+          if (acceptId) {
+            await organizationService.acceptInvitation(org, acceptId, token);
+            notificationService.showSuccess('Invitation accepted');
+          } else if (declineId) {
+            await organizationService.declineInvitation(org, declineId, token);
+            notificationService.showInfo('Invitation declined');
+          }
+        } catch (e: any) {
+          const msg = String(e?.message || '');
+          if (msg.includes('HTTP error 400')) {
+            notificationService.showWarning('This invitation link is no longer valid. Please request a new invite.');
+          } else if (msg.includes('HTTP error 403')) {
+            const emailParam = params.get('email');
+            notificationService.showWarning(
+              emailParam
+                ? `This invitation is for ${emailParam}. Please sign in with that email or ask for a new invite.`
+                : 'This invitation is for a different account. Please sign in with the invited email or request a new invite.'
+            );
+          } else if (msg.includes('HTTP error 404')) {
+            notificationService.showWarning('Invitation not found. It may have been rescinded.');
+          } else {
+            notificationService.showError(`Failed to process invitation: ${msg || 'Unknown error'}`);
+          }
+        }
+      }
       try { window.location.replace('/dashboard'); } catch { window.location.href = '/dashboard'; }
+    };
+
+    if (!loading && user && (user as UserInfo).authenticated && location.pathname === '/login') {
+      // If login deep-link contains invite params, process them before redirecting.
+      void processInviteParams();
     }
-  }, [loading, user, location.pathname]);
+  }, [loading, user, location.pathname, location.search]);
   useEffect(() => {
     if (!loading && location.pathname === '/') {
       if (user && (user as UserInfo).authenticated) {
@@ -67,6 +107,7 @@ function AppContent() {
   const getPageTitle = (pathname: string): string => {
     const routeMap: Record<string, string> = {
       '/dashboard': 'Dashboard',
+      '/profile': 'Profile',
       '/memory-blocks': 'Memory Blocks',
       '/keywords': 'Keywords',
       '/agents': 'Agents',
@@ -88,6 +129,7 @@ function AppContent() {
       <Layout title={getPageTitle(location.pathname)} onOpenAbout={() => setShowAboutModal(true)} onToggleDebugPanel={() => setShowDebugPanel(prev => !prev)}>
         <Routes>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/memory-blocks" element={<MemoryBlocksPage key={location.pathname} />} />
           <Route path="/memory-blocks/:id" element={<MemoryBlockDetail />} />
           <Route path="/keywords" element={<KeywordManager />} />

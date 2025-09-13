@@ -43,7 +43,38 @@ This will start the FastAPI application, typically accessible at `http://localho
 
 -   `core/api/`: Contains the FastAPI application entry point and API routes.
 -   `core/db/`: Houses database models (SQLAlchemy ORM), database session management, and CRUD operations.
--   `core/core/`: Contains core business logic, such as keyword extraction and feedback processing.
+-   `core/core/`: Legacy/back-compat shims and select long-running workers.
+-   `core/workers/`: Background/long-running tasks (e.g., consolidation worker, async bulk operations shim).
+-   `core/utils/`: Lightweight utilities (e.g., keyword extraction heuristics, role/scope constants).
+
+## 🔎 Keyword Extraction
+
+- Active extractor: `core/utils/keywords.py` provides `simple_extract_keywords()`, a dependency-free heuristic that
+  selects up to 10 lowercased tokens (>= 3 chars), de-duplicated in first-seen order.
+- Repositories call this heuristic as the default. There is no spaCy dependency.
+- Removed legacy stub: the old `core/core/keyword_extraction.py` spaCy-based implementation was an experimental stub and
+  returned empty results; it has been removed to reduce confusion and dead code.
+
+## 🔗 Environment
+
+Important env vars (see `.env.example`):
+- `APP_BASE_URL`: Frontend base URL used to build login/accept-invite links in emails.
+  - Production: `https://app.hindsight-ai.com`
+  - Staging: `https://app-staging.hindsight-ai.com`
+  - Dev: `http://localhost:3000`
+
+## 🔐 Permissions & Scopes
+
+- See `SECURITY.md` for the security model overview (roles, scopes, and helpers).
+- See `ROLE_PERMISSIONS_README.md` for dynamic role permission details and usage patterns.
+
+## 🔑 Personal Access Tokens (PAT)
+
+- Create/manage under Dashboard → Profile → API Tokens.
+- Token format: `hs_pat_<token_id>_<secret>` (shown once on create/rotate).
+- Use with requests via `Authorization: Bearer <token>` or `X-API-Key: <token>`.
+- Scopes: `read` for GETs, `write` for POST/PUT/PATCH/DELETE. Optional `organization_id` restricts writes to that org.
+- Middleware permits write methods when a PAT header is present; routes enforce validation and scope checks.
 
 ## 🧪 Running Tests
 

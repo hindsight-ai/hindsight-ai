@@ -14,8 +14,14 @@ from core.db import schemas, crud, models
 from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
 from core.api.permissions import can_read, can_write
-from core.search.search_service import SearchService
-from core.api.deps import get_current_user_context
+from core.utils.scopes import (
+    ALL_SCOPES,
+    SCOPE_PUBLIC,
+    SCOPE_ORGANIZATION,
+    SCOPE_PERSONAL,
+)
+from core.services.search_service import SearchService
+from core.api.deps import get_current_user_context, get_current_user_context_or_pat, ensure_pat_allows_write
 
 router = APIRouter(prefix="/memory-blocks", tags=["memory-blocks"])  # normalized prefix
 
@@ -33,27 +39,31 @@ def parse_optional_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
 def create_memory_block_endpoint(
     memory_block: schemas.MemoryBlockCreate,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     agent = crud.get_agent(db, agent_id=memory_block.agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     u, current_user = user_context
     memberships_by_org = current_user.get('memberships_by_org', {})
-    scope = memory_block.visibility_scope or 'personal'
+    _scope_in = memory_block.visibility_scope or SCOPE_PERSONAL
+    scope = getattr(_scope_in, 'value', _scope_in)
     org_id = str(memory_block.organization_id) if getattr(memory_block, 'organization_id', None) else None
-    if scope == 'public' and not current_user.get('is_superadmin'):
+    if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
         raise HTTPException(status_code=403, detail="Only superadmin can create public data")
-    if scope == 'organization':
+    if scope == SCOPE_ORGANIZATION:
         if not org_id or org_id not in memberships_by_org:
             raise HTTPException(status_code=403, detail="Not a member of target organization")
         m = memberships_by_org[org_id]
         if not (m.get('can_write') or m.get('role') in ('owner','admin','editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
+    # Enforce PAT restrictions for write
+    ensure_pat_allows_write(current_user, memory_block.organization_id if scope == SCOPE_ORGANIZATION else None)
+
     mb = memory_block.model_copy(update={
         'visibility_scope': scope,
-        'owner_user_id': u.id if scope == 'personal' else None,
-        'organization_id': memory_block.organization_id if scope == 'organization' else None,
+        'owner_user_id': u.id if scope == SCOPE_PERSONAL else None,
+        'organization_id': memory_block.organization_id if scope == SCOPE_ORGANIZATION else None,
     })
     db_memory_block = crud.create_memory_block(db=db, memory_block=mb)
     return db_memory_block
@@ -154,7 +164,7 @@ def associate_keyword_with_memory_block_endpoint(
     memory_id: uuid.UUID,
     keyword_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
@@ -258,7 +268,7 @@ def get_archived_memory_blocks_endpoint(
 
     # For archived endpoint, we want to show archived blocks more liberally
     # If no specific scope is requested, default to public archived blocks
-    effective_scope = scope or 'public'
+    effective_scope = scope or SCOPE_PUBLIC
     
     # Get total count of archived items
     _, total_items = crud.get_all_memory_blocks(
@@ -345,6 +355,8 @@ def update_memory_block_endpoint(
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
     u, current_user = user_context
+    # Enforce PAT restrictions (if PAT present and resource is org-scoped)
+    ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     updated = crud.update_memory_block(db, memory_id=memory_id, memory_block=memory_block)
@@ -354,12 +366,13 @@ def update_memory_block_endpoint(
 def archive_memory_block_endpoint(
     memory_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
     u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     db_memory_block = crud.archive_memory_block(db, memory_id=memory_id)
@@ -371,30 +384,14 @@ def archive_memory_block_endpoint(
 def soft_delete_memory_block_endpoint(
     memory_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        memberships = get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    u, current_user = user_context
+    # PAT restriction enforcement
+    ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     if not getattr(current, 'archived', False):
@@ -405,12 +402,13 @@ def soft_delete_memory_block_endpoint(
 def hard_delete_memory_block_endpoint(
     memory_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
     u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     success = crud.delete_memory_block(db, memory_id=memory_id)
@@ -423,7 +421,7 @@ def report_memory_feedback_endpoint(
     memory_id: uuid.UUID,
     feedback: schemas.FeedbackLogCreate,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
@@ -431,6 +429,7 @@ def report_memory_feedback_endpoint(
     if feedback.memory_id != memory_id:
         raise HTTPException(status_code=400, detail="Memory ID mismatch")
     u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_write(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     updated_memory = crud.report_memory_feedback(

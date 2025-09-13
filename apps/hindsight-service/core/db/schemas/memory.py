@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, ConfigDict
+from core.utils.scopes import VisibilityScopeEnum
 
 
 class MemoryBlockBase(BaseModel):
@@ -15,7 +16,7 @@ class MemoryBlockBase(BaseModel):
     retrieval_count: Optional[int] = 0
     archived: Optional[bool] = False
     archived_at: Optional[datetime] = None
-    visibility_scope: Optional[str] = 'personal'
+    visibility_scope: Optional[VisibilityScopeEnum] = VisibilityScopeEnum.personal
     owner_user_id: Optional[uuid.UUID] = None
     organization_id: Optional[uuid.UUID] = None
 

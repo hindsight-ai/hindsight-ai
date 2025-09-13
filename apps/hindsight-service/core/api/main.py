@@ -28,7 +28,7 @@ from core.db.database import engine, get_db
 from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
-from core.api.deps import get_current_user_context
+from core.api.deps import get_current_user_context, get_current_user_context_or_pat, ensure_pat_allows_write
 from core.api.orgs import router as orgs_router
 from core.api.agents import router as agents_router
 from core.api.keywords import router as keywords_router
@@ -38,8 +38,15 @@ from core.api.bulk_operations import router as bulk_operations_router
 from core.api.notifications import router as notifications_router
 from core.api.consolidation import router as consolidation_router
 from core.api.support import router as support_router
+from core.api.users import router as users_router
 from core.api.permissions import can_read, can_write, can_manage_org
-from core.search.search_service import SearchService
+from core.utils.scopes import (
+    ALL_SCOPES,
+    SCOPE_PUBLIC,
+    SCOPE_ORGANIZATION,
+    SCOPE_PERSONAL,
+)
+from core.services.search_service import SearchService
 
 # models.Base.metadata.create_all(bind=engine) # Removed: Database schema is now managed by Alembic migrations.
 
@@ -87,7 +94,9 @@ async def enforce_readonly_for_guests(request: Request, call_next):
                 or h.get("x-forwarded-user")
                 or h.get("x-forwarded-email")
             )
-            if not user_present:
+            # Allow Personal Access Tokens to pass middleware; route deps will validate
+            pat_present = h.get("authorization") or h.get("x-api-key")
+            if not user_present and not pat_present:
                 return JSONResponse(
                     {"detail": "Guest mode is read-only. Sign in to perform changes."},
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -103,34 +112,15 @@ def change_memory_block_scope(
     memory_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     mb = crud.get_memory_block(db, memory_id)
     if not mb:
         raise HTTPException(status_code=404, detail="Memory block not found")
-
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    if not email:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    u = get_or_create_user(db, email=email, display_name=name)
-    memberships = get_user_memberships(db, u.id)
-    current_user = {
-        "id": u.id,
-        "is_superadmin": bool(u.is_superadmin),
-        "memberships": memberships,
-        "memberships_by_org": {m["organization_id"]: m for m in memberships},
-    }
+    u, current_user = user_context
 
     target_scope = (payload.get("visibility_scope") or '').lower()
-    if target_scope not in ("personal", "organization", "public"):
+    if target_scope not in ALL_SCOPES:
         raise HTTPException(status_code=422, detail="Invalid target visibility_scope")
 
     target_org_id = payload.get("organization_id")
@@ -138,24 +128,26 @@ def change_memory_block_scope(
 
     # Permission to move
     from core.api.permissions import can_move_scope
-    if target_scope == 'organization':
+    if target_scope == SCOPE_ORGANIZATION:
         if not target_org_id:
             raise HTTPException(status_code=422, detail="organization_id required for organization scope")
         try:
             target_org_uuid = uuid.UUID(str(target_org_id))
         except Exception:
             raise HTTPException(status_code=422, detail="Invalid organization_id")
+        # PAT org restriction (if applicable)
+        ensure_pat_allows_write(current_user, target_org_uuid)
         # Consent check: moving personal -> organization requires owner consent unless superadmin
-        if mb.visibility_scope == 'personal' and not (current_user.get('is_superadmin') or mb.owner_user_id == current_user.get('id')):
+        if mb.visibility_scope == SCOPE_PERSONAL and not (current_user.get('is_superadmin') or mb.owner_user_id == current_user.get('id')):
             raise HTTPException(status_code=409, detail="Owner consent required to move personal data to organization")
-        if not can_move_scope(mb, 'organization', target_org_uuid, current_user):
+        if not can_move_scope(mb, SCOPE_ORGANIZATION, target_org_uuid, current_user):
             raise HTTPException(status_code=403, detail="Forbidden")
-    elif target_scope == 'personal':
-        if not can_move_scope(mb, 'personal', None, current_user):
+    elif target_scope == SCOPE_PERSONAL:
+        if not can_move_scope(mb, SCOPE_PERSONAL, None, current_user):
             # Superadmin override allowed
             if not current_user.get("is_superadmin"):
                 raise HTTPException(status_code=403, detail="Forbidden")
-    elif target_scope == 'public':
+    elif target_scope == SCOPE_PUBLIC:
         if not current_user.get("is_superadmin"):
             raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
 
@@ -163,11 +155,11 @@ def change_memory_block_scope(
     previous_scope = mb.visibility_scope
     previous_org_id = mb.organization_id
     previous_owner_id = mb.owner_user_id
-    if target_scope == 'organization':
-        mb.visibility_scope = 'organization'
+    if target_scope == SCOPE_ORGANIZATION:
+        mb.visibility_scope = SCOPE_ORGANIZATION
         mb.organization_id = target_org_uuid
         mb.owner_user_id = None
-    elif target_scope == 'personal':
+    elif target_scope == SCOPE_PERSONAL:
         owner_id = u.id
         if new_owner_user_id:
             try:
@@ -177,13 +169,13 @@ def change_memory_block_scope(
             if not current_user.get("is_superadmin"):
                 raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
             owner_id = owner_uuid
-        mb.visibility_scope = 'personal'
+        mb.visibility_scope = SCOPE_PERSONAL
         mb.owner_user_id = owner_id
         mb.organization_id = None
     else:  # public
         if not current_user.get("is_superadmin"):
             raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
-        mb.visibility_scope = 'public'
+        mb.visibility_scope = SCOPE_PUBLIC
         mb.organization_id = None
         mb.owner_user_id = None
 
@@ -1094,6 +1086,7 @@ def search_memory_blocks_hybrid_endpoint(
 
 # Include the main router
 app.include_router(router)
+app.include_router(users_router)
 app.include_router(orgs_router)
 app.include_router(agents_router)
 app.include_router(keywords_router)

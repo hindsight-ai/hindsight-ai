@@ -16,6 +16,7 @@ from .memory import MemoryBlock, FeedbackLog, MemoryBlockKeyword, ConsolidationS
 from .audit import AuditLog
 from .bulk_ops import BulkOperation
 from .notifications import UserNotificationPreference, Notification, EmailNotificationLog
+from .tokens import PersonalAccessToken
 
 __all__ = [
     # base
@@ -42,5 +43,6 @@ __all__ = [
     "UserNotificationPreference",
     "Notification",
     "EmailNotificationLog",
+    # tokens
+    "PersonalAccessToken",
 ]
-

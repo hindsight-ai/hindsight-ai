@@ -1,6 +1,6 @@
 # Memory Block Consolidation Process
 
-This document outlines the process by which the Hindsight AI memory service consolidates similar or duplicate memory blocks into single, refined suggestions. The consolidation is performed by a background worker (`consolidation_worker.py`) that leverages either a Large Language Model (LLM) or a fallback similarity algorithm.
+This document outlines the process by which the Hindsight AI memory service consolidates similar or duplicate memory blocks into single, refined suggestions. The consolidation is performed by a background worker (`core.workers.consolidation_worker`) that leverages either a Large Language Model (LLM) or a fallback similarity algorithm.
 
 ## 1. Overview
 

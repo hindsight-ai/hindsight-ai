@@ -12,7 +12,13 @@ from core.db import schemas, crud
 from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
 from core.api.permissions import can_read, can_write
-from core.api.deps import get_current_user_context
+from core.utils.scopes import (
+    ALL_SCOPES,
+    SCOPE_PUBLIC,
+    SCOPE_ORGANIZATION,
+    SCOPE_PERSONAL,
+)
+from core.api.deps import get_current_user_context, get_current_user_context_or_pat, ensure_pat_allows_write
 
 router = APIRouter(prefix="/agents", tags=["agents"])  # normalized prefix
 
@@ -20,14 +26,15 @@ router = APIRouter(prefix="/agents", tags=["agents"])  # normalized prefix
 def create_agent_endpoint(
     agent: schemas.AgentCreate,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     u, current_user = user_context
 
-    scope = getattr(agent, 'visibility_scope', 'personal') or 'personal'
-    owner_user_id = u.id if scope == 'personal' else None
+    _scope_in = getattr(agent, 'visibility_scope', SCOPE_PERSONAL) or SCOPE_PERSONAL
+    scope = getattr(_scope_in, 'value', _scope_in)
+    owner_user_id = u.id if scope == SCOPE_PERSONAL else None
     org_id = getattr(agent, 'organization_id', None)
-    if scope == 'organization':
+    if scope == SCOPE_ORGANIZATION:
         by_org = current_user.get('memberships_by_org', {})
         key = str(org_id) if org_id else None
         m = by_org.get(key) if key else None
@@ -35,7 +42,7 @@ def create_agent_endpoint(
         can_write = bool((m or {}).get('can_write'))
         if not m or not (can_write or role in ('owner', 'admin', 'editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
-    if scope == 'public' and not current_user.get('is_superadmin'):
+    if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
         raise HTTPException(status_code=403, detail="Only superadmin can create public agents")
 
     existing = crud.get_agent_by_name(
@@ -51,8 +58,10 @@ def create_agent_endpoint(
     agent_for_create = agent.model_copy(update={
         'visibility_scope': scope,
         'owner_user_id': owner_user_id,
-        'organization_id': org_id if scope == 'organization' else None,
+        'organization_id': org_id if scope == SCOPE_ORGANIZATION else None,
     })
+    # PAT write restrictions
+    ensure_pat_allows_write(current_user, org_id if scope == SCOPE_ORGANIZATION else None)
     created = crud.create_agent(db=db, agent=agent_for_create)
     try:
         from core.audit import log_agent, AuditAction, AuditStatus
@@ -183,12 +192,13 @@ def search_agents_endpoint(
 def delete_agent_endpoint(
     agent_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     agent = crud.get_agent(db, agent_id=agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(agent, 'organization_id', None))
     if not can_write(agent, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     crud.delete_agent(db, agent_id=agent_id)
@@ -216,12 +226,13 @@ def update_agent_endpoint(
     agent_id: uuid.UUID,
     agent_update: schemas.AgentUpdate,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     agent = crud.get_agent(db, agent_id=agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(agent, 'organization_id', None))
     if not can_write(agent, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     if agent_update.agent_name and agent_update.agent_name != agent.agent_name:
@@ -242,41 +253,41 @@ def change_agent_scope(
     agent_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
     agent = crud.get_agent(db, agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     u, current_user = user_context
     target_scope = (payload.get("visibility_scope") or '').lower()
-    if target_scope not in ("personal", "organization", "public"):
+    if target_scope not in ALL_SCOPES:
         raise HTTPException(status_code=422, detail="Invalid target visibility_scope")
     target_org_id = payload.get("organization_id")
     new_owner_user_id = payload.get("new_owner_user_id")
     from core.api.permissions import can_move_scope
-    if target_scope == 'organization':
+    if target_scope == SCOPE_ORGANIZATION:
         if not target_org_id:
             raise HTTPException(status_code=422, detail="organization_id required for organization scope")
         try:
             target_org_uuid = uuid.UUID(str(target_org_id))
         except Exception:
             raise HTTPException(status_code=422, detail="Invalid organization_id")
-        if agent.visibility_scope == 'personal' and not (current_user.get('is_superadmin') or agent.owner_user_id == current_user.get('id')):
+        if agent.visibility_scope == SCOPE_PERSONAL and not (current_user.get('is_superadmin') or agent.owner_user_id == current_user.get('id')):
             raise HTTPException(status_code=409, detail="Owner consent required to move personal agent to organization")
-        if not can_move_scope(agent, 'organization', target_org_uuid, current_user):
+        if not can_move_scope(agent, SCOPE_ORGANIZATION, target_org_uuid, current_user):
             raise HTTPException(status_code=403, detail="Forbidden")
-    elif target_scope == 'personal':
-        if not can_move_scope(agent, 'personal', None, current_user):
+    elif target_scope == SCOPE_PERSONAL:
+        if not can_move_scope(agent, SCOPE_PERSONAL, None, current_user):
             if not current_user.get("is_superadmin"):
                 raise HTTPException(status_code=403, detail="Forbidden")
-    elif target_scope == 'public':
+    elif target_scope == SCOPE_PUBLIC:
         if not current_user.get("is_superadmin"):
             raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
     owner_id = None
     org_uuid = None
-    if target_scope == 'organization':
+    if target_scope == SCOPE_ORGANIZATION:
         org_uuid = target_org_uuid  # type: ignore
-    elif target_scope == 'personal':
+    elif target_scope == SCOPE_PERSONAL:
         owner_id = u.id
         if new_owner_user_id:
             try:
@@ -286,6 +297,9 @@ def change_agent_scope(
             if not current_user.get("is_superadmin"):
                 raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
             owner_id = owner_uuid
+    # PAT scope enforcement (if PAT present and target is org, require match)
+    ensure_pat_allows_write(current_user, target_org_uuid if target_scope == SCOPE_ORGANIZATION else None)
+
     existing = crud.get_agent_by_name(
         db,
         agent_name=agent.agent_name,

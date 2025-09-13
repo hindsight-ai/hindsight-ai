@@ -36,6 +36,20 @@ export interface UpdateMemberData {
   can_write?: boolean;
 }
 
+export interface OrganizationInvitation {
+  id: string;
+  organization_id: string;
+  invited_by_user_id: string;
+  email: string;
+  role: string;
+  status: string;
+  token?: string | null;
+  created_at: string;
+  expires_at: string;
+  accepted_at?: string | null;
+  revoked_at?: string | null;
+}
+
 const organizationService = {
   // Get all organizations for current user
   getOrganizations: async (): Promise<Organization[]> => {
@@ -262,6 +276,69 @@ const organizationService = {
     } catch (error) {
       console.error('Error removing organization member:', error);
       throw error;
+    }
+  },
+
+  // Invitations: accept
+  acceptInvitation: async (orgId: string, invitationId: string, token?: string): Promise<void> => {
+    const url = token ? `/organizations/${orgId}/invitations/${invitationId}/accept?token=${encodeURIComponent(token)}` : `/organizations/${orgId}/invitations/${invitationId}/accept`;
+    const response = await apiFetch(url, { method: 'POST' });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${error}`);
+    }
+  },
+
+  // Invitations: decline
+  declineInvitation: async (orgId: string, invitationId: string, token?: string): Promise<void> => {
+    const url = token ? `/organizations/${orgId}/invitations/${invitationId}/decline?token=${encodeURIComponent(token)}` : `/organizations/${orgId}/invitations/${invitationId}/decline`;
+    const response = await apiFetch(url, { method: 'POST' });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${error}`);
+    }
+  },
+
+  // Invitations: list
+  listInvitations: async (orgId: string, status: string = 'pending'): Promise<OrganizationInvitation[]> => {
+    const response = await apiFetch(`/organizations/${orgId}/invitations`, { searchParams: { status } });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${error}`);
+    }
+    return await response.json();
+  },
+
+  // Invitations: create
+  createInvitation: async (orgId: string, data: { email: string; role: string }): Promise<OrganizationInvitation> => {
+    const response = await apiFetch(`/organizations/${orgId}/invitations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${error}`);
+    }
+    return await response.json();
+  },
+
+  // Invitations: resend
+  resendInvitation: async (orgId: string, invitationId: string): Promise<OrganizationInvitation> => {
+    const response = await apiFetch(`/organizations/${orgId}/invitations/${invitationId}/resend`, { method: 'POST' });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${error}`);
+    }
+    return await response.json();
+  },
+
+  // Invitations: revoke (delete)
+  revokeInvitation: async (orgId: string, invitationId: string): Promise<void> => {
+    const response = await apiFetch(`/organizations/${orgId}/invitations/${invitationId}`, { method: 'DELETE' });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${error}`);
     }
   },
 };

@@ -41,11 +41,19 @@ def get_notifications(
         unread_only=unread_only,
         limit=limit
     )
-    
+    # Adapt SQLAlchemy objects: schema expects `.metadata` (dict) but model uses metadata_json
+    adapted: List[Any] = []
+    for n in notifications:
+        try:
+            setattr(n, 'metadata', getattr(n, 'metadata_json', None))
+        except Exception:
+            pass
+        adapted.append(n)
+
     unread_count = service.get_unread_count(user.id)
     
     return schemas.NotificationListResponse(
-        notifications=notifications,
+        notifications=adapted,
         unread_count=unread_count,
         total_count=len(notifications)
     )
@@ -89,11 +97,19 @@ def get_notification_stats(
         unread_only=False,
         limit=5
     )
+    # Adapt metadata field for schema compatibility
+    adapted_recent: List[Any] = []
+    for n in recent_notifications:
+        try:
+            setattr(n, 'metadata', getattr(n, 'metadata_json', None))
+        except Exception:
+            pass
+        adapted_recent.append(n)
     
     return schemas.NotificationStatsResponse(
         unread_count=unread_count,
-        total_notifications=len(recent_notifications),
-        recent_notifications=recent_notifications
+        total_notifications=len(adapted_recent),
+        recent_notifications=adapted_recent
     )
 
 

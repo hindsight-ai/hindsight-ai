@@ -25,7 +25,7 @@ router = APIRouter(tags=["consolidation"])  # keep paths stable for now
 def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
     """Trigger the memory block consolidation process manually."""
     import os
-    from core.core.consolidation_worker import run_consolidation_analysis
+    from core.workers.consolidation_worker import run_consolidation_analysis
 
     logger.info("Manual trigger of consolidation process received")
 
@@ -147,4 +147,3 @@ def delete_consolidation_suggestion_endpoint(
     if not success:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
     return {"message": "Consolidation suggestion deleted successfully"}
-

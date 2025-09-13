@@ -78,4 +78,24 @@ describe('organizationService', () => {
       expect(calledUrl).toContain('/organizations/');
     });
   });
+
+  describe('Invitation token forwarding', () => {
+    test('acceptInvitation includes token in URL when provided', async () => {
+      const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => ({}) } as any);
+      await organizationService.acceptInvitation('org-123', 'inv-456', 'tok-789');
+      const calls = fetchSpy.mock.calls;
+      const calledUrl = calls[calls.length-1][0] as string;
+      expect(calledUrl).toContain('/organizations/org-123/invitations/inv-456/accept');
+      expect(calledUrl).toContain('token=tok-789');
+    });
+
+    test('declineInvitation includes token in URL when provided', async () => {
+      const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => ({}) } as any);
+      await organizationService.declineInvitation('org-123', 'inv-456', 'tok-789');
+      const calls = fetchSpy.mock.calls;
+      const calledUrl = calls[calls.length-1][0] as string;
+      expect(calledUrl).toContain('/organizations/org-123/invitations/inv-456/decline');
+      expect(calledUrl).toContain('token=tok-789');
+    });
+  });
 });

@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from core.db import models, schemas, scope_utils
+from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION, SCOPE_PUBLIC
 
 
 def create_agent(db: Session, agent: schemas.AgentCreate):
     db_agent = models.Agent(
         agent_name=agent.agent_name,
-        visibility_scope=getattr(agent, 'visibility_scope', 'personal') or 'personal',
+        visibility_scope=getattr(agent, 'visibility_scope', SCOPE_PERSONAL) or SCOPE_PERSONAL,
         owner_user_id=getattr(agent, 'owner_user_id', None),
         organization_id=getattr(agent, 'organization_id', None),
     )
@@ -40,7 +41,7 @@ def get_agent_by_name(
     organization_id=None,
 ):
     q = db.query(models.Agent).filter(func.lower(models.Agent.agent_name) == func.lower(agent_name))
-    if visibility_scope == 'organization' and organization_id is not None:
+    if visibility_scope == SCOPE_ORGANIZATION and organization_id is not None:
         # Accept either UUID object or string
         if isinstance(organization_id, str):
             try:
@@ -48,17 +49,17 @@ def get_agent_by_name(
                 organization_id = _uuid.UUID(organization_id)
             except Exception:
                 pass
-        q = q.filter(models.Agent.visibility_scope == 'organization', models.Agent.organization_id == organization_id)
-    elif visibility_scope == 'personal' and owner_user_id is not None:
+        q = q.filter(models.Agent.visibility_scope == SCOPE_ORGANIZATION, models.Agent.organization_id == organization_id)
+    elif visibility_scope == SCOPE_PERSONAL and owner_user_id is not None:
         if isinstance(owner_user_id, str):
             try:
                 import uuid as _uuid
                 owner_user_id = _uuid.UUID(owner_user_id)
             except Exception:
                 pass
-        q = q.filter(models.Agent.visibility_scope == 'personal', models.Agent.owner_user_id == owner_user_id)
-    elif visibility_scope == 'public':
-        q = q.filter(models.Agent.visibility_scope == 'public')
+        q = q.filter(models.Agent.visibility_scope == SCOPE_PERSONAL, models.Agent.owner_user_id == owner_user_id)
+    elif visibility_scope == SCOPE_PUBLIC:
+        q = q.filter(models.Agent.visibility_scope == SCOPE_PUBLIC)
     return q.first()
 
 

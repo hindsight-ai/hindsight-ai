@@ -9,6 +9,7 @@ import uuid
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, and_, or_, String
+from core.utils.scopes import SCOPE_PUBLIC, SCOPE_ORGANIZATION
 
 from core.db import models, schemas
 
@@ -130,7 +131,7 @@ class SearchService:
 
             # Scope filters
             if current_user is None:
-                base_query = base_query.filter(models.MemoryBlock.visibility_scope == 'public')
+                base_query = base_query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
             else:
                 org_ids: List[uuid.UUID] = []
                 for m in (current_user.get('memberships') or []):
@@ -140,10 +141,10 @@ class SearchService:
                         pass
                 base_query = base_query.filter(
                     or_(
-                        models.MemoryBlock.visibility_scope == 'public',
+                        models.MemoryBlock.visibility_scope == SCOPE_PUBLIC,
                         models.MemoryBlock.owner_user_id == current_user.get('id'),
                         and_(
-                            models.MemoryBlock.visibility_scope == 'organization',
+                            models.MemoryBlock.visibility_scope == SCOPE_ORGANIZATION,
                             models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
                         ),
                     )
@@ -221,12 +222,6 @@ class SearchService:
         
         self.logger.info(f"Semantic search requested for query: '{query}'")
         self.logger.info("Semantic search not yet implemented - returning empty results")
-        
-        # TODO: Future implementation:
-        # 1. Generate embedding for query using configured model
-        # 2. Perform vector similarity search using pgvector or similar
-        # 3. Apply filters and ranking
-        # 4. Return scored results
         
         search_time = (time.time() - start_time) * 1000
         
@@ -336,107 +331,75 @@ class SearchService:
         min_combined_score: float
     ) -> List[schemas.MemoryBlockWithScore]:
         """
-        Combine results from multiple search methods and rerank by weighted score.
+        Combine results from multiple search methods
+        based on weighted score merging and return MemoryBlockWithScore
+        ordered by the combined score in descending order.
         """
-        # Create score dictionaries
-        fulltext_score_dict = {
-            result.id: result.search_score for result in fulltext_results
-        }
-        semantic_score_dict = {
-            result.id: result.search_score for result in semantic_results
-        }
+        # Build a mapping from id to result for quick lookup
+        fulltext_map = {r.id: r for r in fulltext_results}
+        semantic_map = {r.id: r for r in semantic_results}
         
-        # Get all unique memory blocks
-        all_memory_blocks = {}
-        for result in fulltext_results + semantic_results:
-            all_memory_blocks[result.id] = result
+        # Combine ids from both results
+        all_ids = set(fulltext_map.keys()) | set(semantic_map.keys())
         
-        # Calculate combined scores
+        # Compute combined scores
         scored_results = []
-        for memory_id, memory_block in all_memory_blocks.items():
-            fulltext_score = fulltext_score_dict.get(memory_id, 0.0)
-            semantic_score = semantic_score_dict.get(memory_id, 0.0)
-            
-            # Normalize scores (both should be 0-1 range)
-            normalized_fulltext = min(1.0, max(0.0, fulltext_score))
-            normalized_semantic = min(1.0, max(0.0, semantic_score))
-            
-            # Calculate weighted combined score
-            combined_score = (
-                normalized_fulltext * fulltext_weight + 
-                normalized_semantic * semantic_weight
-            )
-            
-            if combined_score >= min_combined_score:
-                # Create new MemoryBlockWithScore with combined score
-                # Extract base memory block data from the MemoryBlockWithScore
-                base_data = {k: v for k, v in memory_block.model_dump().items() 
-                           if k not in ['search_score', 'search_type', 'rank_explanation']}
-                
-                combined_result = schemas.MemoryBlockWithScore(
-                    **base_data,
-                    search_score=combined_score,
-                    search_type="hybrid",
-                    rank_explanation=f"Hybrid score: {combined_score:.4f} (fulltext: {normalized_fulltext:.4f} * {fulltext_weight}, semantic: {normalized_semantic:.4f} * {semantic_weight})"
+        for mid in all_ids:
+            ft_score = fulltext_map.get(mid).search_score if mid in fulltext_map else 0.0
+            se_score = semantic_map.get(mid).search_score if mid in semantic_map else 0.0
+            combined = (ft_score * fulltext_weight) + (se_score * semantic_weight)
+            if combined >= min_combined_score:
+                # Prefer fulltext version when available for extra fields like rank_explanation
+                base_result = fulltext_map.get(mid) or semantic_map[mid]
+                base_result.search_score = combined
+                base_result.search_type = "hybrid"
+                base_result.rank_explanation = (
+                    f"Combined score: {combined:.4f} (fulltext={ft_score:.4f} * {fulltext_weight} + "
+                    f"semantic={se_score:.4f} * {semantic_weight})"
                 )
-                scored_results.append((combined_result, combined_score))
+                scored_results.append((base_result, combined))
         
-        # Sort by combined score (descending)
-        scored_results.sort(key=lambda x: x[1], reverse=True)
-        
-        # Return just the memory blocks with scores
-        return [result[0] for result in scored_results]
-    
-    def _combine_and_rerank(
-        self,
-        fulltext_results: List[models.MemoryBlock],
-        semantic_results: List[models.MemoryBlock],
-        fulltext_scores: List[float],
-        semantic_scores: List[float],
-        fulltext_weight: float,
-        semantic_weight: float,
-        min_combined_score: float
-    ) -> List[models.MemoryBlock]:
-        """
-        Combine results from multiple search methods and rerank by weighted score.
-        """
-        # Create score dictionaries
-        fulltext_score_dict = {
-            result.id: score for result, score in zip(fulltext_results, fulltext_scores)
-        }
-        semantic_score_dict = {
-            result.id: score for result, score in zip(semantic_results, semantic_scores)
-        }
-        
-        # Get all unique memory blocks
-        all_memory_blocks = {}
-        for result in fulltext_results + semantic_results:
-            all_memory_blocks[result.id] = result
-        
-        # Calculate combined scores
-        scored_results = []
-        for memory_id, memory_block in all_memory_blocks.items():
-            fulltext_score = fulltext_score_dict.get(memory_id, 0.0)
-            semantic_score = semantic_score_dict.get(memory_id, 0.0)
-            
-            # Normalize scores (both should be 0-1 range)
-            normalized_fulltext = min(1.0, max(0.0, fulltext_score))
-            normalized_semantic = min(1.0, max(0.0, semantic_score))
-            
-            # Calculate weighted combined score
-            combined_score = (
-                normalized_fulltext * fulltext_weight + 
-                normalized_semantic * semantic_weight
-            )
-            
-            if combined_score >= min_combined_score:
-                scored_results.append((memory_block, combined_score))
-        
-        # Sort by combined score (descending)
+        # Sort by combined score descending
         scored_results.sort(key=lambda x: x[1], reverse=True)
         
         # Return just the memory blocks
         return [result[0] for result in scored_results]
+
+    # Backwards-compat helper used by unit tests: accepts raw items + separate scores
+    def _combine_and_rerank(
+        self,
+        fulltext_items: List[Any],
+        semantic_items: List[Any],
+        fulltext_scores: List[float],
+        semantic_scores: List[float],
+        fulltext_weight: float,
+        semantic_weight: float,
+        min_combined_score: float,
+    ) -> List[Any]:
+        ft_map = {}
+        for item, score in zip(fulltext_items, fulltext_scores):
+            ft_map[getattr(item, 'id', id(item))] = (item, score)
+        se_map = {}
+        for item, score in zip(semantic_items, semantic_scores):
+            se_map[getattr(item, 'id', id(item))] = (item, score)
+
+        all_ids = set(ft_map.keys()) | set(se_map.keys())
+        scored: List[tuple[Any, float]] = []
+        for mid in all_ids:
+            ft_score = ft_map.get(mid, (None, 0.0))[1]
+            se_score = se_map.get(mid, (None, 0.0))[1]
+            combined = ft_score * fulltext_weight + se_score * semantic_weight
+            if combined >= min_combined_score:
+                base = (ft_map.get(mid) or se_map.get(mid))[0]
+                # Attach combined score attribute for callers that inspect it
+                try:
+                    setattr(base, 'search_score', combined)
+                except Exception:
+                    pass
+                scored.append((base, combined))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [item for item, _ in scored]
     
     def enhanced_search_memory_blocks(
         self,
@@ -530,7 +493,7 @@ class SearchService:
         
         # Apply scope filters
         if current_user is None:
-            query = query.filter(models.MemoryBlock.visibility_scope == 'public')
+            query = query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
         else:
             org_ids: List[uuid.UUID] = []
             for m in (current_user.get('memberships') or []):
@@ -540,10 +503,10 @@ class SearchService:
                     pass
             query = query.filter(
                 or_(
-                    models.MemoryBlock.visibility_scope == 'public',
+                    models.MemoryBlock.visibility_scope == SCOPE_PUBLIC,
                     models.MemoryBlock.owner_user_id == current_user.get('id'),
                     and_(
-                        models.MemoryBlock.visibility_scope == 'organization',
+                        models.MemoryBlock.visibility_scope == SCOPE_ORGANIZATION,
                         models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
                     ),
                 )

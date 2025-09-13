@@ -11,6 +11,15 @@ Key functions:
 - can_move_scope(): Check if user can change resource visibility scope
 """
 from typing import Optional, Dict, Any
+from core.utils.role_permissions import (
+    role_allows_write as _role_allows_write,
+    role_allows_manage as _role_allows_manage,
+)
+from core.utils.scopes import (
+    SCOPE_PUBLIC,
+    SCOPE_PERSONAL,
+    SCOPE_ORGANIZATION,
+)
 
 # Optional import for DB fallback; keep local to avoid heavy module load at import time
 try:  # pragma: no cover - safe import for runtime
@@ -44,12 +53,7 @@ def get_org_membership(org_id, current_user: Optional[Dict[str, Any]]):
     return None
 
 
-def _role_allows_write(role: str) -> bool:
-    return role in ("owner", "admin", "editor")
-
-
-def _role_allows_manage(role: str) -> bool:
-    return role in ("owner", "admin")
+# Back-compat: keep function names in this module but delegate to centralized utils
 
 
 def can_read(resource, current_user: Optional[Dict[str, Any]]) -> bool:
@@ -59,7 +63,7 @@ def can_read(resource, current_user: Optional[Dict[str, Any]]) -> bool:
         
     try:
         # Public data is always readable
-        if getattr(resource, "visibility_scope", None) == "public":
+        if getattr(resource, "visibility_scope", None) == SCOPE_PUBLIC:
             return True
             
         if current_user is None:
@@ -71,10 +75,10 @@ def can_read(resource, current_user: Optional[Dict[str, Any]]) -> bool:
         uid = current_user.get("id")
         visibility_scope = getattr(resource, "visibility_scope", None)
         
-        if visibility_scope == "personal":
+        if visibility_scope == SCOPE_PERSONAL:
             return getattr(resource, "owner_user_id", None) == uid
 
-        if visibility_scope == "organization":
+        if visibility_scope == SCOPE_ORGANIZATION:
             org_id = getattr(resource, "organization_id", None)
             if not org_id:
                 return False
@@ -102,10 +106,10 @@ def can_write(resource, current_user: Optional[Dict[str, Any]]) -> bool:
         uid = current_user.get("id")
         visibility_scope = getattr(resource, "visibility_scope", None)
         
-        if visibility_scope == "personal":
+        if visibility_scope == SCOPE_PERSONAL:
             return getattr(resource, "owner_user_id", None) == uid
             
-        if visibility_scope == "organization":
+        if visibility_scope == SCOPE_ORGANIZATION:
             org_id = getattr(resource, "organization_id", None)
             if not org_id:
                 return False
@@ -193,21 +197,20 @@ def can_move_scope(resource, target_scope: str, target_org_id, current_user: Opt
         if current_user.get("is_superadmin"):
             return True
             
-        if target_scope == "organization":
+        if target_scope == SCOPE_ORGANIZATION:
             if target_org_id is None:
                 return False
             # Require admin (or owner) of target org
             return can_manage_org(target_org_id, current_user)
             
-        if target_scope == "personal":
+        if target_scope == SCOPE_PERSONAL:
             # Only the resource owner can move to personal scope
             return getattr(resource, "owner_user_id", None) == current_user.get("id")
             
-        if target_scope == "public":
+        if target_scope == SCOPE_PUBLIC:
             # Only superadmin can move to public (handled above)
             return False
             
         return False
     except (AttributeError, TypeError):
         return False
-

@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy.orm import Session
 
-from core.search.search_service import SearchService
+from core.services.search_service import SearchService
 from core.db import models
 
 

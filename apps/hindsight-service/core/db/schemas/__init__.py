@@ -77,6 +77,12 @@ from .notifications import (
     NotificationPreferencesResponse,
     NotificationStatsResponse,
 )
+from .tokens import (
+    TokenCreateRequest,
+    TokenUpdateRequest,
+    TokenResponse,
+    TokenCreateResponse,
+)
 
 # Resolve forward references across split modules (e.g., MemoryBlock -> Keyword)
 try:  # pragma: no cover - safe rebuilds
@@ -162,4 +168,9 @@ __all__ = [
     "NotificationListResponse",
     "NotificationPreferencesResponse",
     "NotificationStatsResponse",
+    # Tokens
+    "TokenCreateRequest",
+    "TokenUpdateRequest",
+    "TokenResponse",
+    "TokenCreateResponse",
 ]

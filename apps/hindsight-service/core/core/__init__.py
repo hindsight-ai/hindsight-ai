@@ -1,6 +1,7 @@
 """
-Core algorithms and background workers package.
+Back-compat shims and selected workers.
 
-Contains keyword extraction experiments and consolidation workers used by
-memory optimization features.
+This package hosts legacy import shims (e.g., consolidation worker re-export)
+so tests and older imports continue to work while new code uses
+`core.workers.*` and utilities under `core.utils.*`.
 """

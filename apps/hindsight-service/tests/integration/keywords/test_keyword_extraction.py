@@ -1,28 +1,26 @@
 import pytest
-from core.core.keyword_extraction import extract_keywords, normalize_keywords
+from core.utils.keywords import simple_extract_keywords
 
 
 def test_extract_keywords_empty_text():
-    assert extract_keywords("") == []
+    assert simple_extract_keywords("") == []
 
 
 def test_extract_keywords_none():
-    assert extract_keywords(None) == []
+    assert simple_extract_keywords(None) == []
 
 
 def test_extract_keywords_basic():
-    # Since the function is stubbed to return [], test that
-    assert extract_keywords("This is a test") == []
+    # Simple heuristic should extract at least 'this' and 'test'
+    result = simple_extract_keywords("This is a test")
+    assert isinstance(result, list)
+    assert len(result) >= 1
 
 
-def test_normalize_keywords_empty():
-    assert normalize_keywords([]) == []
-
-
-def test_normalize_keywords_basic():
-    # Stubbed to return []
-    assert normalize_keywords(["test", "Test"]) == []
-
-
-def test_normalize_keywords_duplicates():
-    assert normalize_keywords(["a", "a", "b"]) == []
+def test_keyword_extraction_dedup_and_limit():
+    # Ensure de-dupe and limit of 10 applies
+    text = "alpha beta gamma alpha beta gamma delta epsilon zeta eta theta iota kappa"
+    result = simple_extract_keywords(text)
+    assert len(result) <= 10
+    # Duplicates should be removed while preserving order
+    assert result[0] == "alpha"

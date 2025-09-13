@@ -3,18 +3,18 @@
 {% block title %}Invitation to {{ organization_name }} - Hindsight AI{% endblock %}
 
 {% block header_title %}You're Invited!{% endblock %}
-{% block header_subtitle %}{{ inviter_name }} has invited you to join {{ organization_name }}{% endblock %}
+{% block header_subtitle %}{{ inviter_display if inviter_display else inviter_name }} has invited you to join {{ organization_name }}{% endblock %}
 
 {% block content %}
 <h2>Join {{ organization_name }}</h2>
 
 <p>Hello!</p>
 
-<p><strong>{{ inviter_name }}</strong> has invited you to join <strong>{{ organization_name }}</strong> on Hindsight AI.</p>
+<p><strong>{{ inviter_display if inviter_display else inviter_name }}</strong> has invited you to join <strong>{{ organization_name }}</strong> on Hindsight AI.</p>
 
 <div class="highlight">
     <p><strong>Organization:</strong> {{ organization_name }}</p>
-    <p><strong>Invited by:</strong> {{ inviter_name }}</p>
+    <p><strong>Invited by:</strong> {{ inviter_display if inviter_display else inviter_name }}</p>
     <p><strong>Role:</strong> {{ role if role else 'Member' }}</p>
 </div>
 
@@ -33,12 +33,12 @@
 </div>
 
 <p style="margin-top: 32px; color: #64748b; font-size: 14px;">
-    This invitation will expire in 7 days. If you have any questions, please contact {{ inviter_name }} or our support team.
+    This invitation will expire in 7 days. If you have any questions, please contact {{ inviter_display if inviter_display else inviter_name }} or our support team.
 </p>
 
 {% if invitation_message %}
 <div class="highlight" style="margin-top: 24px;">
-    <p><strong>Personal message from {{ inviter_name }}:</strong></p>
+    <p><strong>Personal message from {{ inviter_display if inviter_display else inviter_name }}:</strong></p>
     <p style="font-style: italic;">{{ invitation_message }}</p>
 </div>
 {% endif %}

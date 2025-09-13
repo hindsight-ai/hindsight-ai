@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 import uuid
-from core.search.search_service import SearchService, _create_memory_block_with_score
+from core.services.search_service import SearchService, _create_memory_block_with_score
 
 
 class TestSearchService:
@@ -42,7 +42,7 @@ class TestSearchService:
         assert len(result.keywords) == 1
         assert result.keywords[0].keyword_text == "test"
 
-    @patch('core.search.search_service.func')
+    @patch('core.services.search_service.func')
     def test_search_memory_blocks_fulltext_empty_query(self, mock_func):
         db = Mock()
         service = SearchService()
@@ -64,7 +64,7 @@ class TestSearchService:
             assert len(results) == 1
             assert meta["search_type"] == "fulltext"
 
-    @patch('core.search.search_service.time')
+    @patch('core.services.search_service.time')
     def test_search_memory_blocks_semantic_placeholder(self, mock_time):
         db = Mock()
         service = SearchService()
@@ -85,7 +85,7 @@ class TestSearchService:
         with patch.object(service, 'search_memory_blocks_fulltext', return_value=([], {"fulltext_results_count": 0, "search_time": 0.01})), \
              patch.object(service, 'search_memory_blocks_semantic', return_value=([], {"semantic_results_count": 0, "search_time": 0.01})), \
              patch.object(service, '_basic_search_fallback', return_value=([], {"basic_results_count": 0})), \
-             patch('core.search.search_service.time') as mock_time:
+             patch('core.services.search_service.time') as mock_time:
             mock_time.time.return_value = 1000.0
             results, metadata = service.search_memory_blocks_hybrid(db, "")
             assert results == []
@@ -224,7 +224,7 @@ class TestSearchService:
         assert len(result) == 2
 
     def test_get_search_service(self):
-        from core.search.search_service import get_search_service
+        from core.services.search_service import get_search_service
         service = get_search_service()
         assert isinstance(service, SearchService)
         # Test singleton

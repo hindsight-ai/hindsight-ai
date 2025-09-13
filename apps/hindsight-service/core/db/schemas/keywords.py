@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
+from core.utils.scopes import VisibilityScopeEnum
 
 
 class KeywordBase(BaseModel):
     keyword_text: str
-    visibility_scope: str | None = 'personal'
+    visibility_scope: VisibilityScopeEnum | None = VisibilityScopeEnum.personal
     owner_user_id: uuid.UUID | None = None
     organization_id: uuid.UUID | None = None
 
@@ -16,11 +17,10 @@ class KeywordCreate(KeywordBase):
 
 class KeywordUpdate(BaseModel):
     keyword_text: str | None = None
-    visibility_scope: str | None = None
+    visibility_scope: VisibilityScopeEnum | None = None
 
 
 class Keyword(KeywordBase):
     keyword_id: uuid.UUID
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
-

@@ -62,16 +62,33 @@ This document specifies the expected behavior, constraints, and operational requ
 - ✅ API endpoints enforce membership-based data access
 - ✅ Clear error messages for unauthorized data access attempts
 
-#### AC-ORG-8: Real-time UI State Management ✅ **NEWLY IMPLEMENTED**
-- ✅ Delete buttons appear immediately after creating new organization without panel close/reopen
-- ✅ Delete buttons appear immediately after switching organizations without panel close/reopen
-- ✅ Organization dropdown automatically refreshes after creating new organization
-- ✅ Organization dropdown automatically refreshes after exiting organization management panel
-- ✅ New organizations become immediately available for selection without page reload
-- ✅ Smooth UX transition with no manual refresh required
-- ✅ User data refreshes automatically in background to ensure accurate permission display
-- ✅ Graceful handling of refresh failures without blocking organization operations
-- ✅ RGB methodology test coverage validates state management reliability
+#### AC-ORG-9: Dynamic Role-Based Permission System ✅ **NEWLY IMPLEMENTED**
+- ✅ Role permissions are defined in centralized configuration (`core/utils/role_permissions.py`)
+- ✅ Owner, admin, and editor roles have `can_read=True` and `can_write=True` by default
+- ✅ Viewer role has `can_read=True` and `can_write=False` by default
+- ✅ API endpoints automatically apply correct permissions when adding/updating members
+- ✅ Explicit permission overrides are supported when needed
+- ✅ Invalid roles are rejected with clear error messages
+- ✅ Permission changes require only configuration updates, not code changes
+- ✅ Existing members can be updated to match new permission configurations
+- ✅ Comprehensive unit and integration test coverage for permission logic
+
+#### AC-ORG-10: Permission System Flexibility and Extensibility
+- ✅ Easy to add new roles by updating `ROLE_PERMISSIONS` configuration
+- ✅ Easy to modify existing role permissions without touching business logic
+- ✅ Consistent permission application across all API endpoints
+- ✅ Migration tools available to update existing data after configuration changes
+- ✅ Role validation prevents invalid role assignments
+- ✅ Permission resolution logic handles edge cases gracefully
+- ✅ Audit trail maintained for permission changes
+
+#### AC-ORG-11: Permission System Testing and Validation
+- ✅ Unit tests cover all role permission utility functions
+- ✅ Integration tests validate API endpoints with dynamic permissions
+- ✅ Test coverage for permission override functionality
+- ✅ Tests for invalid role handling and error scenarios
+- ✅ Validation of permission consistency across add/update operations
+- ✅ Automated testing prevents regression in permission logic
 
 ### Organization Management Testing Implementation
 
@@ -242,11 +259,66 @@ In local development mode, the system provides a simplified authentication mecha
 - **Access**: All authenticated users
 - **Behavior**: Regular users see only their manageable orgs, superadmins see all
 
-##### `/organizations/admin`
-- **Purpose**: Legacy superadmin-only endpoint for all organizations
-- **Returns**: All organizations with `created_by` information
-- **Access**: Superadmins only (`is_superadmin: true`)
-- **Error**: 403 Forbidden for non-superadmins
+### 5.6 Dynamic Role-Based Permission System
+
+#### Overview
+The system implements a dynamic, configuration-driven approach to role-based permissions that eliminates hardcoded permission logic and enables easy modification of role capabilities without code changes.
+
+#### Role Permission Configuration
+```python
+ROLE_PERMISSIONS = {
+    "owner": {
+        "can_read": True,
+        "can_write": True,
+    },
+    "admin": {
+        "can_read": True,
+        "can_write": True,
+    },
+    "editor": {
+        "can_read": True,
+        "can_write": True,
+    },
+    "viewer": {
+        "can_read": True,
+        "can_write": False,
+    },
+}
+```
+
+#### Key Features
+1. **Centralized Configuration**: All role permissions defined in `core/utils/role_permissions.py`
+2. **Dynamic Resolution**: Permissions automatically applied based on role during member addition/update
+3. **Override Support**: Explicit permission overrides still supported when needed
+4. **Extensible Design**: Easy to add new roles or modify existing permissions
+5. **Consistent Application**: Same permission logic used across all API endpoints
+
+#### Permission Resolution Logic
+- **Default Behavior**: When adding/updating members, permissions default to role-based values
+- **Explicit Overrides**: API accepts explicit `can_read`/`can_write` parameters to override defaults
+- **Validation**: Invalid roles rejected with clear error messages
+- **Data Integrity**: Existing members can be updated to match new permission configurations
+
+#### Implementation Components
+1. **Utility Module** (`core/utils/role_permissions.py`):
+   - `get_role_permissions(role)`: Returns default permissions for a role
+   - `validate_role(role)`: Validates role against allowed set
+   - `update_permissions_for_role()`: Applies overrides to role permissions
+
+2. **API Integration** (`core/api/orgs_fixed.py`):
+   - `add_member()`: Uses dynamic permissions when creating memberships
+   - `update_member()`: Applies role-based permissions when role changes
+
+3. **Migration Tools** (`update_member_permissions.py`):
+   - Updates existing members to match current role permissions
+   - Handles bulk permission corrections after configuration changes
+
+#### Benefits
+- **Maintainability**: Permission changes require only configuration updates
+- **Consistency**: Eliminates hardcoded permission logic scattered throughout codebase
+- **Flexibility**: Easy to introduce new roles or modify existing permissions
+- **Reliability**: Centralized validation and error handling
+- **Testability**: Comprehensive unit and integration test coverage
 
 ##### `/organizations/{org_id}/members`
 - **Purpose**: Get organization membership information

@@ -26,6 +26,7 @@ class AuditAction(str, Enum):
     INVITATION_RESEND = "invitation_resend"
     INVITATION_REVOKE = "invitation_revoke"
     INVITATION_ACCEPT = "invitation_accept"
+    INVITATION_DECLINE = "invitation_decline"
     # Agent
     AGENT_CREATE = "agent_create"
     AGENT_UPDATE = "agent_update"
@@ -50,6 +51,10 @@ class AuditAction(str, Enum):
     # Bulk ops
     BULK_OPERATION_START = "bulk_operation_start"
     BULK_OPERATION_COMPLETE = "bulk_operation_complete"
+    # Personal Access Tokens
+    TOKEN_CREATE = "token_create"
+    TOKEN_ROTATE = "token_rotate"
+    TOKEN_REVOKE = "token_revoke"
 
 
 class AuditStatus(str, Enum):

@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Portal from './Portal';
 import { useAuth } from '../context/AuthContext';
 import { useOrganization } from '../context/OrganizationContext';
-import organizationService, { Organization, OrganizationMember, CreateOrganizationData, AddMemberData } from '../api/organizationService';
+import organizationService, { Organization, OrganizationMember, CreateOrganizationData, AddMemberData, OrganizationInvitation } from '../api/organizationService';
 import notificationService from '../services/notificationService';
+import { apiFetch } from '../api/http';
 
 interface OrganizationManagementProps {
   onClose: () => void;
@@ -30,11 +31,18 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
   const [viewMode, setViewMode] = useState<'member' | 'all'>('member');
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
+  const [invitations, setInvitations] = useState<OrganizationInvitation[]>([]);
+  const [invitationFilter, setInvitationFilter] = useState<'pending'|'accepted'|'revoked'|'expired'|'all'>('pending');
+  const [invCounts, setInvCounts] = useState<{pending:number; accepted:number; revoked:number; expired:number}>({pending:0,accepted:0,revoked:0,expired:0});
+  const [auditOpen, setAuditOpen] = useState<{open:boolean; invitationId?:string}>({open:false});
   const [loading, setLoading] = useState(true);
   const [createMode, setCreateMode] = useState(false);
   const [newOrgData, setNewOrgData] = useState<CreateOrganizationData>({ name: '', slug: '' });
   const [addMemberMode, setAddMemberMode] = useState(false);
   const [newMemberData, setNewMemberData] = useState<AddMemberData>({ email: '', role: 'viewer' });
+  const [inviteMode, setInviteMode] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('viewer');
   const [showModeConfirmation, setShowModeConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
@@ -88,8 +96,11 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
   useEffect(() => {
     if (selectedOrg) {
       fetchMembers(selectedOrg.id);
+      fetchInvitations(selectedOrg.id);
+      // also refresh counts
+      try { refreshInvitationCounts(selectedOrg.id); } catch {}
     }
-  }, [selectedOrg]);
+  }, [selectedOrg, invitationFilter]);
 
   const fetchOrganizations = async () => {
     try {
@@ -124,6 +135,58 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
       console.error('Error fetching members:', error);
     }
   };
+
+  async function fetchInvitations(orgId: string) {
+    try {
+      if (invitationFilter === 'all') {
+        const all = await organizationService.listInvitations(orgId, 'all');
+        setInvitations(all || []);
+      } else {
+        const invs = await organizationService.listInvitations(orgId, invitationFilter);
+        setInvitations(invs || []);
+      }
+    } catch (error) {
+      console.error('Error fetching invitations:', error);
+      notificationService.showError('Failed to fetch invitations');
+    }
+  }
+
+  async function refreshInvitationCounts(orgId: string) {
+    try {
+      const [p, a, r, e] = await Promise.all([
+        organizationService.listInvitations(orgId, 'pending'),
+        organizationService.listInvitations(orgId, 'accepted'),
+        organizationService.listInvitations(orgId, 'revoked'),
+        organizationService.listInvitations(orgId, 'expired'),
+      ]);
+      setInvCounts({ pending: (p||[]).length, accepted: (a||[]).length, revoked: (r||[]).length, expired: (e||[]).length });
+    } catch {}
+  }
+
+  // Auto-refresh pending invitations at configurable interval
+  const getInvitationsRefreshMs = (): number => {
+    try {
+      // Prefer runtime __ENV__ value if present, else VITE_ from process.env
+      const runtime = (typeof window !== 'undefined' && (window as any).__ENV__?.INVITATIONS_REFRESH_MS) || null;
+      const build = (typeof process !== 'undefined' && (process as any).env?.VITE_INVITATIONS_REFRESH_MS) || null;
+      const val = Number(runtime ?? build);
+      return Number.isFinite(val) && val > 0 ? val : 30000; // default 30s
+    } catch {
+      return 30000;
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedOrg) return;
+    const ms = getInvitationsRefreshMs();
+    const id = setInterval(() => {
+      try { 
+        fetchInvitations(selectedOrg.id);
+        refreshInvitationCounts(selectedOrg.id);
+      } catch {}
+    }, ms);
+    return () => clearInterval(id);
+  }, [selectedOrg, invitationFilter]);
 
   const handleCreateOrganization = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,17 +232,18 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
     }
 
     try {
-      await organizationService.addMember(selectedOrg.id, {
+      // Send an invitation instead of directly adding the member
+      await organizationService.createInvitation(selectedOrg.id, {
         email: newMemberData.email.trim(),
         role: newMemberData.role,
       });
-      
-      await fetchMembers(selectedOrg.id);
+
+      await fetchInvitations(selectedOrg.id);
       setAddMemberMode(false);
       setNewMemberData({ email: '', role: 'viewer' });
-      notificationService.showSuccess('Member added successfully');
+      notificationService.showSuccess('Invitation sent');
     } catch (error) {
-      notificationService.showError(`Failed to add member: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      notificationService.showError(`Failed to send invitation: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -461,9 +525,15 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                     <div className="flex gap-2">
                       <button
                         onClick={() => setAddMemberMode(true)}
-                        className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition"
+                        className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition"
                       >
-                        + Add Member
+                        + Invite Member
+                      </button>
+                      <button
+                        onClick={() => setInviteMode(true)}
+                        className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition"
+                      >
+                        + Invite
                       </button>
                       {canManageOrganization(selectedOrg) && (
                         <button
@@ -486,7 +556,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                       <input
                         type="email"
-                        placeholder="Member Email"
+                        placeholder="Invitee Email"
                         value={newMemberData.email}
                         onChange={(e) => setNewMemberData({ ...newMemberData, email: e.target.value })}
                         className="px-3 py-2 border rounded"
@@ -504,12 +574,72 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                       </select>
                     </div>
                     <div className="flex gap-2">
-                      <button type="submit" className="bg-green-500 text-white px-3 py-2 rounded hover:bg-green-600">
-                        Add Member
+                      <button type="submit" className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700">
+                        Send Invitation
                       </button>
                       <button
                         type="button"
                         onClick={() => setAddMemberMode(false)}
+                        className="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Invitation Create Form */}
+                {inviteMode && (user?.is_superadmin || isUserMember(selectedOrg.id)) && (
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!selectedOrg) return;
+                      try {
+                        // Prevent duplicate pending invite client-side
+                        const dup = invitations.find((i) => (i.email || '').toLowerCase() === inviteEmail.toLowerCase() && (i.status || '').toLowerCase() === 'pending');
+                        if (dup) {
+                          notificationService.showInfo('A pending invitation already exists for this email');
+                          return;
+                        }
+                        await organizationService.createInvitation(selectedOrg.id, { email: inviteEmail, role: inviteRole });
+                        notificationService.showSuccess('Invitation sent');
+                        setInviteEmail('');
+                        setInviteRole('viewer');
+                        setInviteMode(false);
+                        await fetchInvitations(selectedOrg.id);
+                      } catch (error: any) {
+                        notificationService.showError(`Failed to send invitation: ${error?.message || 'Unknown error'}`);
+                      }
+                    }}
+                    className="mb-4 p-4 border rounded bg-blue-50"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                      <input
+                        type="email"
+                        placeholder="Invitee Email"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        className="px-3 py-2 border rounded"
+                        required
+                      />
+                      <select
+                        value={inviteRole}
+                        onChange={(e) => setInviteRole(e.target.value)}
+                        className="px-3 py-2 border rounded"
+                      >
+                        <option value="viewer">Viewer</option>
+                        <option value="editor">Editor</option>
+                        <option value="admin">Admin</option>
+                        <option value="owner">Owner</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="submit" className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700">
+                        Send Invitation
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInviteMode(false)}
                         className="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600"
                       >
                         Cancel
@@ -572,6 +702,108 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                   {members.length === 0 && (
                     <div className="text-gray-500 text-center py-8">
                       No members found. Add some members to get started.
+                    </div>
+                  )}
+                </div>
+
+                {/* Invitations Section */}
+                <div className="mt-8">
+                  <div className="flex flex-col gap-2 mb-3">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold">Invitations</h3>
+                      <div className="text-xs text-gray-600 bg-gray-100 rounded-full px-3 py-1">
+                        Pending: <span className="text-amber-700 font-semibold">{invCounts.pending}</span> • Accepted: <span className="text-green-700 font-semibold">{invCounts.accepted}</span> • Revoked: <span className="text-red-700 font-semibold">{invCounts.revoked}</span> • Expired: <span className="text-gray-700 font-semibold">{invCounts.expired}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {(['pending','accepted','revoked','expired','all'] as const).map(s => (
+                        <button key={s} onClick={() => setInvitationFilter(s)} className={`px-3 py-1 rounded text-sm border ${invitationFilter===s? 'bg-blue-600 text-white border-blue-600':'bg-white text-gray-700 hover:bg-gray-50'}`}>{s.charAt(0).toUpperCase()+s.slice(1)}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border px-3 py-2 text-left">Email</th>
+                          <th className="border px-3 py-2 text-left">Role</th>
+                          <th className="border px-3 py-2 text-left">Status</th>
+                          <th className="border px-3 py-2 text-left">Created</th>
+                          <th className="border px-3 py-2 text-left">Expires</th>
+                          <th className="border px-3 py-2 text-left">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invitations.map((inv) => {
+                          const isPending = (inv.status || '').toLowerCase() === 'pending';
+                          return (
+                            <tr key={inv.id} className="hover:bg-gray-50">
+                              <td className="border px-3 py-2">{inv.email}</td>
+                              <td className="border px-3 py-2">{inv.role}</td>
+                              <td className="border px-3 py-2">{inv.status}</td>
+                              <td className="border px-3 py-2 text-sm">{new Date(inv.created_at).toLocaleString()}</td>
+                              <td className="border px-3 py-2 text-sm">{new Date(inv.expires_at).toLocaleString()}</td>
+                              <td className="border px-3 py-2">
+                                <div className="flex gap-2">
+                                  <button
+                                    disabled={!isPending}
+                                    onClick={async () => {
+                                      if (!selectedOrg) return;
+                                      try {
+                                        await organizationService.resendInvitation(selectedOrg.id, inv.id);
+                                        notificationService.showSuccess('Invitation resent');
+                                        await fetchInvitations(selectedOrg.id);
+                                        await refreshInvitationCounts(selectedOrg.id);
+                                      } catch (error: any) {
+                                        notificationService.showError(`Failed to resend: ${error?.message || 'Unknown error'}`);
+                                      }
+                                    }}
+                                    className={`px-2 py-1 rounded text-sm ${isPending ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'}`}
+                                  >
+                                    Resend
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!selectedOrg) return;
+                                      try {
+                                        await organizationService.revokeInvitation(selectedOrg.id, inv.id);
+                                        notificationService.showInfo('Invitation revoked');
+                                        await fetchInvitations(selectedOrg.id);
+                                        await refreshInvitationCounts(selectedOrg.id);
+                                      } catch (error: any) {
+                                        notificationService.showError(`Failed to revoke: ${error?.message || 'Unknown error'}`);
+                                      }
+                                    }}
+                                    className="px-2 py-1 rounded text-sm bg-red-500 hover:bg-red-600 text-white"
+                                  >
+                                    Revoke
+                                  </button>
+                                  <button
+                                    onClick={() => setAuditOpen({open:true, invitationId: inv.id})}
+                                    className="px-2 py-1 rounded text-sm bg-gray-200 hover:bg-gray-300 text-gray-800"
+                                  >
+                                    View Audit
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {invitations.length === 0 && (
+                          <tr><td colSpan={6} className="border px-3 py-6 text-center text-gray-500">No invitations found.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {auditOpen.open && (
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-60" onClick={() => setAuditOpen({open:false})}>
+                      <div className="bg-white rounded-lg p-4 w-full max-w-2xl mx-4" onClick={(e)=>e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="text-md font-semibold">Invitation Audit</h4>
+                          <button onClick={() => setAuditOpen({open:false})} className="text-gray-500 hover:text-gray-700">×</button>
+                        </div>
+                        <AuditLogs invitationId={auditOpen.invitationId!} orgId={selectedOrg!.id} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -664,3 +896,55 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
 };
 
 export default OrganizationManagement;
+
+// Lightweight audit log viewer component
+const AuditLogs: React.FC<{invitationId: string; orgId: string}> = ({ invitationId, orgId }) => {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true); setError(null);
+        const res = await apiFetch(`/audits`, { searchParams: { organization_id: orgId, limit: 200 } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const filtered = (data || []).filter((l: any) => (l?.target_type || '').toLowerCase() === 'invitation' && String(l?.target_id || '').toLowerCase() === invitationId.toLowerCase());
+        setLogs(filtered);
+      } catch (e: any) {
+        setError(e?.message || 'Failed to load');
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, [invitationId, orgId]);
+
+  if (loading) return <div className="text-sm text-gray-600">Loading audit logs…</div>;
+  if (error) return <div className="text-sm text-red-600">{error}</div>;
+  if (!logs.length) return <div className="text-sm text-gray-600">No audit events for this invitation.</div>;
+
+  return (
+    <div className="max-h-80 overflow-y-auto">
+      <table className="w-full border-collapse border border-gray-200 text-sm">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="border px-2 py-1 text-left">Time</th>
+            <th className="border px-2 py-1 text-left">Action</th>
+            <th className="border px-2 py-1 text-left">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map((l:any) => (
+            <tr key={l.id}>
+              <td className="border px-2 py-1">{new Date(l.created_at).toLocaleString()}</td>
+              <td className="border px-2 py-1">{l.action_type}</td>
+              <td className="border px-2 py-1">{l.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};

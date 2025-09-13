@@ -1,7 +1,8 @@
 import uuid
+import pytest
 from core.db import models, crud, schemas
 from sqlalchemy.orm import Session
-from core.bulk_operations_worker import perform_bulk_move, perform_bulk_delete
+from core.async_bulk_operations import BulkOperationTask
 
 
 def _create_bulk_operation(db: Session, op_type: str, organization_id, actor_user_id):
@@ -17,7 +18,8 @@ def _create_bulk_operation(db: Session, op_type: str, organization_id, actor_use
     return op
 
 
-def test_bulk_move_operation_success(db_session: Session, monkeypatch):
+@pytest.mark.asyncio
+async def test_bulk_move_operation_success(db_session: Session, monkeypatch):
     db = db_session
     # Seed orgs and user
     user = models.User(email=f"bulk_move_user@example.com")
@@ -35,17 +37,19 @@ def test_bulk_move_operation_success(db_session: Session, monkeypatch):
 
     op = _create_bulk_operation(db, "move", src_org.id, user.id)
 
-    # Monkeypatch _get_db generator to yield our session
-    import core.bulk_operations_worker as worker
-    def fake_get_db():
-        yield db
-    worker._get_db = fake_get_db
-
-    perform_bulk_move(op.id, user.id, src_org.id, {
-        "destination_organization_id": dst_org.id,
-        "destination_owner_user_id": user.id,
-        "resource_types": ["agents", "keywords", "memory_blocks"],
-    })
+    # Execute via async BulkOperationTask directly
+    task = BulkOperationTask(
+        operation_id=op.id,
+        task_type="bulk_move",
+        actor_user_id=user.id,
+        organization_id=src_org.id,
+        payload={
+            "destination_organization_id": dst_org.id,
+            "destination_owner_user_id": user.id,
+            "resource_types": ["agents", "keywords", "memory_blocks"],
+        },
+    )
+    await task._perform_bulk_move(db)
 
     try:
         db.refresh(op)
@@ -63,7 +67,8 @@ def test_bulk_move_operation_success(db_session: Session, monkeypatch):
             raise
 
 
-def test_bulk_delete_operation_with_error(db_session: Session, monkeypatch):
+@pytest.mark.asyncio
+async def test_bulk_delete_operation_with_error(db_session: Session, monkeypatch):
     db = db_session
     user = models.User(email=f"bulk_del_user@example.com")
     db.add(user); db.commit(); db.refresh(user)
@@ -79,11 +84,6 @@ def test_bulk_delete_operation_with_error(db_session: Session, monkeypatch):
     op = _create_bulk_operation(db, "delete", org.id, user.id)
 
     # Monkeypatch delete_agent to raise for one agent
-    import core.bulk_operations_worker as worker
-    def fake_get_db():
-        yield db
-    worker._get_db = fake_get_db
-
     real_delete_agent = crud.delete_agent
     def fake_delete_agent(db_, agent_id):
         if agent_id == agent_fail.agent_id:
@@ -92,7 +92,14 @@ def test_bulk_delete_operation_with_error(db_session: Session, monkeypatch):
     crud.delete_agent = fake_delete_agent
 
     try:
-        perform_bulk_delete(op.id, user.id, org.id, {"resource_types": ["agents"]})
+        task = BulkOperationTask(
+            operation_id=op.id,
+            task_type="bulk_delete",
+            actor_user_id=user.id,
+            organization_id=org.id,
+            payload={"resource_types": ["agents"]},
+        )
+        await task._perform_bulk_delete(db)
     finally:
         crud.delete_agent = real_delete_agent
 

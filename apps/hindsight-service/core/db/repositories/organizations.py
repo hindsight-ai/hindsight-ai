@@ -140,11 +140,13 @@ def create_organization_invitation(
     invitation: schemas.OrganizationInvitationCreate,
     invited_by_user_id: uuid.UUID,
 ):
+    import uuid as _uuid
     db_invitation = models.OrganizationInvitation(
         organization_id=organization_id,
         email=invitation.email,
         role=invitation.role,
         invited_by_user_id=invited_by_user_id,
+        token=_uuid.uuid4().hex,
         expires_at=datetime.now(timezone.utc) + timedelta(days=7),
     )
     db.add(db_invitation)
@@ -161,14 +163,20 @@ def get_organization_invitation(db: Session, invitation_id: uuid.UUID):
     return db.query(models.OrganizationInvitation).filter(models.OrganizationInvitation.id == invitation_id).first()
 
 
-def get_organization_invitations(db: Session, organization_id: uuid.UUID, skip: int = 0, limit: int = 100):
-    return (
-        db.query(models.OrganizationInvitation)
-        .filter(models.OrganizationInvitation.organization_id == organization_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
+def get_organization_invitations(
+    db: Session,
+    organization_id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 100,
+    *,
+    status: str | None = None,
+):
+    q = db.query(models.OrganizationInvitation).filter(
+        models.OrganizationInvitation.organization_id == organization_id
     )
+    if status:
+        q = q.filter(models.OrganizationInvitation.status == status)
+    return q.offset(skip).limit(limit).all()
 
 
 def update_organization_invitation(db: Session, invitation_id: uuid.UUID, invitation: schemas.OrganizationInvitationUpdate):
