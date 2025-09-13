@@ -199,6 +199,7 @@ jobs:
             HINDSIGHT_SERVICE_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-service:${{ github.sha }}
             HINDSIGHT_DASHBOARD_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:${{ github.sha }}
             APP_HOST=${{ secrets.APP_HOST }}
+            APP_BASE_URL=https://${{ secrets.APP_HOST }}
             TRAEFIK_DASHBOARD_HOST=${{ secrets.TRAEFIK_DASHBOARD_HOST }}
             CLOUDFLARE_DNS_EMAIL=${{ secrets.CLOUDFLARE_DNS_EMAIL }}
             CLOUDFLARE_DNS_API_TOKEN=${{ secrets.CLOUDFLARE_DNS_API_TOKEN }}
@@ -227,6 +228,7 @@ jobs:
             POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
             POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
             HINDSIGHT_SERVICE_API_URL=${{ secrets.API_URL }}
+            VITE_INVITATIONS_REFRESH_MS=${{ secrets.VITE_INVITATIONS_REFRESH_MS }}
             REACT_APP_HINDSIGHT_SERVICE_API_URL=https://${{ secrets.REACT_APP_HINDSIGHT_SERVICE_API_URL }}
             BACKEND_BUILD_SHA=${{ github.sha }}
             FRONTEND_BUILD_SHA=${{ github.sha }}
