@@ -20,7 +20,7 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
     }
   }, [isOpen]);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -47,14 +47,14 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
     }
   };
 
-  const handleBackdropClick = (e) => {
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (e.target === e.currentTarget) {
       onClose();
     }
   };
 
-  const handleModalContentClick = (e) => {
+  const handleModalContentClick = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
   };
 
@@ -62,50 +62,55 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
 
   return (
     <Portal>
-    <div className="dialog-overlay" onClick={handleBackdropClick}>
-      <div className="dialog-box" onClick={handleModalContentClick}>
-        <h2>Add New Agent</h2>
-        <div className="dialog-content">
-          {error && <p className="error-message" data-testid="modal-error">{error}</p>}
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50" onClick={handleBackdropClick}>
+        <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4" onClick={handleModalContentClick}>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Add New Agent</h3>
+          <div>
+            {error && (
+              <p className="text-red-600 text-sm mb-3" data-testid="modal-error">{error}</p>
+            )}
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="agentName">Agent Name *</label>
-              <input
-                id="agentName"
-                name="agentName"
-                type="text"
-                value={agentName}
-                onChange={(e) => setAgentName(e.target.value)}
-                required
-                placeholder="Enter agent name"
-                data-testid="agent-name-input"
-                disabled={loading}
-                autoFocus
-              />
-            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="mb-4">
+                <label htmlFor="agentName" className="block text-sm font-medium text-gray-700 mb-2">Agent Name *</label>
+                <input
+                  id="agentName"
+                  name="agentName"
+                  type="text"
+                  value={agentName}
+                  onChange={(e) => setAgentName(e.target.value)}
+                  required
+                  placeholder="Enter agent name"
+                  data-testid="agent-name-input"
+                  disabled={loading}
+                  autoFocus
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
 
-            <div className="dialog-actions">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                data-testid="cancel-button"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading || !agentName.trim()}
-                data-testid="submit-button"
-              >
-                {loading ? 'Creating...' : 'Create Agent'}
-              </button>
-            </div>
-          </form>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={loading}
+                  data-testid="cancel-button"
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || !agentName.trim()}
+                  data-testid="submit-button"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Creating...' : 'Create Agent'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
-    </div>
     </Portal>
   );
 };
