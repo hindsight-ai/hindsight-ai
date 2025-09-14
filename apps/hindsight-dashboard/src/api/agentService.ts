@@ -52,8 +52,31 @@ const agentService = {
 
   createAgent: async (data: Partial<Agent>): Promise<Agent> => {
     if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to create agents.'); throw new Error('Guest mode read-only'); }
+    // Inject current org scope into create requests
+    let payload: Partial<Agent> = { ...data };
+    let searchParams: Record<string, any> | undefined = undefined;
+    try {
+      const scope = sessionStorage.getItem('ACTIVE_SCOPE') || undefined;
+      const orgId = sessionStorage.getItem('ACTIVE_ORG_ID') || undefined;
+      if (scope) {
+        payload.visibility_scope = scope as any;
+        // Also include as query params for backends that read scope from query on writes
+        searchParams = { ...(searchParams || {}), scope };
+      }
+      if (scope === 'organization' && orgId) {
+        payload.organization_id = orgId;
+        searchParams = { ...(searchParams || {}), organization_id: orgId };
+      }
+    } catch {}
+
     const response = await apiFetch('/agents/', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), credentials: 'include'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+      // Ensure scope/org reach the API in environments that expect query-based scoping
+      searchParams,
+      ensureTrailingSlash: true,
     });
     if (!response.ok) {
       if (response.status === 401) { notificationService.show401Error(); throw new Error('Authentication required'); }
