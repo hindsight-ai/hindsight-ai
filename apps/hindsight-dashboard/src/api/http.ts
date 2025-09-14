@@ -57,19 +57,43 @@ export const apiUrlDir = (path: string): string => {
 export type ApiFetchInit = RequestInit & {
   searchParams?: Record<string, any> | URLSearchParams;
   ensureTrailingSlash?: boolean;
+  noScope?: boolean; // opt out of automatic scope injection
 };
 
 export const apiFetch = (path: string, init: ApiFetchInit = {}): Promise<Response> => {
-  const { searchParams, ensureTrailingSlash, ...rest } = init;
+  const { searchParams, ensureTrailingSlash, noScope, ...rest } = init;
   let url = ensureTrailingSlash ? apiUrlDir(path) : apiUrl(path);
 
-  if (searchParams) {
-    const usp = searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams();
-    if (!(searchParams instanceof URLSearchParams)) {
-      for (const [k, v] of Object.entries(searchParams)) {
-        if (v !== undefined && v !== null) usp.append(k, String(v));
-      }
+  // Start with provided params
+  const usp = searchParams instanceof URLSearchParams ? new URLSearchParams(searchParams.toString()) : new URLSearchParams();
+  if (searchParams && !(searchParams instanceof URLSearchParams)) {
+    for (const [k, v] of Object.entries(searchParams)) {
+      if (v !== undefined && v !== null) usp.append(k, String(v));
     }
+  }
+
+  // Inject scope/org for GET/HEAD by default, unless noScope=true
+  const method = (rest.method || 'GET').toUpperCase();
+  if (!noScope && (method === 'GET' || method === 'HEAD')) {
+    try {
+      const existingScope = usp.get('scope');
+      const existingOrg = usp.get('organization_id');
+      let scope = existingScope;
+      let orgId = existingOrg;
+
+      if (!scope) {
+        scope = sessionStorage.getItem('ACTIVE_SCOPE') || undefined;
+        if (!scope && isGuest()) scope = 'public';
+      }
+      if (!orgId) {
+        orgId = sessionStorage.getItem('ACTIVE_ORG_ID') || undefined;
+      }
+      if (scope) usp.set('scope', scope);
+      if (scope === 'organization' && orgId) usp.set('organization_id', orgId);
+    } catch {}
+  }
+
+  if ([...usp.keys()].length > 0) {
     const sep = url.includes('?') ? '&' : '?';
     url = `${url}${sep}${usp.toString()}`;
   }
@@ -77,4 +101,3 @@ export const apiFetch = (path: string, init: ApiFetchInit = {}): Promise<Respons
   const req: RequestInit = { credentials: 'include', ...rest };
   return fetch(url, req);
 };
-

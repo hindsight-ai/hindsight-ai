@@ -13,7 +13,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from core.db import crud, schemas
+from core.db import crud, schemas, models
+from core.api.permissions import can_read, can_write
+from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_read
+from core.audit import log as audit_log, AuditAction, AuditStatus
 from core.db.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -41,6 +44,35 @@ def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error triggering consolidation process: {str(e)}")
 
 
+def _user_can_view_suggestion(db: Session, suggestion, current_user) -> bool:
+    try:
+        # Check at least one original memory is readable
+        for mid in suggestion.original_memory_ids or []:
+            try:
+                mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
+            except Exception:
+                mem = None
+            if mem and can_read(mem, current_user):
+                return True
+    except Exception:
+        pass
+    return False
+
+def _user_can_write_suggestion(db: Session, suggestion, current_user) -> bool:
+    try:
+        # Require write on all originals to proceed with mutation
+        for mid in suggestion.original_memory_ids or []:
+            try:
+                mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
+            except Exception:
+                mem = None
+            if not (mem and can_write(mem, current_user)):
+                return False
+        return True
+    except Exception:
+        return False
+
+
 @router.get("/consolidation-suggestions/", response_model=schemas.PaginatedConsolidationSuggestions)
 def get_consolidation_suggestions_endpoint(
     status: Optional[str] = None,
@@ -50,20 +82,23 @@ def get_consolidation_suggestions_endpoint(
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """Retrieve all consolidation suggestions with filtering/sorting/pagination."""
     logger.info(
         f"Fetching consolidation suggestions with filters: status={status}, group_id={group_id}"
     )
 
-    suggestions, total_items = crud.get_consolidation_suggestions(
+    user, current_user, scope_ctx = scoped
+    # Fetch suggestions then filter to those with at least one visible memory
+    raw_suggestions, total_items = crud.get_consolidation_suggestions(
         db=db,
         status=status,
         group_id=group_id,
         skip=skip,
         limit=limit,
     )
-
+    suggestions = [s for s in raw_suggestions if _user_can_view_suggestion(db, s, current_user)]
     total_pages = math.ceil(total_items / limit) if limit > 0 else 0
 
     return {"items": suggestions, "total_items": total_items, "total_pages": total_pages}
@@ -74,11 +109,17 @@ def get_consolidation_suggestions_endpoint(
     response_model=schemas.ConsolidationSuggestion,
 )
 def get_consolidation_suggestion_endpoint(
-    suggestion_id: uuid.UUID, db: Session = Depends(get_db)
+    suggestion_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """Retrieve a specific consolidation suggestion by ID."""
+    user, current_user, scope_ctx = scoped
     suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not suggestion:
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+    # Enforce visibility based on original memories
+    if not _user_can_view_suggestion(db, suggestion, current_user):
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
     return suggestion
 
@@ -88,15 +129,20 @@ def get_consolidation_suggestion_endpoint(
     response_model=schemas.ConsolidationSuggestion,
 )
 def validate_consolidation_suggestion_endpoint(
-    suggestion_id: uuid.UUID, db: Session = Depends(get_db)
+    suggestion_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """Validate a consolidation suggestion and apply the consolidation."""
     logger.info(f"Validating consolidation suggestion {suggestion_id}")
+    user, current_user, scope_ctx = scoped
     suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not suggestion:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
     if suggestion.status != "pending":
         raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
+    if not _user_can_view_suggestion(db, suggestion, current_user):
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
 
     try:
         crud.apply_consolidation(db, suggestion_id=suggestion_id)
@@ -108,6 +154,33 @@ def validate_consolidation_suggestion_endpoint(
             updated = crud.update_consolidation_suggestion(
                 db, suggestion_id=suggestion_id, suggestion=update_schema
             )
+        # Audit: consolidation validated
+        try:
+            # Try to derive an org from first original memory
+            org_id = None
+            for mid in (updated.original_memory_ids or []):
+                try:
+                    mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
+                except Exception:
+                    mem = None
+                if mem and getattr(mem, 'organization_id', None):
+                    org_id = mem.organization_id
+                    break
+            audit_log(
+                db,
+                action=AuditAction.CONSOLIDATION_VALIDATE,
+                status=AuditStatus.SUCCESS,
+                target_type="consolidation_suggestion",
+                target_id=updated.suggestion_id,
+                actor_user_id=current_user.get('id'),
+                organization_id=org_id,
+                metadata={
+                    "group_id": str(updated.group_id) if getattr(updated, 'group_id', None) else None,
+                    "original_count": len(updated.original_memory_ids or []),
+                },
+            )
+        except Exception:
+            pass
         return updated
     except Exception as e:
         logger.error(f"Error validating suggestion {suggestion_id}: {str(e)}")
@@ -119,20 +192,57 @@ def validate_consolidation_suggestion_endpoint(
     response_model=schemas.ConsolidationSuggestion,
 )
 def reject_consolidation_suggestion_endpoint(
-    suggestion_id: uuid.UUID, db: Session = Depends(get_db)
+    suggestion_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """Reject a consolidation suggestion, marking it as rejected."""
     logger.info(f"Rejecting consolidation suggestion {suggestion_id}")
+    user, current_user, scope_ctx = scoped
     suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not suggestion:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
     if suggestion.status != "pending":
         raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
+    if not _user_can_view_suggestion(db, suggestion, current_user):
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+    # Mutating action: require write permission on all originals
+    if not _user_can_write_suggestion(db, suggestion, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not _user_can_view_suggestion(db, suggestion, current_user):
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
 
     update_schema = schemas.ConsolidationSuggestionUpdate(status="rejected")
-    return crud.update_consolidation_suggestion(
+    updated = crud.update_consolidation_suggestion(
         db, suggestion_id=suggestion_id, suggestion=update_schema
     )
+    # Audit: consolidation rejected
+    try:
+        org_id = None
+        for mid in (updated.original_memory_ids or []):
+            try:
+                mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
+            except Exception:
+                mem = None
+            if mem and getattr(mem, 'organization_id', None):
+                org_id = mem.organization_id
+                break
+        audit_log(
+            db,
+            action=AuditAction.CONSOLIDATION_REJECT,
+            status=AuditStatus.SUCCESS,
+            target_type="consolidation_suggestion",
+            target_id=updated.suggestion_id,
+            actor_user_id=current_user.get('id'),
+            organization_id=org_id,
+            metadata={
+                "group_id": str(updated.group_id) if getattr(updated, 'group_id', None) else None,
+                "original_count": len(updated.original_memory_ids or []),
+            },
+        )
+    except Exception:
+        pass
+    return updated
 
 
 @router.delete(

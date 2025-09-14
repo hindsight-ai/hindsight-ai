@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, UTC
 from sqlalchemy.orm import Session
 
 from core.db import models
-from core.api.memory_optimization import get_memory_optimization_suggestions
+from fastapi.testclient import TestClient
+from core.api.main import app
 
 
 def create_block(db: Session, **kw):
@@ -16,6 +17,7 @@ def create_block(db: Session, **kw):
         feedback_score=kw.get('feedback_score', 0),
         retrieval_count=kw.get('retrieval_count', 0),
         archived=kw.get('archived', False),
+        visibility_scope=kw.get('visibility_scope', 'public'),
         created_at=kw.get('created_at') or datetime.now(UTC) - timedelta(days=kw.get('age_days', 0))
     )
     db.add(mb)
@@ -23,7 +25,7 @@ def create_block(db: Session, **kw):
     return mb
 
 
-def test_memory_optimization_suggestions(db_session: Session):
+def test_memory_optimization_suggestions(db_session: Session, client: TestClient):
     agent_id = uuid.uuid4()
     agent = models.Agent(agent_id=agent_id, agent_name="Test Agent")
     db_session.add(agent)
@@ -42,9 +44,8 @@ def test_memory_optimization_suggestions(db_session: Session):
 
     db_session.commit()
 
-    import asyncio
-    # Use asyncio.run for modern event loop management (avoids deprecated get_event_loop warning)
-    result = asyncio.run(get_memory_optimization_suggestions(db_session))
+    # Call the API endpoint (public scope is sufficient due to visibility_scope='public')
+    result = client.get("/memory-optimization/suggestions").json()
 
     types = {s['type'] for s in result['suggestions']}
     assert 'compaction' in types

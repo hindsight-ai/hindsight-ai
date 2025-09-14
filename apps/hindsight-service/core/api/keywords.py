@@ -18,7 +18,13 @@ from core.utils.scopes import (
     SCOPE_ORGANIZATION,
     SCOPE_PERSONAL,
 )
-from core.api.deps import get_current_user_context, get_current_user_context_or_pat, ensure_pat_allows_write
+from core.api.deps import (
+    get_current_user_context,
+    get_current_user_context_or_pat,
+    ensure_pat_allows_write,
+    ensure_pat_allows_read,
+    get_scoped_user_and_context,
+)
 
 router = APIRouter(prefix="/keywords", tags=["keywords"])  # normalized prefix
 
@@ -66,6 +72,10 @@ def create_keyword_endpoint(
             keyword_id=created.keyword_id,
             action=AuditAction.KEYWORD_CREATE,
             text=created.keyword_text,
+            extra_metadata={
+                "scope": created.visibility_scope,
+                "organization_id": str(created.organization_id) if created.organization_id else None,
+            },
             status=AuditStatus.SUCCESS,
         )
     except Exception:
@@ -76,38 +86,19 @@ def create_keyword_endpoint(
 def get_all_keywords_endpoint(
     skip: int = 0,
     limit: int = 100,
-    scope: Optional[str] = None,
-    organization_id: Optional[uuid.UUID] = None,
+    scope: Optional[str] = None,  # kept for backward-compat; unused with scope_ctx
+    organization_id: Optional[uuid.UUID] = None,  # for legacy callers
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        from core.api import main as main_module
-        memberships = main_module.get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, scope_ctx.organization_id)
     keywords = crud.get_keywords(
         db,
         skip=skip,
         limit=limit,
         current_user=current_user,
-        scope=scope,
-        organization_id=organization_id,
+        scope_ctx=scope_ctx,
     )
     return keywords
 
@@ -115,31 +106,13 @@ def get_all_keywords_endpoint(
 def get_keyword_endpoint(
     keyword_id: uuid.UUID,
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    current_user = None
-    if email:
-        u = get_or_create_user(db, email=email, display_name=name)
-        from core.api import main as main_module
-        memberships = main_module.get_user_memberships(db, u.id)
-        current_user = {
-            "id": u.id,
-            "is_superadmin": bool(u.is_superadmin),
-            "memberships": memberships,
-            "memberships_by_org": {m["organization_id"]: m for m in memberships},
-        }
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, getattr(db_keyword, 'organization_id', None))
     if not can_read(db_keyword, current_user):
         raise HTTPException(status_code=404, detail="Keyword not found")
     return db_keyword
@@ -168,6 +141,10 @@ def update_keyword_endpoint(
             keyword_id=db_keyword.keyword_id,
             action=AuditAction.KEYWORD_UPDATE,
             text=db_keyword.keyword_text,
+            extra_metadata={
+                "scope": db_keyword.visibility_scope,
+                "organization_id": str(db_keyword.organization_id) if db_keyword.organization_id else None,
+            },
             status=AuditStatus.SUCCESS,
         )
     except Exception:
@@ -198,6 +175,10 @@ def delete_keyword_endpoint(
                 keyword_id=existing.keyword_id,
                 action=AuditAction.KEYWORD_DELETE,
                 text=existing.keyword_text,
+                extra_metadata={
+                    "scope": existing.visibility_scope,
+                    "organization_id": str(existing.organization_id) if existing.organization_id else None,
+                },
                 status=AuditStatus.SUCCESS,
             )
         except Exception:
@@ -205,7 +186,13 @@ def delete_keyword_endpoint(
     return {"message": "Keyword deleted successfully"}
 
 @router.get("/{keyword_id}/memory-blocks/", response_model=List[schemas.MemoryBlock])
-def get_keyword_memory_blocks_endpoint(keyword_id: uuid.UUID, skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
+def get_keyword_memory_blocks_endpoint(
+    keyword_id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
     """
     Get all memory blocks associated with a specific keyword.
     This endpoint is used for keyword analytics to show which memory blocks use each keyword.
@@ -214,11 +201,26 @@ def get_keyword_memory_blocks_endpoint(keyword_id: uuid.UUID, skip: int = 0, lim
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
 
-    memory_blocks = crud.get_keyword_memory_blocks(db, keyword_id=keyword_id, skip=skip, limit=limit)
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, getattr(db_keyword, 'organization_id', None))
+    if not can_read(db_keyword, current_user):
+        raise HTTPException(status_code=404, detail="Keyword not found")
+    memory_blocks = crud.get_keyword_memory_blocks(
+        db,
+        keyword_id=keyword_id,
+        skip=skip,
+        limit=limit,
+        current_user=current_user,
+        scope_ctx=scope_ctx,
+    )
     return memory_blocks
 
 @router.get("/{keyword_id}/memory-blocks/count")
-def get_keyword_memory_blocks_count_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_keyword_memory_blocks_count_endpoint(
+    keyword_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
     """
     Get the count of memory blocks associated with a specific keyword.
     This endpoint is used for displaying usage statistics on keyword cards.
@@ -227,5 +229,14 @@ def get_keyword_memory_blocks_count_endpoint(keyword_id: uuid.UUID, db: Session 
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
 
-    count = crud.get_keyword_memory_blocks_count(db, keyword_id=keyword_id)
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, getattr(db_keyword, 'organization_id', None))
+    if not can_read(db_keyword, current_user):
+        raise HTTPException(status_code=404, detail="Keyword not found")
+    count = crud.get_keyword_memory_blocks_count(
+        db,
+        keyword_id=keyword_id,
+        current_user=current_user,
+        scope_ctx=scope_ctx,
+    )
     return {"count": count}

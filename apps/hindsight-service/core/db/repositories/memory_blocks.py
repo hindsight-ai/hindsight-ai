@@ -121,6 +121,7 @@ def get_all_memory_blocks(
     include_archived: bool = False,
     is_archived: Optional[bool] = None,
     current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
     filter_scope: Optional[str] = None,
     filter_organization_id: Optional[uuid.UUID] = None,
 ) -> List[schemas.MemoryBlock] | Tuple[List[schemas.MemoryBlock], int]:
@@ -172,7 +173,12 @@ def get_all_memory_blocks(
     if keyword_ids:
         query = query.join(models.MemoryBlockKeyword).filter(models.MemoryBlockKeyword.keyword_id.in_(keyword_ids))
 
-    query = scope_utils.apply_optional_scope_narrowing(query, filter_scope, filter_organization_id, models.MemoryBlock)
+    if scope_ctx is not None:
+        query = scope_utils.apply_optional_scope_narrowing(
+            query, scope_ctx.scope, scope_ctx.organization_id, models.MemoryBlock
+        )
+    else:
+        query = scope_utils.apply_optional_scope_narrowing(query, filter_scope, filter_organization_id, models.MemoryBlock)
 
     total_count = query.count()
 

@@ -69,13 +69,21 @@ def get_agents(
     limit: int = 100,
     *,
     current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
     scope: Optional[str] = None,
     organization_id: Optional[uuid.UUID] = None,
 ):
-    """List agents with scope filtering."""
+    """List agents with scope filtering.
+
+    New contract prefers `scope_ctx`. For backward-compat, will also accept
+    legacy `scope` and `organization_id` when `scope_ctx` is None.
+    """
     q = db.query(models.Agent)
     q = scope_utils.apply_scope_filter(q, current_user, models.Agent)
-    q = scope_utils.apply_optional_scope_narrowing(q, scope, organization_id, models.Agent)
+    if scope_ctx is not None:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope_ctx.scope, scope_ctx.organization_id, models.Agent)
+    else:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope, organization_id, models.Agent)
     return q.offset(skip).limit(limit).all()
 
 
@@ -86,6 +94,7 @@ def search_agents(
     limit: int = 100,
     *,
     current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
     scope: Optional[str] = None,
     organization_id: Optional[uuid.UUID] = None,
 ):
@@ -94,7 +103,10 @@ def search_agents(
         func.similarity(models.Agent.agent_name, query) >= SIMILARITY_THRESHOLD
     )
     q = scope_utils.apply_scope_filter(q, current_user, models.Agent)
-    q = scope_utils.apply_optional_scope_narrowing(q, scope, organization_id, models.Agent)
+    if scope_ctx is not None:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope_ctx.scope, scope_ctx.organization_id, models.Agent)
+    else:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope, organization_id, models.Agent)
     return q.order_by(
         func.similarity(models.Agent.agent_name, query).desc()
     ).offset(skip).limit(limit).all()

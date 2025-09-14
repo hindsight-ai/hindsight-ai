@@ -28,7 +28,13 @@ from core.db.database import engine, get_db
 from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
-from core.api.deps import get_current_user_context, get_current_user_context_or_pat, ensure_pat_allows_write
+from core.api.deps import (
+    get_current_user_context,
+    get_current_user_context_or_pat,
+    ensure_pat_allows_write,
+    ensure_pat_allows_read,
+    get_scoped_user_and_context,
+)
 from core.api.orgs import router as orgs_router
 from core.api.agents import router as agents_router
 from core.api.keywords import router as keywords_router
@@ -321,13 +327,18 @@ def get_user_info(
 
 # Dashboard Stats Endpoints
 @router.get("/conversations/count")
-def get_conversations_count_endpoint(db: Session = Depends(get_db)):
+def get_conversations_count_endpoint(
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
     """
     Get the count of unique conversations from memory blocks.
     This endpoint is used by the dashboard to display conversation statistics.
     """
     try:
-        count = crud.get_unique_conversation_count(db)
+        user, current_user, scope_ctx = scoped
+        ensure_pat_allows_read(current_user, scope_ctx.organization_id)
+        count = crud.get_unique_conversation_count(db, current_user=current_user, scope_ctx=scope_ctx)
         return {"count": count or 0}  # Return 0 if count is None
     except Exception as e:
         logger.error(f"Error getting conversations count: {str(e)}")

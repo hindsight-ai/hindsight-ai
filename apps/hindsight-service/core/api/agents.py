@@ -23,6 +23,7 @@ from core.api.deps import (
     get_current_user_context_or_pat,
     ensure_pat_allows_write,
     ensure_pat_allows_read,
+    get_scoped_user_and_context,
 )
 
 router = APIRouter(prefix="/agents", tags=["agents"])  # normalized prefix
@@ -77,6 +78,10 @@ def create_agent_endpoint(
             agent_id=created.agent_id,
             action=AuditAction.AGENT_CREATE,
             name=created.agent_name,
+            extra_metadata={
+                "scope": created.visibility_scope,
+                "organization_id": str(created.organization_id) if created.organization_id else None,
+            },
             status=AuditStatus.SUCCESS,
         )
     except Exception:
@@ -87,63 +92,21 @@ def create_agent_endpoint(
 def get_all_agents_endpoint(
     skip: int = 0,
     limit: int = 100,
-    scope: Optional[str] = None,
-    organization_id: Optional[uuid.UUID] = None,
+    scope: Optional[str] = None,  # kept for backward-compatible API, ignored when scope_ctx present
+    organization_id: Optional[uuid.UUID] = None,  # kept for backward-compatible API, mismatch handled in deps
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
-    authorization: Optional[str] = Header(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    current_user = None
-    if authorization or x_api_key:
-        try:
-            _u, current_user = get_current_user_context_or_pat(
-                db=db,
-                authorization=authorization,
-                x_api_key=x_api_key,
-                x_auth_request_user=x_auth_request_user,
-                x_auth_request_email=x_auth_request_email,
-                x_forwarded_user=x_forwarded_user,
-                x_forwarded_email=x_forwarded_email,
-            )
-        except HTTPException:
-            raise
-    else:
-        name, email = resolve_identity_from_headers(
-            x_auth_request_user=x_auth_request_user,
-            x_auth_request_email=x_auth_request_email,
-            x_forwarded_user=x_forwarded_user,
-            x_forwarded_email=x_forwarded_email,
-        )
-        if email:
-            u = get_or_create_user(db, email=email, display_name=name)
-            memberships = get_user_memberships(db, u.id)
-            current_user = {
-                "id": u.id,
-                "is_superadmin": bool(u.is_superadmin),
-                "memberships": memberships,
-                "memberships_by_org": {m["organization_id"]: m for m in memberships},
-            }
-
-    # Apply PAT org restriction if present
-    effective_org_id = organization_id
-    if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
-        pat_org = current_user["pat"]["organization_id"]
-        if organization_id and str(organization_id) != str(pat_org):
-            raise HTTPException(status_code=403, detail="Token organization restriction mismatch")
-        effective_org_id = pat_org
-        ensure_pat_allows_read(current_user, effective_org_id)
+    user, current_user, scope_ctx = scoped
+    # Enforce PAT read scope/org (no-op if no PAT)
+    ensure_pat_allows_read(current_user, scope_ctx.organization_id)
 
     agents = crud.get_agents(
         db,
         skip=skip,
         limit=limit,
         current_user=current_user,
-        scope=scope,
-        organization_id=effective_org_id,
+        scope_ctx=scope_ctx,
     )
     return agents
 
@@ -289,6 +252,8 @@ def delete_agent_endpoint(
             metadata={
                 "agent_name": agent.agent_name,
                 "visibility_scope": agent.visibility_scope,
+                "scope": agent.visibility_scope,
+                "organization_id": str(agent.organization_id) if agent.organization_id else None,
             },
         )
     except Exception:

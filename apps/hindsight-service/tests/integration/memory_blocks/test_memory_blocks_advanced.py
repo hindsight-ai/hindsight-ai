@@ -49,7 +49,11 @@ def test_memory_block_filters_and_archive(db_session):
     # Keyword association via retrieval (create a block with keywords through create API for reliability)
     payload = schemas.MemoryBlockCreate(agent_id=agent_p.agent_id, conversation_id=uuid.uuid4(), content="Delta alpha beta", visibility_scope="personal", owner_user_id=user_p.id)
     mb_created = crud.create_memory_block(db, payload)
-    kw_blocks = crud.get_keyword_memory_blocks(db, db.query(models.Keyword).first().keyword_id)
+    kw_blocks = crud.get_keyword_memory_blocks(
+        db,
+        db.query(models.Keyword).first().keyword_id,
+        current_user=ctx,
+    )
     assert kw_blocks
 
     # Retrieval by keywords simple function

@@ -102,6 +102,7 @@ def get_agents(
     limit: int = 100,
     *,
     current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
     scope: Optional[str] = None,
     organization_id: Optional[uuid.UUID] = None,
 ):
@@ -110,6 +111,7 @@ def get_agents(
         skip=skip,
         limit=limit,
         current_user=current_user,
+        scope_ctx=scope_ctx,
         scope=scope,
         organization_id=organization_id,
     )
@@ -121,6 +123,7 @@ def search_agents(
     limit: int = 100,
     *,
     current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
     scope: Optional[str] = None,
     organization_id: Optional[uuid.UUID] = None,
 ):
@@ -130,6 +133,7 @@ def search_agents(
         skip=skip,
         limit=limit,
         current_user=current_user,
+        scope_ctx=scope_ctx,
         scope=scope,
         organization_id=organization_id,
     )
@@ -191,6 +195,7 @@ def get_keywords(
     limit: int = 100,
     *,
     current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
     scope: Optional[str] = None,
     organization_id: Optional[uuid.UUID] = None,
 ):
@@ -199,6 +204,7 @@ def get_keywords(
         skip=skip,
         limit=limit,
         current_user=current_user,
+        scope_ctx=scope_ctx,
         scope=scope,
         organization_id=organization_id,
     )
@@ -249,6 +255,7 @@ def get_all_memory_blocks(
     include_archived: bool = False, # New parameter to include archived blocks
     is_archived: Optional[bool] = None, # New parameter to explicitly filter by archived status
     current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
     filter_scope: Optional[str] = None,
     filter_organization_id: Optional[uuid.UUID] = None,
 ):
@@ -272,6 +279,7 @@ def get_all_memory_blocks(
         include_archived,
         is_archived,
         current_user,
+        scope_ctx,
         filter_scope,
         filter_organization_id,
     )
@@ -369,11 +377,37 @@ def delete_memory_block_keyword(db: Session, memory_id: uuid.UUID, keyword_id: u
 def get_memory_block_keywords(db: Session, memory_id: uuid.UUID):
     return repo_keywords.get_memory_block_keywords(db, memory_id)
 
-def get_keyword_memory_blocks(db: Session, keyword_id: uuid.UUID, skip: int = 0, limit: int = 50):
-    return repo_keywords.get_keyword_memory_blocks(db, keyword_id, skip, limit)
+def get_keyword_memory_blocks(
+    db: Session,
+    keyword_id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 50,
+    *,
+    current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
+):
+    return repo_keywords.get_keyword_memory_blocks(
+        db,
+        keyword_id,
+        skip,
+        limit,
+        current_user=current_user,
+        scope_ctx=scope_ctx,
+    )
 
-def get_keyword_memory_blocks_count(db: Session, keyword_id: uuid.UUID):
-    return repo_keywords.get_keyword_memory_blocks_count(db, keyword_id)
+def get_keyword_memory_blocks_count(
+    db: Session,
+    keyword_id: uuid.UUID,
+    *,
+    current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
+):
+    return repo_keywords.get_keyword_memory_blocks_count(
+        db,
+        keyword_id,
+        current_user=current_user,
+        scope_ctx=scope_ctx,
+    )
 
 
 # CRUD for ConsolidationSuggestion
@@ -477,14 +511,22 @@ def apply_consolidation(db: Session, suggestion_id: uuid.UUID):
     return None
 
 # CRUD for Dashboard Stats
-def get_unique_conversation_count(db: Session):
+def get_unique_conversation_count(
+    db: Session,
+    *,
+    current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
+):
     """
     Get the count of unique conversations from memory blocks.
     This counts distinct conversation_id values in the MemoryBlock table.
     """
-    return db.query(func.count(func.distinct(models.MemoryBlock.conversation_id))).filter(
-        models.MemoryBlock.archived == False  # Only count non-archived memory blocks
-    ).scalar()
+    q = db.query(func.count(func.distinct(models.MemoryBlock.conversation_id)))
+    q = q.filter(models.MemoryBlock.archived == False)
+    q = scope_utils.apply_scope_filter(q, current_user, models.MemoryBlock)
+    if scope_ctx is not None:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope_ctx.scope, scope_ctx.organization_id, models.MemoryBlock)
+    return q.scalar()
 
 # Enhanced Search Functions
 def search_memory_blocks_enhanced(

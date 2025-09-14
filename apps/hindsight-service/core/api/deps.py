@@ -6,6 +6,7 @@ used by various route modules and tests.
 """
 import uuid
 from typing import Optional, Tuple, Dict, Any
+from fastapi import Query
 
 from fastapi import Header, HTTPException, status, Depends
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
 from core.db import models
+from core.db.scope_utils import ScopeContext
 from core.db.repositories import tokens as token_repo
 from core.utils.token_crypto import parse_token, verify_secret
 from fastapi import HTTPException
@@ -204,3 +206,143 @@ def ensure_pat_allows_read(current_user: Dict[str, Any], target_org_id=None, *, 
     pat_org = pat.get("organization_id")
     if pat_org and target_org_id and str(pat_org) != str(target_org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token organization restriction mismatch")
+
+
+def get_scope_context(
+    db: Session = Depends(get_db),
+    # Optional incoming hints
+    scope: Optional[str] = Query(default=None),
+    organization_id: Optional[str] = Query(default=None),
+    # Headers for PAT or oauth2-proxy
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+) -> ScopeContext:
+    """Derive a canonical ScopeContext for the request.
+
+    Rules:
+    - If PAT present: if PAT has organization_id -> force organization scope; otherwise default to personal.
+      Query hints (scope/org) may be used when safe but can never broaden beyond PAT restrictions.
+    - If no PAT: if oauth2 user present -> default personal; else default public.
+      Query hints may narrow to organization/public, final filtering enforced by repository layer.
+    """
+    # Normalize requested scope string
+    requested_scope = (scope or '').strip().lower() or None
+    requested_org_uuid = None
+    if organization_id:
+        try:
+            requested_org_uuid = uuid.UUID(str(organization_id))
+        except Exception:
+            requested_org_uuid = None
+
+    # If PAT provided, derive from PAT (authoritative)
+    if authorization or x_api_key:
+        try:
+            user, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+        except HTTPException:
+            # invalid PAT → bubble as unauthenticated scope (public)
+            return ScopeContext(scope="public", organization_id=None)
+
+        pat = current_user.get("pat") or {}
+        pat_org = pat.get("organization_id")
+        if pat_org:
+            # Force organization scope by PAT restriction; ignore conflicting hints
+            try:
+                pat_org_uuid = uuid.UUID(str(pat_org))
+            except Exception:
+                pat_org_uuid = None
+            return ScopeContext(scope="organization", organization_id=pat_org_uuid)
+        # No org restriction in PAT → accept requested scope when sensible; default to personal
+        if requested_scope in {"organization", "public", "personal"}:
+            if requested_scope == "organization":
+                return ScopeContext(scope="organization", organization_id=requested_org_uuid)
+            return ScopeContext(scope=requested_scope, organization_id=None)
+        return ScopeContext(scope="personal", organization_id=None)
+
+    # No PAT → try oauth2 headers to decide default
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if requested_scope in {"organization", "public", "personal"}:
+        if requested_scope == "organization":
+            return ScopeContext(scope="organization", organization_id=requested_org_uuid)
+        return ScopeContext(scope=requested_scope, organization_id=None)
+
+    # Default based on presence of user identity
+    if email:
+        return ScopeContext(scope="personal", organization_id=None)
+    return ScopeContext(scope="public", organization_id=None)
+
+
+def _parse_uuid_maybe(val: Optional[str]):
+    if not val:
+        return None
+    try:
+        return uuid.UUID(str(val))
+    except Exception:
+        return None
+
+
+def get_current_user_context_or_guest(
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+):
+    """Return current user context if authenticated via PAT or oauth2 headers; otherwise (guest) return (None, None).
+
+    This is a permissive variant used for read endpoints that allow guest access.
+    """
+    try:
+        return get_current_user_context_or_pat(
+            db=db,
+            authorization=authorization,
+            x_api_key=x_api_key,
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+    except HTTPException as e:
+        # If token provided but invalid, propagate; otherwise treat as guest
+        has_pat = bool(authorization or x_api_key)
+        if has_pat:
+            raise
+        return None, None
+
+
+def get_scoped_user_and_context(
+    scope_ctx: ScopeContext = Depends(get_scope_context),
+    user_ctx = Depends(get_current_user_context_or_guest),
+    # Also accept the raw query hint to enforce PAT/org mismatch when requested explicitly
+    organization_id: Optional[str] = Query(default=None),
+):
+    """Return a tuple (user, current_user, scope_ctx) for endpoints.
+
+    Enforces PAT-org mismatch when a conflicting organization_id query param is provided.
+    """
+    user, current_user = user_ctx
+    # If PAT is present and request hinted a different org, raise 403
+    if current_user and current_user.get("pat") and current_user["pat"].get("organization_id") and organization_id:
+        pat_org = str(current_user["pat"]["organization_id"])  # store may be UUID or str
+        req_org = _parse_uuid_maybe(organization_id)
+        if req_org is not None and str(req_org) != str(pat_org):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token organization restriction mismatch")
+    return user, current_user, scope_ctx

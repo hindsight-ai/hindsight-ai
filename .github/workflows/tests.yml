@@ -61,6 +61,17 @@ jobs:
       - name: Run Jest (coverage)
         run: npm run test:coverage -- --ci
 
+      - name: Enforce no raw fetch in UI (api client only)
+        run: |
+          set -e
+          cd apps/hindsight-dashboard
+          FOUND=$(grep -RIn "fetch\(" src/components src/context src/services || true)
+          if [ -n "$FOUND" ]; then
+            echo "Raw fetch usage detected in UI files. Use apiFetch from src/api/http.ts instead." >&2
+            echo "$FOUND" >&2
+            exit 1
+          fi
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

@@ -6,6 +6,7 @@ to database queries, eliminating code duplication across CRUD operations.
 """
 import uuid
 from typing import List, Optional, Dict, Any
+from dataclasses import dataclass
 from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,17 @@ from core.utils.scopes import (
     SCOPE_PERSONAL,
     ALL_SCOPES,
 )
+
+
+@dataclass(frozen=True)
+class ScopeContext:
+    """Canonical scope context for reads/writes.
+
+    scope: one of personal|organization|public
+    organization_id: optional org UUID for organization scope
+    """
+    scope: str
+    organization_id: Optional[uuid.UUID] = None
 
 
 def get_user_organization_ids(current_user: Optional[Dict[str, Any]]) -> List[uuid.UUID]:

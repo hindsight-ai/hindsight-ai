@@ -62,7 +62,8 @@ def test_get_memory_optimization_suggestions_with_data(client, db_session):
     
     db_session.commit()
     
-    response = client.get("/memory-optimization/suggestions")
+    headers = {"x-auth-request-user": "opt_test", "x-auth-request-email": "opt_test@example.com"}
+    response = client.get("/memory-optimization/suggestions", headers=headers)
     assert response.status_code == 200
     data = response.json()
     print(f"DEBUG: Response data: {data}")

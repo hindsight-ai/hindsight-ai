@@ -97,7 +97,20 @@ def log(
 __all__ = ["AuditAction", "AuditStatus", "log"]
 
 # Convenience wrappers (non-breaking). Keep optional organization_id explicit.
-def log_agent(db: Session, *, actor_user_id: uuid.UUID, organization_id: Optional[uuid.UUID], agent_id: uuid.UUID, action: AuditAction, name: Optional[str] = None, status: AuditStatus | str = AuditStatus.SUCCESS):
+def log_agent(
+    db: Session,
+    *,
+    actor_user_id: uuid.UUID,
+    organization_id: Optional[uuid.UUID],
+    agent_id: uuid.UUID,
+    action: AuditAction,
+    name: Optional[str] = None,
+    status: AuditStatus | str = AuditStatus.SUCCESS,
+    extra_metadata: Optional[Dict[str, Any]] = None,
+):
+    md: Dict[str, Any] = {"name": name} if name else {}
+    if extra_metadata:
+        md.update(extra_metadata)
     return log(
         db,
         action=action,
@@ -106,10 +119,23 @@ def log_agent(db: Session, *, actor_user_id: uuid.UUID, organization_id: Optiona
         target_id=agent_id,
         actor_user_id=actor_user_id,
         organization_id=organization_id,
-        metadata={"name": name} if name else None,
+        metadata=md or None,
     )
 
-def log_keyword(db: Session, *, actor_user_id: uuid.UUID, organization_id: Optional[uuid.UUID], keyword_id: uuid.UUID, action: AuditAction, text: Optional[str] = None, status: AuditStatus | str = AuditStatus.SUCCESS):
+def log_keyword(
+    db: Session,
+    *,
+    actor_user_id: uuid.UUID,
+    organization_id: Optional[uuid.UUID],
+    keyword_id: uuid.UUID,
+    action: AuditAction,
+    text: Optional[str] = None,
+    status: AuditStatus | str = AuditStatus.SUCCESS,
+    extra_metadata: Optional[Dict[str, Any]] = None,
+):
+    md: Dict[str, Any] = {"text": text} if text else {}
+    if extra_metadata:
+        md.update(extra_metadata)
     return log(
         db,
         action=action,
@@ -118,10 +144,19 @@ def log_keyword(db: Session, *, actor_user_id: uuid.UUID, organization_id: Optio
         target_id=keyword_id,
         actor_user_id=actor_user_id,
         organization_id=organization_id,
-        metadata={"text": text} if text else None,
+        metadata=md or None,
     )
 
-def log_memory(db: Session, *, actor_user_id: uuid.UUID, organization_id: Optional[uuid.UUID], memory_block_id: uuid.UUID, action: AuditAction, status: AuditStatus | str = AuditStatus.SUCCESS, metadata: Optional[Dict[str, Any]] = None):
+def log_memory(
+    db: Session,
+    *,
+    actor_user_id: uuid.UUID,
+    organization_id: Optional[uuid.UUID],
+    memory_block_id: uuid.UUID,
+    action: AuditAction,
+    status: AuditStatus | str = AuditStatus.SUCCESS,
+    metadata: Optional[Dict[str, Any]] = None,
+):
     return log(
         db,
         action=action,
@@ -133,7 +168,16 @@ def log_memory(db: Session, *, actor_user_id: uuid.UUID, organization_id: Option
         metadata=metadata,
     )
 
-def log_bulk_operation(db: Session, *, actor_user_id: uuid.UUID, organization_id: Optional[uuid.UUID], bulk_operation_id: uuid.UUID, action: AuditAction, status: AuditStatus | str = AuditStatus.SUCCESS, metadata: Optional[Dict[str, Any]] = None):
+def log_bulk_operation(
+    db: Session,
+    *,
+    actor_user_id: uuid.UUID,
+    organization_id: Optional[uuid.UUID],
+    bulk_operation_id: uuid.UUID,
+    action: AuditAction,
+    status: AuditStatus | str = AuditStatus.SUCCESS,
+    metadata: Optional[Dict[str, Any]] = None,
+):
     return log(
         db,
         action=action,

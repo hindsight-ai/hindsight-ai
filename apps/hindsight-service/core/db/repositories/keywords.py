@@ -74,12 +74,16 @@ def get_keywords(
     limit: int = 100,
     *,
     current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
     scope: Optional[str] = None,
     organization_id: Optional[uuid.UUID] = None,
 ):
     q = db.query(models.Keyword)
     q = scope_utils.apply_scope_filter(q, current_user, models.Keyword)
-    q = scope_utils.apply_optional_scope_narrowing(q, scope, organization_id, models.Keyword)
+    if scope_ctx is not None:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope_ctx.scope, scope_ctx.organization_id, models.Keyword)
+    else:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope, organization_id, models.Keyword)
     return q.offset(skip).limit(limit).all()
 
 
@@ -138,22 +142,38 @@ def get_memory_block_keywords(db: Session, memory_id: uuid.UUID) -> List[schemas
 
 
 def get_keyword_memory_blocks(
-    db: Session, keyword_id: uuid.UUID, skip: int = 0, limit: int = 50
+    db: Session,
+    keyword_id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 50,
+    *,
+    current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
 ):
-    return (
+    q = (
         db.query(models.MemoryBlock)
         .join(models.MemoryBlockKeyword)
         .filter(models.MemoryBlockKeyword.keyword_id == keyword_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
     )
+    q = scope_utils.apply_scope_filter(q, current_user, models.MemoryBlock)
+    if scope_ctx is not None:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope_ctx.scope, scope_ctx.organization_id, models.MemoryBlock)
+    return q.offset(skip).limit(limit).all()
 
 
-def get_keyword_memory_blocks_count(db: Session, keyword_id: uuid.UUID) -> int:
-    return (
+def get_keyword_memory_blocks_count(
+    db: Session,
+    keyword_id: uuid.UUID,
+    *,
+    current_user: Optional[dict] = None,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
+) -> int:
+    q = (
         db.query(models.MemoryBlock)
         .join(models.MemoryBlockKeyword)
         .filter(models.MemoryBlockKeyword.keyword_id == keyword_id)
-        .count()
     )
+    q = scope_utils.apply_scope_filter(q, current_user, models.MemoryBlock)
+    if scope_ctx is not None:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope_ctx.scope, scope_ctx.organization_id, models.MemoryBlock)
+    return q.count()
