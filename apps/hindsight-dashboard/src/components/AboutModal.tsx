@@ -127,7 +127,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
   return (
     <Portal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-xl w-full mx-4 max-h-[90vh] overflow-y-auto max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-800">About AI Agent Memory Dashboard</h2>
           <button
