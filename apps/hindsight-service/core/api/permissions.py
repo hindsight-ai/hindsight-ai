@@ -1,14 +1,11 @@
 """
-Simplified permission system for resource access control.
+Permission checks for resource access control.
 
-This module provides streamlined permission checking functions that follow
-KISS principles while maintaining robust security for resource access.
-
-Key functions:
-- can_read(): Check if user can read a resource
-- can_write(): Check if user can modify a resource  
-- can_manage_org(): Check if user can manage an organization
-- can_move_scope(): Check if user can change resource visibility scope
+Key helpers:
+- can_read(resource, current_user)
+- can_write(resource, current_user)
+- can_manage_org(org_id, current_user)
+- can_move_scope(resource, target_scope, target_org_id, current_user)
 """
 from typing import Optional, Dict, Any
 from core.utils.role_permissions import (
@@ -53,7 +50,7 @@ def get_org_membership(org_id, current_user: Optional[Dict[str, Any]]):
     return None
 
 
-# Back-compat: keep function names in this module but delegate to centralized utils
+# Public API delegates to role and scope utilities where appropriate.
 
 
 def can_read(resource, current_user: Optional[Dict[str, Any]]) -> bool:

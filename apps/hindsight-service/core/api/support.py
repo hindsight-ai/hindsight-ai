@@ -42,7 +42,7 @@ def get_build_info():
 
 @router.post("/support/contact")
 async def support_contact(
-    request: dict = Body(default={}),
+    payload: dict = Body(default={}),
     db: Session = Depends(get_db),
     user_and_context = Depends(get_current_user_context),
 ):
@@ -53,9 +53,9 @@ async def support_contact(
     user, _current_user_context = user_and_context
 
     # Extract payload
-    message = (request or {}).get("message") or ""
-    frontend = (request or {}).get("frontend") or {}
-    context = (request or {}).get("context") or {}
+    message = (payload or {}).get("message") or ""
+    frontend = (payload or {}).get("frontend") or {}
+    context = (payload or {}).get("context") or {}
 
     backend_info = {
         "service_name": "hindsight-service",
@@ -123,7 +123,7 @@ async def support_contact(
         template_context = {
             "user_email": user.email,
             "user_name": user.display_name or user.email.split("@")[0],
-            "submitted_at": datetime.utcnow().isoformat() + "Z",
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
             "message": message,
             "frontend": {
                 "service_name": frontend.get("service_name"),
@@ -159,4 +159,3 @@ async def support_contact(
     except Exception as e:
         logger.error(f"Support contact failed: {e}")
         raise HTTPException(status_code=500, detail="Support contact failed")
-

@@ -104,22 +104,52 @@ def test_bulk_move_conflict_detection(client, org_with_user, db):
     ):
         return fake_user, fake_current_user
     
+    # Ensure override applies to the exact dependency object used by the router
+    from core.api import bulk_operations as bo_mod
+    print("[TEST-OVERRIDE ids] deps.get_current_user_context=", id(get_current_user_context))
+    print("[TEST-OVERRIDE ids] bo_mod.get_current_user_context=", id(bo_mod.get_current_user_context))
     original_override = app.dependency_overrides.get(get_current_user_context)
+    original_override_bo = app.dependency_overrides.get(bo_mod.get_current_user_context)
     app.dependency_overrides[get_current_user_context] = mock_get_current_user_context
+    app.dependency_overrides[bo_mod.get_current_user_context] = mock_get_current_user_context
     
     try:
-        r = client.post(
+        print("[TEST-DIAG bulk_move_conflict] test_user_id=", user.id, "src_org=", org.id, "dest_org=", dest.id)
+        from fastapi.testclient import TestClient as _TC
+        import core.db.database as db_module
+        original_db = app.dependency_overrides.get(db_module.get_db)
+        def _override_db():
+            yield db
+        app.dependency_overrides[db_module.get_db] = _override_db
+        _client = _TC(app)
+        r = _client.post(
             f"/bulk-operations/organizations/{org.id}/bulk-move",
             json={"destination_organization_id": str(dest.id), "resource_types": ["agents"]},
             headers=_h(user),
         )
+        if r.status_code != 200:
+            try:
+                print("[TEST-DIAG bulk_move_conflict] status=", r.status_code, "body=", r.json())
+            except Exception:
+                print("[TEST-DIAG bulk_move_conflict] status=", r.status_code, "body=", r.text)
         assert r.status_code == 200
     finally:
         # Clean up dependency override
+        try:
+            if original_db is not None:
+                app.dependency_overrides[db_module.get_db] = original_db
+            else:
+                app.dependency_overrides.pop(db_module.get_db, None)
+        except Exception:
+            pass
         if original_override is not None:
             app.dependency_overrides[get_current_user_context] = original_override
         else:
             app.dependency_overrides.pop(get_current_user_context, None)
+        if original_override_bo is not None:
+            app.dependency_overrides[bo_mod.get_current_user_context] = original_override_bo
+        else:
+            app.dependency_overrides.pop(bo_mod.get_current_user_context, None)
     data = r.json()
     assert data["conflicts"]["agents"]
     assert data["resources_to_move"]["agents"] == 1
@@ -158,22 +188,51 @@ def test_bulk_delete_dry_run_counts(client, org_with_user, db):
     ):
         return fake_user, fake_current_user
     
+    from core.api import bulk_operations as bo_mod
+    print("[TEST-OVERRIDE ids] deps.get_current_user_context=", id(get_current_user_context))
+    print("[TEST-OVERRIDE ids] bo_mod.get_current_user_context=", id(bo_mod.get_current_user_context))
     original_override = app.dependency_overrides.get(get_current_user_context)
+    original_override_bo = app.dependency_overrides.get(bo_mod.get_current_user_context)
     app.dependency_overrides[get_current_user_context] = mock_get_current_user_context
+    app.dependency_overrides[bo_mod.get_current_user_context] = mock_get_current_user_context
     
     try:
-        r = client.post(
+        print("[TEST-DIAG bulk_delete_dry_run] test_user_id=", user.id, "src_org=", org.id)
+        from fastapi.testclient import TestClient as _TC
+        import core.db.database as db_module
+        original_db = app.dependency_overrides.get(db_module.get_db)
+        def _override_db():
+            yield db
+        app.dependency_overrides[db_module.get_db] = _override_db
+        _client = _TC(app)
+        r = _client.post(
             f"/bulk-operations/organizations/{org.id}/bulk-delete",
             json={"dry_run": True},
             headers=_h(user),
         )
+        if r.status_code != 200:
+            try:
+                print("[TEST-DIAG bulk_delete_dry_run] status=", r.status_code, "body=", r.json())
+            except Exception:
+                print("[TEST-DIAG bulk_delete_dry_run] status=", r.status_code, "body=", r.text)
         assert r.status_code == 200
     finally:
         # Clean up dependency override
+        try:
+            if original_db is not None:
+                app.dependency_overrides[db_module.get_db] = original_db
+            else:
+                app.dependency_overrides.pop(db_module.get_db, None)
+        except Exception:
+            pass
         if original_override is not None:
             app.dependency_overrides[get_current_user_context] = original_override
         else:
             app.dependency_overrides.pop(get_current_user_context, None)
+        if original_override_bo is not None:
+            app.dependency_overrides[bo_mod.get_current_user_context] = original_override_bo
+        else:
+            app.dependency_overrides.pop(bo_mod.get_current_user_context, None)
     data = r.json()
     # Two agents were created (a1 and mbagent)
     assert data["resources_to_delete"]["agents"] == 2

@@ -1,6 +1,5 @@
 """
-Advanced search service for memory blocks.
-Supports BM25-like full-text search, semantic search (future), and hybrid search.
+Search service for memory blocks: full-text, semantic (placeholder), and hybrid.
 """
 
 import logging
@@ -365,7 +364,7 @@ class SearchService:
         # Return just the memory blocks
         return [result[0] for result in scored_results]
 
-    # Backwards-compat helper used by unit tests: accepts raw items + separate scores
+    # Helper used by tests: accepts raw items + separate score lists
     def _combine_and_rerank(
         self,
         fulltext_items: List[Any],

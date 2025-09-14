@@ -1,10 +1,8 @@
 """
-FastAPI application assembly and high-level routes.
-
-Wires middleware, routers, and selected endpoints that don’t fit a specific
-resource module. Also exposes health and support endpoints.
+FastAPI app assembly: middleware and router wiring.
+Includes selected endpoints that span multiple resource modules.
 """
-import logging # Moved to top
+import logging
 import os
 from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter, Body
 from starlette.requests import Request
@@ -14,14 +12,13 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
 from fastapi.middleware.cors import CORSMiddleware
-import math # Import math for ceil
+import math
 
-# Configure logging (Moved to top)
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Environment variables are expected to be set by the deployment environment (e.g., Kubernetes)
-# For local development, ensure these are set in your shell or via a tool like docker-compose.
+
 
 from core.db import models, schemas, crud
 from core.db.database import engine, get_db
@@ -54,7 +51,7 @@ from core.utils.scopes import (
 )
 from core.services.search_service import SearchService
 
-# models.Base.metadata.create_all(bind=engine) # Removed: Database schema is now managed by Alembic migrations.
+# Database schema is managed by Alembic migrations.
 
 app = FastAPI(
     title="Intelligent AI Agent Memory Service",
@@ -62,7 +59,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Avoid implicit trailing-slash redirects to keep URL handling predictable
+# Avoid implicit trailing-slash redirects for predictable URLs
 try:
     app.router.redirect_slashes = False
 except Exception:
@@ -70,8 +67,8 @@ except Exception:
 
 origins = [
     "http://localhost",
-    "http://localhost:3000", # React frontend
-    "http://localhost:8000", # FastAPI backend
+    "http://localhost:3000",
+    "http://localhost:8000",
     "https://app.hindsight-ai.com",
     "https://app-staging.hindsight-ai.com",
 ]
@@ -84,11 +81,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global middleware: enforce read-only access for unauthenticated requests
+# Middleware: enforce read-only for unauthenticated requests
 @app.middleware("http")
 async def enforce_readonly_for_guests(request: Request, call_next):
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-        # In dev mode, allow all requests (authentication handled by deps.py)
+        # In dev mode, allow; authentication is handled by route dependencies
         import os
         is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
         
@@ -100,7 +97,7 @@ async def enforce_readonly_for_guests(request: Request, call_next):
                 or h.get("x-forwarded-user")
                 or h.get("x-forwarded-email")
             )
-            # Allow Personal Access Tokens to pass middleware; route deps will validate
+            # Allow Personal Access Tokens to pass; route dependencies validate
             pat_present = h.get("authorization") or h.get("x-api-key")
             if not user_present and not pat_present:
                 return JSONResponse(

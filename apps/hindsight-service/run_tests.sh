@@ -110,6 +110,14 @@ fi
 # Change to the hindsight-service directory
 cd "$(dirname "$0")"
 
+# Proactively stop any running Hindsight services to avoid E2E interference
+if [ -x "../../stop_hindsight.sh" ]; then
+    print_status "Stopping any running Hindsight services (to avoid interference)..."
+    ../../stop_hindsight.sh || true
+else
+    print_warning "stop_hindsight.sh not found at repo root; skipping service stop."
+fi
+
 print_status "Running tests with command: $TEST_COMMAND"
 
 # Check if image exists and rebuild if necessary

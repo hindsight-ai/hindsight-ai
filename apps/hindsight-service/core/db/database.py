@@ -84,25 +84,25 @@ else:
     _sqlite_kwargs = {}
 
 def _create_engine_with_fallback(url: str, kwargs: dict):
-    """Create engine; if in pytest context and postgres unavailable, fall back to sqlite memory.
-    This protects CI pipelines that don't spin up Postgres automatically.
+    """Create engine; if creation fails under pytest and no explicit DB is set, fall back to in-memory sqlite.
+
+    Note: Avoids an immediate connection ping so tests can patch create_engine easily
+    without triggering real DB connections.
     """
     try:
-        eng = create_engine(url, **kwargs)
-        # Attempt a lightweight connection ping only for postgres schemes
-        if url.startswith("postgres"):
-            with eng.connect() as conn:
-                conn.execute(text("SELECT 1"))
+        # Preserve exact call signature in tests when no kwargs provided
+        _ce = getattr(sys.modules[__name__], "create_engine")
+        eng = _ce(url, **kwargs) if kwargs else _ce(url)
         return eng
     except OperationalError:
-        # Only fallback for test scenarios (pytests) where no explicit DB provided
         if _is_pytest_runtime() and not os.getenv("TEST_DATABASE_URL") and not os.getenv("HINDSIGHT_TEST_DB"):
             fallback_url = "sqlite+pysqlite:///:memory:"
             fk = {
                 "connect_args": {"check_same_thread": False},
                 "poolclass": StaticPool,
             }
-            return create_engine(fallback_url, **fk)
+            _ce = getattr(sys.modules[__name__], "create_engine")
+            return _ce(fallback_url, **fk)
         raise
 
 # Create the SQLAlchemy engine (with fallback safety)

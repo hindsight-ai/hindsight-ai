@@ -6,10 +6,11 @@ Focuses on specific uncovered lines identified in coverage analysis.
 import pytest
 import os
 import sys
+import importlib
 from unittest.mock import patch, Mock
 from sqlalchemy.exc import OperationalError
 
-from core.db.database import _is_pytest_runtime, _create_engine_with_fallback
+import core.db.database as dbmod
 
 class TestDatabaseCoverage:
     """Tests targeting specific uncovered lines in database.py"""
@@ -17,19 +18,19 @@ class TestDatabaseCoverage:
     def test_is_pytest_runtime_explicit_env(self):
         """Test PYTEST_RUNNING environment variable detection (line 30)"""
         with patch.dict(os.environ, {"PYTEST_RUNNING": "1"}):
-            result = _is_pytest_runtime()
+            result = dbmod._is_pytest_runtime()
             assert result == True
 
     def test_is_pytest_runtime_current_test_env(self):
         """Test PYTEST_CURRENT_TEST environment variable detection (line 32)"""
         with patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "some_test"}):
-            result = _is_pytest_runtime()
+            result = dbmod._is_pytest_runtime()
             assert result == True
 
     def test_is_pytest_runtime_sys_modules(self):
         """Test pytest in sys.modules detection (line 34-35)"""
         # pytest should already be in sys.modules during test execution
-        result = _is_pytest_runtime()
+        result = dbmod._is_pytest_runtime()
         assert result == True  # Should be true since we're running under pytest
 
     def test_is_pytest_runtime_false_case(self):
@@ -37,7 +38,7 @@ class TestDatabaseCoverage:
         # Mock sys.modules without pytest and clear env vars
         with patch.dict(os.environ, {}, clear=True), \
              patch.dict(sys.modules, {k: v for k, v in sys.modules.items() if k != "pytest"}):
-            result = _is_pytest_runtime()
+            result = dbmod._is_pytest_runtime()
             # Note: This may still be True if pytest is imported elsewhere
             # The important thing is testing the logic path
 
@@ -53,7 +54,8 @@ class TestDatabaseCoverage:
             mock_engine.connect.return_value.__exit__ = Mock(return_value=None)
             mock_create_engine.return_value = mock_engine
             
-            result = _create_engine_with_fallback("postgresql://test", {})
+            # reload not required here; direct call is fine
+            result = dbmod._create_engine_with_fallback("postgresql://test", {})
             
             assert result == mock_engine
             mock_create_engine.assert_called_once_with("postgresql://test")
@@ -69,7 +71,7 @@ class TestDatabaseCoverage:
             mock_pytest.return_value = True
             
             with pytest.raises(OperationalError):
-                _create_engine_with_fallback("postgresql://test", {})
+                dbmod._create_engine_with_fallback("postgresql://test", {})
 
     def test_create_engine_with_fallback_postgres_failure_with_hindsight_env(self):
         """Test postgres connection failure with HINDSIGHT_TEST_DB env (line 67-75)"""
@@ -81,7 +83,7 @@ class TestDatabaseCoverage:
             mock_pytest.return_value = True
             
             with pytest.raises(OperationalError):
-                _create_engine_with_fallback("postgresql://test", {})
+                dbmod._create_engine_with_fallback("postgresql://test", {})
 
     def test_create_engine_with_fallback_sqlite_fallback(self):
         """Test sqlite fallback when postgres fails in pytest (lines 69-75)"""
@@ -97,7 +99,7 @@ class TestDatabaseCoverage:
             ]
             mock_pytest.return_value = True
             
-            result = _create_engine_with_fallback("postgresql://test", {})
+            result = dbmod._create_engine_with_fallback("postgresql://test", {})
             
             assert result == mock_engine
             assert mock_create_engine.call_count == 2
@@ -115,7 +117,7 @@ class TestDatabaseCoverage:
             mock_pytest.return_value = False  # Not in pytest context
             
             with pytest.raises(OperationalError):
-                _create_engine_with_fallback("postgresql://test", {})
+                dbmod._create_engine_with_fallback("postgresql://test", {})
 
     def test_create_engine_with_fallback_non_postgres_url(self):
         """Test non-postgres URL doesn't attempt connection ping (line 63-64)"""
@@ -123,7 +125,8 @@ class TestDatabaseCoverage:
             mock_engine = Mock()
             mock_create_engine.return_value = mock_engine
             
-            result = _create_engine_with_fallback("sqlite:///test.db", {})
+            # no reload required; function behavior independent from env for sqlite
+            result = dbmod._create_engine_with_fallback("sqlite:///test.db", {})
             
             # Should return engine without attempting connection ping
             assert result == mock_engine

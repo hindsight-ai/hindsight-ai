@@ -1,13 +1,6 @@
 """
-Notification Service
-
-This service handles all notification operations including:
-- Creating in-app notifications
-- Sending email notifications via SMTP
-- Managing user notification preferences
-- Tracking email delivery status
-
-Business logic is centralized here to ensure consistency across all notification triggers.
+Notification service: in-app notifications, preferences, and email dispatch.
+Centralizes business logic for consistent handling across the app.
 """
 
 import uuid
@@ -168,7 +161,7 @@ class NotificationService:
         )
         
         return query.order_by(desc(models.Notification.created_at)).limit(limit).all()
-    
+
     def mark_notification_read(self, notification_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """
         Mark a notification as read for a specific user.

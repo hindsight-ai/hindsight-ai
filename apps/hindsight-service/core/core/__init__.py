@@ -1,7 +1,6 @@
 """
-Back-compat shims and selected workers.
+Internal namespace for worker exports.
 
-This package hosts legacy import shims (e.g., consolidation worker re-export)
-so tests and older imports continue to work while new code uses
-`core.workers.*` and utilities under `core.utils.*`.
+Modules under `core.workers.*` are the canonical import path for background
+tasks and related helpers.
 """

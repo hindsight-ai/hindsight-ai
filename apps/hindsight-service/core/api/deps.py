@@ -1,8 +1,7 @@
 """
 API dependency helpers.
 
-Provides dependency-resolved current user context and compatibility shims
-used by various route modules and tests.
+Provides dependency-resolved user context and scope information for routes.
 """
 import uuid
 from typing import Optional, Tuple, Dict, Any
@@ -70,11 +69,10 @@ def get_current_user_context(
     }
     return user, current_user
 
-# Backwards compatible alias name some modules used internally.
+# Internal alias used by some modules.
 _require_current_user = get_current_user_context
 
-# Backwards-compat shim used by some integration tests and older routes.
-# Historically returned only the ORM user; keep that behavior here.
+# Legacy helper that returns only the ORM user.
 def get_current_user_or_oauth(
     db: Session = Depends(get_db),
     x_auth_request_user: Optional[str] = Header(default=None),
