@@ -65,7 +65,7 @@ const UserAccountButton: React.FC = () => {
             className="fixed inset-0 z-10"
             onClick={() => setShowDropdown(false)}
           ></div>
-          <div className="absolute right-0 mt-2 w-60 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+          <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
             <div className="px-4 py-3 border-b border-gray-200">
               <p className="text-sm font-medium text-gray-900">
                 {user.email || user.display_name || 'User'}
@@ -76,6 +76,24 @@ const UserAccountButton: React.FC = () => {
               </p>
             </div>
             <div className="py-1">
+              <a
+                href="https://buymeacoffee.com/jeanibarz"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setShowDropdown(false)}
+                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-amber-800 bg-amber-50 hover:bg-amber-100 transition duration-150 rounded"
+                aria-label="Donate to support Hindsight AI (opens in a new tab)"
+                title="Help bring Hindsight AI to life with a small donation—every bit counts! ☕"
+              >
+                {/* Coffee icon */}
+                <svg className="w-4 h-4 text-amber-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 8h13a4 4 0 010 8H16a5 5 0 01-5 5H8a5 5 0 01-5-5V8z" />
+                  <path d="M16 8h2a3 3 0 010 6h-2" />
+                  <path d="M6 1s1 1 0 2 1 1 0 2 1 1 0 2" />
+                </svg>
+                <span className="text-amber-800">Donate to support Hindsight AI</span>
+                <span className="sr-only">Opens in a new tab</span>
+              </a>
               <button
                 onClick={() => {
                   setShowDropdown(false);
@@ -121,21 +139,6 @@ const UserAccountButton: React.FC = () => {
                 </svg>
                 Manage Organizations
               </button>
-              <a
-                href="https://buymeacoffee.com/jeanibarz"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setShowDropdown(false)}
-                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
-              >
-                {/* Coffee icon */}
-                <svg className="w-4 h-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 8h13a4 4 0 010 8H16a5 5 0 01-5 5H8a5 5 0 01-5-5V8z" />
-                  <path d="M16 8h2a3 3 0 010 6h-2" />
-                  <path d="M6 1s1 1 0 2 1 1 0 2 1 1 0 2" />
-                </svg>
-                Support / Buy me a coffee
-              </a>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
