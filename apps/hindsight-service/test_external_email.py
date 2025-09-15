@@ -13,6 +13,8 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from core.services.notification_service import TEMPLATE_ORG_INVITATION
+
 from core.services.transactional_email_service import TransactionalEmailService
 
 async def test_different_recipient():
@@ -39,7 +41,7 @@ async def test_different_recipient():
     }
     
     html_content, text_content = email_service.render_template(
-        'organization_invitation',
+        TEMPLATE_ORG_INVITATION,
         template_context
     )
     

@@ -1,7 +1,7 @@
 import uuid
 from unittest.mock import MagicMock
 
-from core.services.notification_service import NotificationService
+from core.services.notification_service import NotificationService, TEMPLATE_ORG_INVITATION
 from core.db import models
 from core.utils.role_permissions import RoleEnum
 
@@ -41,7 +41,7 @@ def test_notify_organization_invitation_role_is_string(db_session, monkeypatch):
         role=RoleEnum.viewer,
     )
 
-    assert captured.get('template_name') == 'organization_invitation'
+    assert captured.get('template_name') == TEMPLATE_ORG_INVITATION
     ctx = captured.get('context') or {}
     assert ctx.get('organization_name') == 'DevOrg'
     # Role must be a plain string, not an Enum repr

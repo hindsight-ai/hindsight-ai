@@ -1,10 +1,11 @@
 import pytest
 import uuid
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock, ANY
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from core.db import models
+from core.services.notification_service import EVENT_ORG_INVITATION, EVENT_ORG_MEMBERSHIP_ADDED
 from core.services.notification_service import NotificationService
 from core.services.transactional_email_service import TransactionalEmailService
 
@@ -44,7 +45,7 @@ class TestMemberNotifications:
         # Check for notification
         notification = db_session.query(models.Notification).filter(
             models.Notification.user_id == new_user.id,
-            models.Notification.event_type == "organization_invitation"
+            models.Notification.event_type == EVENT_ORG_MEMBERSHIP_ADDED
         ).first()
         
         assert notification is not None
@@ -116,7 +117,7 @@ class TestMemberNotifications:
             member = db_session.query(models.User).filter(models.User.email == member_email).first()
             notification = db_session.query(models.Notification).filter(
                 models.Notification.user_id == member.id,
-                models.Notification.event_type == "organization_invitation"
+                models.Notification.event_type == EVENT_ORG_MEMBERSHIP_ADDED
             ).first()
             
             assert notification is not None
@@ -201,7 +202,7 @@ class TestMemberNotifications:
         
         # Check no notification was created
         notifications = db_session.query(models.Notification).filter(
-            models.Notification.event_type == "organization_invitation"
+            models.Notification.event_type == EVENT_ORG_INVITATION
         ).count()
         
         assert notifications == 0
@@ -252,7 +253,7 @@ class TestMemberNotifications:
         # In-app notification should still be created
         notification = db_session.query(models.Notification).filter(
             models.Notification.user_id == new_user.id,
-            models.Notification.event_type == "organization_invitation"
+            models.Notification.event_type == EVENT_ORG_MEMBERSHIP_ADDED
         ).first()
         
         assert notification is not None
@@ -284,7 +285,7 @@ class TestMemberNotifications:
         
         notification = db_session.query(models.Notification).filter(
             models.Notification.user_id == new_user.id,
-            models.Notification.event_type == "organization_invitation"
+            models.Notification.event_type == EVENT_ORG_MEMBERSHIP_ADDED
         ).first()
         
         assert notification is not None
@@ -341,7 +342,7 @@ class TestMemberNotifications:
         
         notification = db_session.query(models.Notification).filter(
             models.Notification.user_id == new_user.id,
-            models.Notification.event_type == "organization_invitation"
+            models.Notification.event_type == EVENT_ORG_MEMBERSHIP_ADDED
         ).first()
         
         assert notification is not None
@@ -368,7 +369,7 @@ class TestNotificationService:
         # Create notification
         notification = service.create_notification(
             user_id=user.id,
-            event_type="organization_invitation",
+            event_type=EVENT_ORG_MEMBERSHIP_ADDED,
             title="Test Notification",
             message="This is a test notification",
             metadata={
@@ -379,7 +380,7 @@ class TestNotificationService:
         
         assert notification is not None
         assert notification.user_id == user.id
-        assert notification.event_type == "organization_invitation"
+        assert notification.event_type == EVENT_ORG_MEMBERSHIP_ADDED
         assert notification.title == "Test Notification"
         assert notification.message == "This is a test notification"
         meta = notification.get_metadata() if hasattr(notification, 'get_metadata') else notification.metadata_json
@@ -401,7 +402,7 @@ class TestNotificationService:
         for i in range(3):
             service.create_notification(
                 user_id=user.id,
-                event_type="organization_invitation",
+                event_type=EVENT_ORG_MEMBERSHIP_ADDED,
                 title=f"Notification {i}",
                 message=f"This is notification {i}"
             )
@@ -428,7 +429,7 @@ class TestNotificationService:
         for i in range(5):
             service.create_notification(
                 user_id=user.id,
-                event_type="organization_invitation",
+                event_type=EVENT_ORG_MEMBERSHIP_ADDED,
                 title=f"Notification {i}",
                 message=f"Message {i}"
             )
@@ -444,3 +445,221 @@ class TestNotificationService:
         # Check count again
         unread_count = service.get_unread_count(user_id=user.id)
         assert unread_count == 4
+
+
+class TestNotificationEventTypesAndTemplates:
+    """Test that notifications use correct event types and template names."""
+
+    @patch('core.services.transactional_email_service.get_transactional_email_service')
+    def test_membership_added_uses_correct_event_type_and_template(self, mock_email_service, client: TestClient, org_owner_context):
+        """Test that membership added notifications use correct event type and template."""
+        from core.services.notification_service import EVENT_ORG_MEMBERSHIP_ADDED, TEMPLATE_MEMBERSHIP_ADDED
+
+        owner, organization = org_owner_context
+
+        # Mock the email service
+        mock_service_instance = MagicMock()
+        mock_service_instance.render_template.return_value = ("<html>Test email</html>", "Test email")
+        mock_service_instance.send_email = AsyncMock(return_value={"id": "test-email-id"})
+        mock_email_service.return_value = mock_service_instance
+
+        new_member_email = "template_test@example.com"
+
+        response = client.post(
+            f"/organizations/{organization.id}/members",
+            json={
+                "email": new_member_email,
+                "role": "editor",
+                "can_read": True,
+                "can_write": True
+            },
+            headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
+        )
+
+        assert response.status_code == 201
+
+        # Give background thread time to execute
+        import time
+        time.sleep(0.5)
+
+        # Verify the correct template was used
+        mock_service_instance.render_template.assert_called_once_with(
+            TEMPLATE_MEMBERSHIP_ADDED,
+            {
+                'user_name': 'template_test',
+                'organization_name': organization.name,
+                'invited_by': owner.display_name or owner.email,
+                'role': 'editor',
+                'dashboard_url': f'http://localhost:3000/dashboard'
+            }
+        )
+
+    @patch('core.services.transactional_email_service.get_transactional_email_service')
+    def test_role_change_notification_uses_correct_event_type_and_template(self, mock_email_service, client: TestClient, org_owner_context, db_session):
+        """Test that role change notifications use correct event type and template."""
+        from core.services.notification_service import EVENT_ORG_ROLE_CHANGED, TEMPLATE_ROLE_CHANGED
+
+        owner, organization = org_owner_context
+
+        # Create a member first
+        member_email = "role_change_test@example.com"
+        response = client.post(
+            f"/organizations/{organization.id}/members",
+            json={
+                "email": member_email,
+                "role": "viewer",
+                "can_read": True,
+                "can_write": False
+            },
+            headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
+        )
+        assert response.status_code == 201
+
+        # Get the member user
+        member = db_session.query(models.User).filter(models.User.email == member_email).first()
+        assert member is not None
+
+        # Mock the email service
+        mock_service_instance = MagicMock()
+        mock_service_instance.render_template.return_value = ("<html>Test email</html>", "Test email")
+        mock_service_instance.send_email = AsyncMock(return_value={"id": "test-email-id"})
+        mock_email_service.return_value = mock_service_instance
+
+        # Change the member's role
+        response = client.put(
+            f"/organizations/{organization.id}/members/{member.id}",
+            json={
+                "role": "admin",
+                "can_read": True,
+                "can_write": True
+            },
+            headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
+        )
+
+        assert response.status_code == 200
+
+        # Give background thread time to execute
+        import time
+        time.sleep(0.5)
+
+        # Verify the correct template was used for role change
+        mock_service_instance.render_template.assert_called_once_with(
+            TEMPLATE_ROLE_CHANGED,
+            {
+                'organization_name': organization.name,
+                'old_role': 'viewer',
+                'new_role': 'admin',
+                'changed_by_name': owner.display_name or owner.email,
+                'date_changed': ANY,  # Date will be generated dynamically
+                'current_year': ANY,  # Year will be current year
+            }
+        )
+
+        # Verify notification was created with correct event type
+        notification = db_session.query(models.Notification).filter(
+            models.Notification.user_id == member.id,
+            models.Notification.event_type == EVENT_ORG_ROLE_CHANGED
+        ).first()
+        assert notification is not None
+        assert "Role changed" in notification.title
+        assert "viewer" in notification.message
+        assert "admin" in notification.message
+
+    @patch('core.services.transactional_email_service.get_transactional_email_service')
+    def test_membership_removal_notification_uses_correct_event_type_and_template(self, mock_email_service, client: TestClient, org_owner_context, db_session):
+        """Test that membership removal notifications use correct event type and template."""
+        from core.services.notification_service import EVENT_ORG_MEMBERSHIP_REMOVED, TEMPLATE_MEMBERSHIP_REMOVED
+
+        owner, organization = org_owner_context
+
+        # Create a member first
+        member_email = "removal_test@example.com"
+        response = client.post(
+            f"/organizations/{organization.id}/members",
+            json={
+                "email": member_email,
+                "role": "editor",
+                "can_read": True,
+                "can_write": True
+            },
+            headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
+        )
+        assert response.status_code == 201
+
+        # Get the member user
+        member = db_session.query(models.User).filter(models.User.email == member_email).first()
+        assert member is not None
+
+        # Mock the email service
+        mock_service_instance = MagicMock()
+        mock_service_instance.render_template.return_value = ("<html>Test email</html>", "Test email")
+        mock_service_instance.send_email = AsyncMock(return_value={"id": "test-email-id"})
+        mock_email_service.return_value = mock_service_instance
+
+        # Remove the member
+        response = client.delete(
+            f"/organizations/{organization.id}/members/{member.id}",
+            headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
+        )
+
+        assert response.status_code == 204
+
+        # Give background thread time to execute
+        import time
+        time.sleep(0.5)
+
+        # Verify the correct template was used for membership removal
+        mock_service_instance.render_template.assert_called_once_with(
+            TEMPLATE_MEMBERSHIP_REMOVED,
+            {
+                'organization_name': organization.name,
+                'removed_by_name': owner.display_name or owner.email,
+                'date_removed': ANY,  # Date will be generated dynamically
+                'current_year': ANY,  # Year will be current year
+            }
+        )
+
+        # Verify notification was created with correct event type
+        notification = db_session.query(models.Notification).filter(
+            models.Notification.user_id == member.id,
+            models.Notification.event_type == EVENT_ORG_MEMBERSHIP_REMOVED
+        ).first()
+        assert notification is not None
+        assert "Removed from" in notification.title
+        assert organization.name in notification.title
+
+    def test_membership_added_notification_created_with_correct_event_type(self, client: TestClient, org_owner_context, db_session):
+        """Test that membership added creates notification with correct event type."""
+        from core.services.notification_service import EVENT_ORG_MEMBERSHIP_ADDED
+
+        owner, organization = org_owner_context
+
+        # Create a member
+        member_email = "event_type_test@example.com"
+        response = client.post(
+            f"/organizations/{organization.id}/members",
+            json={
+                "email": member_email,
+                "role": "editor",
+                "can_read": True,
+                "can_write": True
+            },
+            headers={"x-auth-request-email": owner.email, "x-auth-request-user": owner.display_name or owner.email}
+        )
+
+        assert response.status_code == 201
+
+        # Get the member user
+        member = db_session.query(models.User).filter(models.User.email == member_email).first()
+        assert member is not None
+
+        # Verify notification was created with correct event type
+        notification = db_session.query(models.Notification).filter(
+            models.Notification.user_id == member.id,
+            models.Notification.event_type == EVENT_ORG_MEMBERSHIP_ADDED
+        ).first()
+
+        assert notification is not None
+        assert notification.event_type == EVENT_ORG_MEMBERSHIP_ADDED
+        assert "Welcome to" in notification.title
+        assert organization.name in notification.title

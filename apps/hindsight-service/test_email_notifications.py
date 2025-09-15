@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.services.email_service import EmailService, EmailServiceConfig
-from core.services.notification_service import NotificationService, get_notification_service
+from core.services.notification_service import NotificationService, get_notification_service, TEMPLATE_ORG_INVITATION
 
 async def test_email_configuration():
     """Test email service configuration."""
@@ -59,7 +59,7 @@ async def test_email_templates():
         }
         
         html_content, text_content = email_service.render_template(
-            'organization_invitation',
+            TEMPLATE_ORG_INVITATION,
             template_context
         )
         
@@ -135,7 +135,7 @@ async def test_email_sending():
         }
         
         html_content, text_content = email_service.render_template(
-            'organization_invitation',
+            TEMPLATE_ORG_INVITATION,
             template_context
         )
         

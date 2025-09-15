@@ -381,85 +381,25 @@ def add_member(
         metadata={"role": role},
     )
 
-    # Send notification to the new member
+    # Send notification to the new member using the central NotificationService
     try:
         from core.services.notification_service import NotificationService
-        
-        # Get organization details
+
         org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
-        
-        # Create notification service with current session
         notification_service = NotificationService(db)
-        
-        # Create in-app notification (synchronous version)
-        notification = models.Notification(
-            id=uuid.uuid4(),
+        notification_service.notify_membership_added(
             user_id=member_user.id,
-            event_type="organization_invitation",
-            title=f"Welcome to {org.name}!",
-            message=f"{user.display_name or user.email} added you to the organization '{org.name}' as {role}.",
-            metadata_json={
-                "organization_id": str(org_id),
-                "organization_name": org.name,
-                "added_by_user_id": str(user.id),
-                "role": role
-            },
-            created_at=datetime.now(UTC)
+            user_email=member_user.email,
+            organization_name=(org.name if org else ''),
+            role=role,
+            added_by_name=(user.display_name or user.email),
+            organization_id=org.id if org else None,
+            added_by_user_id=user.id
         )
-        db.add(notification)
-        
-        # Try to send email notification in background
-        import threading
-        
-        # Get data we need before starting background thread (to avoid session issues)
-        member_email = member_user.email
-        member_name = member_user.display_name or member_user.email.split('@')[0]
-        inviter_name = user.display_name or user.email
-        org_name_for_email = org.name
-        
-        def send_email_background():
-            try:
-                import asyncio
-                from core.services.transactional_email_service import get_transactional_email_service
-                
-                async def _send_email():
-                    email_service = get_transactional_email_service()
-                    
-                    # Render template
-                    template_data = {
-                        "user_name": member_name,
-                        "organization_name": org_name_for_email,
-                        "invited_by": inviter_name,
-                        "role": role,
-                        "dashboard_url": "https://hindsight-ai.com/dashboard"
-                    }
-                    
-                    html_content, text_content = email_service.render_template("organization_invitation", template_data)
-                    
-                    # Send email
-                    result = await email_service.send_email(
-                        to_email=member_email,
-                        subject=f"You've been added to {org_name_for_email}",
-                        html_content=html_content,
-                        text_content=text_content
-                    )
-                    print(f"Email sent successfully to {member_email}: {result}")
-                
-                asyncio.run(_send_email())
-            except Exception as e:
-                print(f"Background email sending failed: {e}")
-        
-        # Start background email task
-        thread = threading.Thread(target=send_email_background)
-        thread.daemon = True
-        thread.start()
-        
-        db.commit()  # Commit the notification
-        
     except Exception as e:
-        # Log error but don't fail the member addition
-        print(f"Failed to send notification: {e}")
-        db.rollback()  # Rollback only notification, not the member addition
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to send membership notification for user {member_user.id}: {str(e)}")
 
     return {"status": "added"}
 
@@ -522,6 +462,22 @@ def update_member(
             organization_id=org_id,
             metadata={"old_role": old_role, "new_role": m.role},
         )
+        # Notify the affected user about role change
+        try:
+            from core.services.notification_service import NotificationService
+            member = db.query(models.User).filter(models.User.id == member_user_id).first()
+            org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
+            if member and org:
+                NotificationService(db).notify_role_changed(
+                    user_id=member_user_id,
+                    user_email=member.email,
+                    organization_name=org.name,
+                    old_role=old_role,
+                    new_role=m.role,
+                    changed_by_name=(user.display_name or user.email)
+                )
+        except Exception:
+            pass
 
     return {"status": "updated"}
 
@@ -554,6 +510,21 @@ def remove_member(
         actor_user_id=user.id,
         organization_id=org_id,
     )
+
+    # Notify the removed user
+    try:
+        from core.services.notification_service import NotificationService
+        member = db.query(models.User).filter(models.User.id == member_user_id).first()
+        org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
+        if member and org:
+            NotificationService(db).notify_membership_removed(
+                user_id=member_user_id,
+                user_email=member.email,
+                organization_name=org.name,
+                removed_by_name=(user.display_name or user.email)
+            )
+    except Exception:
+        pass
 
     return {"status": "removed"}
 

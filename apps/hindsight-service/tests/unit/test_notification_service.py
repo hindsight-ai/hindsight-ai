@@ -30,6 +30,12 @@ from datetime import datetime, UTC
 from core.services.notification_service import NotificationService
 from core.services.transactional_email_service import TransactionalEmailService
 from core.db import models
+from core.services.notification_service import (
+    EVENT_ORG_INVITATION,
+    EVENT_ORG_MEMBERSHIP_ADDED,
+    EVENT_ORG_ROLE_CHANGED,
+    TEMPLATE_ORG_INVITATION,
+)
 
 
 class TestNotificationServiceUnit:
@@ -58,7 +64,7 @@ class TestNotificationServiceUnit:
         # Create notification
         notification = service.create_notification(
             user_id=user.id,
-            event_type="organization_invitation",
+            event_type=EVENT_ORG_INVITATION,
             title="Organization Invitation",
             message="You have been invited to join Test Org",
             metadata=metadata,
@@ -73,7 +79,7 @@ class TestNotificationServiceUnit:
         
         assert db_notification is not None
         assert db_notification.user_id == user.id
-        assert db_notification.event_type == "organization_invitation"
+        assert db_notification.event_type == EVENT_ORG_INVITATION
         assert db_notification.title == "Organization Invitation"
         assert db_notification.message == "You have been invited to join Test Org"
         assert db_notification.action_url == "https://example.com/accept"
@@ -288,9 +294,13 @@ class TestNotificationServiceUnit:
         
         preferences = service.get_user_preferences(user.id)
         
-        # Should return defaults for known notification types
-        assert preferences.get("organization_invitation", True) is True
-        assert preferences.get("membership_added", True) is True
+        # Should return defaults for known notification types (dicts with flags)
+        pref_inv = preferences.get(EVENT_ORG_INVITATION)
+        assert pref_inv["email_enabled"] is True
+        assert pref_inv["in_app_enabled"] is True
+        pref_added = preferences.get(EVENT_ORG_MEMBERSHIP_ADDED)
+        assert pref_added["email_enabled"] is True
+        assert pref_added["in_app_enabled"] is True
 
     def test_update_user_preferences(self, db_session):
         """Test updating user notification preferences."""
@@ -304,18 +314,18 @@ class TestNotificationServiceUnit:
         db_session.flush()
         
         # Update preferences using set_user_preference
-        service.set_user_preference(user.id, "org_invitation", email_enabled=False, in_app_enabled=True)
-        service.set_user_preference(user.id, "org_membership_added", email_enabled=True, in_app_enabled=True)
-        service.set_user_preference(user.id, "org_role_changed", email_enabled=False, in_app_enabled=False)
+        service.set_user_preference(user.id, EVENT_ORG_INVITATION, email_enabled=False, in_app_enabled=True)
+        service.set_user_preference(user.id, EVENT_ORG_MEMBERSHIP_ADDED, email_enabled=True, in_app_enabled=True)
+        service.set_user_preference(user.id, EVENT_ORG_ROLE_CHANGED, email_enabled=False, in_app_enabled=False)
         
         # Verify preferences were saved
         saved_preferences = service.get_user_preferences(user.id)
-        assert saved_preferences["org_invitation"]["email_enabled"] is False
-        assert saved_preferences["org_invitation"]["in_app_enabled"] is True
-        assert saved_preferences["org_membership_added"]["email_enabled"] is True
-        assert saved_preferences["org_membership_added"]["in_app_enabled"] is True
-        assert saved_preferences["org_role_changed"]["email_enabled"] is False
-        assert saved_preferences["org_role_changed"]["in_app_enabled"] is False
+        assert saved_preferences[EVENT_ORG_INVITATION]["email_enabled"] is False
+        assert saved_preferences[EVENT_ORG_INVITATION]["in_app_enabled"] is True
+        assert saved_preferences[EVENT_ORG_MEMBERSHIP_ADDED]["email_enabled"] is True
+        assert saved_preferences[EVENT_ORG_MEMBERSHIP_ADDED]["in_app_enabled"] is True
+        assert saved_preferences[EVENT_ORG_ROLE_CHANGED]["email_enabled"] is False
+        assert saved_preferences[EVENT_ORG_ROLE_CHANGED]["in_app_enabled"] is False
 
     @patch('core.services.transactional_email_service.get_transactional_email_service')
     def test_send_email_notification_success(self, mock_email_service, db_session):
@@ -347,7 +357,7 @@ class TestNotificationServiceUnit:
             notification_id=None,
             user_id=user.id,
             email_address=user.email,
-            event_type="organization_invitation",
+            event_type=EVENT_ORG_INVITATION,
             subject="Organization Invitation"
         )
 
@@ -355,7 +365,7 @@ class TestNotificationServiceUnit:
         import asyncio
         result = asyncio.run(service.send_email_notification(
             email_log=email_log,
-            template_name="organization_invitation",
+            template_name=TEMPLATE_ORG_INVITATION,
             template_context=template_data
         ))
         
@@ -363,7 +373,7 @@ class TestNotificationServiceUnit:
         
         # Verify email service was called correctly
         mock_service_instance.render_template.assert_called_once_with(
-            "organization_invitation", template_data
+            TEMPLATE_ORG_INVITATION, template_data
         )
 
     @patch('core.services.transactional_email_service.get_transactional_email_service')
@@ -382,7 +392,7 @@ class TestNotificationServiceUnit:
         db_session.flush()
         
         # Disable email notifications for this type
-        service.set_user_preference(user.id, "org_invitation", email_enabled=False, in_app_enabled=True)
+        service.set_user_preference(user.id, EVENT_ORG_INVITATION, email_enabled=False, in_app_enabled=True)
         
         template_data = {"test": "data"}
         
@@ -391,7 +401,7 @@ class TestNotificationServiceUnit:
             notification_id=None,
             user_id=user.id,
             email_address=user.email,
-            event_type="organization_invitation",
+            event_type=EVENT_ORG_INVITATION,
             subject="Organization Invitation"
         )
         
@@ -399,7 +409,7 @@ class TestNotificationServiceUnit:
         import asyncio
         result = asyncio.run(service.send_email_notification(
             email_log=email_log,
-            template_name="organization_invitation",
+            template_name=TEMPLATE_ORG_INVITATION,
             template_context=template_data
         ))
         

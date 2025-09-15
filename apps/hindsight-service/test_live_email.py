@@ -16,6 +16,8 @@ from datetime import datetime
 # Add the project root to the Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from core.services.notification_service import TEMPLATE_ORG_INVITATION
+
 from core.services.transactional_email_service import TransactionalEmailService
 
 async def send_test_email():
@@ -56,7 +58,7 @@ async def send_test_email():
         }
         
         html_content, text_content = email_service.render_template(
-            'organization_invitation',
+            TEMPLATE_ORG_INVITATION,
             template_context
         )
         
