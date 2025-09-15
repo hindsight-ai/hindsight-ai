@@ -1,0 +1,28 @@
+REMOVED FROM {{ organization_name|upper }}
+
+Hello!
+
+You have been removed from {{ organization_name }} on Hindsight AI.
+
+Organization: {{ organization_name }}
+Removed by: {{ removed_by_name }}
+Date: {{ date_removed }}
+
+Your access to {{ organization_name }}'s resources and data has been revoked. If you need to regain access, please contact {{ removed_by_name }} or another organization administrator.
+
+If you have any personal data or content that you would like to export before your access is completely removed, please do so as soon as possible.
+
+To view your dashboard, visit:
+{{ dashboard_url }}
+
+To contact support, visit:
+{{ support_url if support_url else 'support@hindsight-ai.com' }}
+
+If you believe this removal was made in error, please contact {{ removed_by_name }} or our support team immediately.
+
+---
+This email was sent by Hindsight AI
+Unsubscribe: {{ unsubscribe_url if unsubscribe_url else 'Contact support' }}
+Support: {{ support_url if support_url else 'support@hindsight-ai.com' }}
+
+© {{ current_year if current_year else '2025' }} Hindsight AI. All rights reserved.

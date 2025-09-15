@@ -1,0 +1,28 @@
+ROLE CHANGED IN {{ organization_name|upper }}
+
+Hello!
+
+Your role in {{ organization_name }} has been changed from {{ old_role }} to {{ new_role }}.
+
+Organization: {{ organization_name }}
+Previous Role: {{ old_role }}
+New Role: {{ new_role }}
+Changed by: {{ changed_by_name }}
+Date: {{ date_changed }}
+
+This change affects your permissions and access within the organization. If you have any questions about your new role or its permissions, please contact {{ changed_by_name }} or our support team.
+
+To view your dashboard, visit:
+{{ dashboard_url }}
+
+To contact support, visit:
+{{ support_url if support_url else 'support@hindsight-ai.com' }}
+
+If you believe this change was made in error, please contact the organization administrator or our support team immediately.
+
+---
+This email was sent by Hindsight AI
+Unsubscribe: {{ unsubscribe_url if unsubscribe_url else 'Contact support' }}
+Support: {{ support_url if support_url else 'support@hindsight-ai.com' }}
+
+© {{ current_year if current_year else '2025' }} Hindsight AI. All rights reserved.

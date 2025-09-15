@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Role Changed in {{ organization_name }} - Hindsight AI{% endblock %}
+
+{% block header_title %}Your Role Has Changed{% endblock %}
+{% block header_subtitle %}Your role in {{ organization_name }} has been updated{% endblock %}
+
+{% block content %}
+<h2>Role Update in {{ organization_name }}</h2>
+
+<p>Hello!</p>
+
+<p>Your role in <strong>{{ organization_name }}</strong> has been changed from <strong>{{ old_role }}</strong> to <strong>{{ new_role }}</strong>.</p>
+
+<div class="highlight">
+    <p><strong>Organization:</strong> {{ organization_name }}</p>
+    <p><strong>Previous Role:</strong> {{ old_role }}</p>
+    <p><strong>New Role:</strong> {{ new_role }}</p>
+    <p><strong>Changed by:</strong> {{ changed_by_name }}</p>
+    <p><strong>Date:</strong> {{ date_changed }}</p>
+</div>
+
+<p>This change affects your permissions and access within the organization. If you have any questions about your new role or its permissions, please contact {{ changed_by_name }} or our support team.</p>
+
+<div class="button-container">
+    <a href="{{ dashboard_url }}" class="button">View Dashboard</a>
+    <a href="{{ support_url if support_url else 'mailto:support@hindsight-ai.com' }}" class="button button-secondary">Contact Support</a>
+</div>
+
+<p style="margin-top: 32px; color: #64748b; font-size: 14px;">
+    If you believe this change was made in error, please contact the organization administrator or our support team immediately.
+</p>
+{% endblock %}

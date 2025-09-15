@@ -467,7 +467,6 @@ class NotificationService:
 
             # Send the actual email
             try:
-                import asyncio
                 template_context = {
                     'organization_name': organization_name,
                     'inviter_name': inviter_name_safe,
@@ -479,21 +478,44 @@ class NotificationService:
                     'current_year': datetime.now().year,
                     'role': role_value,
                 }
-                
-                # Send email asynchronously
-                email_result = asyncio.run(self.send_email_notification(
-                    email_log,
-                    TEMPLATE_ORG_INVITATION,
-                    template_context
-                ))
-                result['email_result'] = email_result
+
+                # Render template synchronously
+                try:
+                    html, text = self.email_service.render_template(TEMPLATE_ORG_INVITATION, template_context)
+                except Exception as e:
+                    # If rendering fails, mark email log and return
+                    self.update_email_status(email_log.id, 'failed', error_message=f'Template render failed: {str(e)}')
+                    return result
+
+                # Send in background thread
+                def _send():
+                    import asyncio
+                    try:
+                        send_res = asyncio.run(self.email_service.send_email(
+                            to_email=email_log.email_address,
+                            subject=email_log.subject,
+                            html_content=html,
+                            text_content=text
+                        ))
+                        if send_res.get('success'):
+                            self.update_email_status(email_log.id, 'sent', provider_message_id=send_res.get('message_id'))
+                        else:
+                            self.update_email_status(email_log.id, 'failed', error_message=send_res.get('error'))
+                    except Exception as e:
+                        self.update_email_status(email_log.id, 'failed', error_message=str(e))
+
+                import threading
+                t = threading.Thread(target=_send, daemon=True)
+                t.start()
+
+                result['email_result'] = {'dispatched_in_background': True}
                 
             except Exception as e:
                 # Log error but don't fail the entire operation
                 self.update_email_status(
                     email_log.id,
                     'failed',
-                    error_message=f"Email sending failed: {str(e)}"
+                    error_message=f"Email dispatch error: {str(e)}"
                 )
         
         return result
@@ -644,7 +666,6 @@ class NotificationService:
             )
             result['email_log'] = log
             try:
-                import asyncio
                 template_context = {
                     'organization_name': organization_name,
                     'old_role': old_role,
@@ -653,14 +674,39 @@ class NotificationService:
                     'date_changed': datetime.now().strftime('%B %d, %Y'),
                     'current_year': datetime.now().year,
                 }
-                email_result = asyncio.run(self.send_email_notification(
-                    log,
-                    TEMPLATE_ROLE_CHANGED,
-                    template_context
-                ))
-                result['email_result'] = email_result
+
+                # Render template synchronously
+                try:
+                    html, text = self.email_service.render_template(TEMPLATE_ROLE_CHANGED, template_context)
+                except Exception as e:
+                    # If rendering fails, mark email log and return
+                    self.update_email_status(log.id, 'failed', error_message=f'Template render failed: {str(e)}')
+                    return result
+
+                # Send in background thread
+                def _send():
+                    import asyncio
+                    try:
+                        send_res = asyncio.run(self.email_service.send_email(
+                            to_email=log.email_address,
+                            subject=log.subject,
+                            html_content=html,
+                            text_content=text
+                        ))
+                        if send_res.get('success'):
+                            self.update_email_status(log.id, 'sent', provider_message_id=send_res.get('message_id'))
+                        else:
+                            self.update_email_status(log.id, 'failed', error_message=send_res.get('error'))
+                    except Exception as e:
+                        self.update_email_status(log.id, 'failed', error_message=str(e))
+
+                import threading
+                t = threading.Thread(target=_send, daemon=True)
+                t.start()
+
+                result['email_result'] = {'dispatched_in_background': True}
             except Exception as e:
-                self.update_email_status(log.id, 'failed', error_message=f"Email sending failed: {str(e)}")
+                self.update_email_status(log.id, 'failed', error_message=f"Email dispatch error: {str(e)}")
 
         return result
 
@@ -700,21 +746,45 @@ class NotificationService:
             )
             result['email_log'] = log
             try:
-                import asyncio
                 template_context = {
                     'organization_name': organization_name,
                     'removed_by_name': removed_by_name,
                     'date_removed': datetime.now().strftime('%B %d, %Y'),
                     'current_year': datetime.now().year,
                 }
-                email_result = asyncio.run(self.send_email_notification(
-                    log,
-                    TEMPLATE_MEMBERSHIP_REMOVED,
-                    template_context
-                ))
-                result['email_result'] = email_result
+
+                # Render template synchronously
+                try:
+                    html, text = self.email_service.render_template(TEMPLATE_MEMBERSHIP_REMOVED, template_context)
+                except Exception as e:
+                    # If rendering fails, mark email log and return
+                    self.update_email_status(log.id, 'failed', error_message=f'Template render failed: {str(e)}')
+                    return result
+
+                # Send in background thread
+                def _send():
+                    import asyncio
+                    try:
+                        send_res = asyncio.run(self.email_service.send_email(
+                            to_email=log.email_address,
+                            subject=log.subject,
+                            html_content=html,
+                            text_content=text
+                        ))
+                        if send_res.get('success'):
+                            self.update_email_status(log.id, 'sent', provider_message_id=send_res.get('message_id'))
+                        else:
+                            self.update_email_status(log.id, 'failed', error_message=send_res.get('error'))
+                    except Exception as e:
+                        self.update_email_status(log.id, 'failed', error_message=str(e))
+
+                import threading
+                t = threading.Thread(target=_send, daemon=True)
+                t.start()
+
+                result['email_result'] = {'dispatched_in_background': True}
             except Exception as e:
-                self.update_email_status(log.id, 'failed', error_message=f"Email sending failed: {str(e)}")
+                self.update_email_status(log.id, 'failed', error_message=f"Email dispatch error: {str(e)}")
 
         return result
 

@@ -479,8 +479,6 @@ def update_member(
         except Exception:
             pass
 
-    return {"status": "updated"}
-
 
 @router.delete("/{org_id}/members/{member_user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_member(
@@ -525,8 +523,6 @@ def remove_member(
             )
     except Exception:
         pass
-
-    return {"status": "removed"}
 
 @router.post("/{org_id}/invitations", status_code=status.HTTP_201_CREATED, response_model=schemas.OrganizationInvitation)
 def create_invitation(

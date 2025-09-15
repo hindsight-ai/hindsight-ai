@@ -26,6 +26,8 @@ import pytest
 import uuid
 from unittest.mock import patch, AsyncMock, MagicMock
 from datetime import datetime, UTC
+import os
+from pathlib import Path
 
 from core.services.notification_service import NotificationService
 from core.services.transactional_email_service import TransactionalEmailService
@@ -35,6 +37,10 @@ from core.services.notification_service import (
     EVENT_ORG_MEMBERSHIP_ADDED,
     EVENT_ORG_ROLE_CHANGED,
     TEMPLATE_ORG_INVITATION,
+    TEMPLATE_MEMBERSHIP_ADDED,
+    TEMPLATE_MEMBERSHIP_REMOVED,
+    TEMPLATE_ROLE_CHANGED,
+    TEMPLATE_SUPPORT_CONTACT,
 )
 
 
@@ -549,3 +555,26 @@ class TestNotificationServiceEdgeCases:
         notifications = service.get_user_notifications(user.id, limit=1)
         assert len(notifications) == 1
         assert notifications[0].metadata_json == large_metadata
+
+
+class TestTemplateFiles:
+    """Tests for template file existence and validation."""
+
+    @pytest.mark.parametrize("template_name", [
+        TEMPLATE_ORG_INVITATION,
+        TEMPLATE_MEMBERSHIP_ADDED,
+        TEMPLATE_MEMBERSHIP_REMOVED,
+        TEMPLATE_ROLE_CHANGED,
+        TEMPLATE_SUPPORT_CONTACT,
+    ])
+    @pytest.mark.parametrize("extension", [".html", ".txt"])
+    def test_template_files_exist(self, template_name, extension):
+        """Test that all required template files exist in the expected location."""
+        template_dir = Path("core/templates/email")
+        template_file = template_dir / f"{template_name}{extension}"
+
+        assert template_file.exists(), f"Template file {template_file} does not exist"
+        assert template_file.is_file(), f"{template_file} is not a file"
+
+        # Verify the file is not empty
+        assert template_file.stat().st_size > 0, f"Template file {template_file} is empty"
