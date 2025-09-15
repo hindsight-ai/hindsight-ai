@@ -22,6 +22,7 @@ import { OrganizationProvider } from './context/OrganizationContext';
 import { NotificationProvider } from './context/NotificationContext';
 import LoginPage from './components/LoginPage';
 import ProfilePage from './components/ProfilePage';
+import TokensPage from './components/TokensPage';
 import organizationService from './api/organizationService';
 import notificationService from './services/notificationService';
 
@@ -130,6 +131,7 @@ function AppContent() {
         <Routes>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/tokens" element={<TokensPage />} />
           <Route path="/memory-blocks" element={<MemoryBlocksPage key={location.pathname} />} />
           <Route path="/memory-blocks/:id" element={<MemoryBlockDetail />} />
           <Route path="/keywords" element={<KeywordManager />} />

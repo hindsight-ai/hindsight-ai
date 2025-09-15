@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import UserAccountButton from './UserAccountButton';
 import OrganizationSwitcher from './OrganizationSwitcher';
 import NotificationBell from './NotificationBell';
+import QuickCreateTokenModal from './QuickCreateTokenModal';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom';
 
@@ -18,6 +19,7 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
   const location = useLocation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState<number>(1);
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
 
   useEffect(() => {
     try {
@@ -81,7 +83,17 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
               </button>
               {guest && <span className="px-2 py-0.5 text-[10px] sm:text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">Guest Mode · Read-only</span>}
               <NotificationBell />
+              <button
+                type="button"
+                title="Quick create token"
+                onClick={() => setShowQuickCreate(true)}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-100"
+                aria-label="Quick create token"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+              </button>
               <UserAccountButton />
+              <QuickCreateTokenModal isOpen={showQuickCreate} onClose={() => setShowQuickCreate(false)} />
             </div>
           </div>
           <p className="mt-1 text-xs sm:text-sm text-gray-500 truncate">{title === 'Dashboard' ? 'Overview of your AI memory management system' : `Manage your ${title.toLowerCase()}`}</p>

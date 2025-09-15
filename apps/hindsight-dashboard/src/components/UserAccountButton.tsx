@@ -94,6 +94,21 @@ const UserAccountButton: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  setShowDropdown(false);
+                  try { window.history.pushState(null, '', '/tokens'); } catch {}
+                  window.location.href = '/tokens';
+                }}
+                className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
+              >
+                {/* API Tokens icon */}
+                <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14" />
+                  <path d="M5 12h14" />
+                </svg>
+                API Tokens
+              </button>
+              <button
+                onClick={() => {
                   setShowOrgManagement(true);
                   setShowDropdown(false);
                 }}
