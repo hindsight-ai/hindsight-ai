@@ -106,6 +106,33 @@ async def enforce_readonly_for_guests(request: Request, call_next):
                 )
     return await call_next(request)
 
+# Middleware: require explicit scope metadata on write operations for scoped resources
+@app.middleware("http")
+async def enforce_write_scope_metadata(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        try:
+            path = request.url.path or ""
+        except Exception:
+            path = ""
+        # Only enforce for scope-managed resources
+        if (
+            path.startswith("/agents")
+            or path.startswith("/keywords")
+            or path.startswith("/memory-blocks")
+            or path.startswith("/consolidation")
+            or path.startswith("/consolidation-suggestions/")
+        ):
+            h = request.headers
+            qp = request.query_params
+            scope_val = (h.get("X-Active-Scope") or qp.get("scope") or "").strip().lower()
+            if not scope_val:
+                return JSONResponse({"detail": "scope_required"}, status_code=status.HTTP_400_BAD_REQUEST)
+            if scope_val == "organization":
+                org_id = (h.get("X-Organization-Id") or qp.get("organization_id") or "").strip()
+                if not org_id:
+                    return JSONResponse({"detail": "organization_id_required"}, status_code=status.HTTP_400_BAD_REQUEST)
+    return await call_next(request)
+
 router = APIRouter()
 
 
@@ -237,6 +264,7 @@ def change_memory_block_scope(
 
 @router.get("/user-info")
 def get_user_info(
+    request: Request,
     x_auth_request_user: Optional[str] = Header(default=None),
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
@@ -297,6 +325,32 @@ def get_user_info(
             }
         except HTTPException as e:
             return JSONResponse({"authenticated": False, "detail": e.detail}, status_code=e.status_code)
+
+    # Local dev fallback (no oauth, no PAT) when running on localhost
+    try:
+        allow_local = os.getenv("ALLOW_LOCAL_DEV_AUTH", "true").lower() == "true"
+    except Exception:
+        allow_local = True
+    host = (request.headers.get('host') or '').lower()
+    client_ip = None
+    try:
+        client_ip = request.client.host if request.client else None
+    except Exception:
+        client_ip = None
+    is_local = allow_local and (host.startswith('localhost') or host.startswith('127.0.0.1') or client_ip in ('127.0.0.1', '::1', None))
+    if is_local and not any([x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email]):
+        email = os.getenv('DEV_LOCAL_EMAIL', 'dev@localhost')
+        name = os.getenv('DEV_LOCAL_NAME', 'Development User')
+        user = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, user.id)
+        return {
+            "authenticated": True,
+            "user_id": str(user.id),
+            "email": user.email,
+            "display_name": user.display_name,
+            "is_superadmin": bool(user.is_superadmin),
+            "memberships": memberships,
+        }
 
     # Otherwise, fallback to oauth2-proxy headers
     name, email = resolve_identity_from_headers(

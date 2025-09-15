@@ -33,11 +33,12 @@ def create_keyword_endpoint(
     keyword: schemas.KeywordCreate,
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context_or_pat),
+    scope_ctx = Depends(get_scoped_user_and_context),
 ):
     u, current_user = user_context
-    _scope_in = (keyword.visibility_scope or SCOPE_PERSONAL)
-    scope = getattr(_scope_in, 'value', _scope_in)
-    org_id = getattr(keyword, 'organization_id', None)
+    _user2, _current2, sc = scope_ctx
+    scope = sc.scope or SCOPE_PERSONAL
+    org_id = sc.organization_id if scope == SCOPE_ORGANIZATION else None
     if scope == SCOPE_ORGANIZATION:
         by_org = current_user.get('memberships_by_org', {})
         key = str(org_id) if org_id else None
@@ -58,7 +59,9 @@ def create_keyword_endpoint(
     if existing:
         raise HTTPException(status_code=409, detail="Keyword already exists in this scope")
     kw_for_create = keyword.model_copy(update={
-        'owner_user_id': u.id if scope == SCOPE_PERSONAL else getattr(keyword, 'owner_user_id', None),
+        'owner_user_id': u.id if scope == SCOPE_PERSONAL else None,
+        'visibility_scope': scope,
+        'organization_id': org_id if scope == SCOPE_ORGANIZATION else None,
     })
     # PAT scope enforcement
     ensure_pat_allows_write(current_user, org_id if scope == SCOPE_ORGANIZATION else None)

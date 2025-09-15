@@ -6,7 +6,7 @@ from core.api.deps import get_current_user_context
 from core.db import models, crud
 from tests.conftest import _current_session
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 def auth():
     return {"x-auth-request-email": "auditor@example.com", "x-auth-request-user": "Auditor"}

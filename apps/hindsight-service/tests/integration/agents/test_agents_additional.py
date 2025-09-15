@@ -4,11 +4,11 @@ from core.api.main import app as main_app
 
 
 def _headers(user: str):
-    return {"x-auth-request-user": user, "x-auth-request-email": f"{user}@example.com"}
+    return {"x-auth-request-user": user, "x-auth-request-email": f"{user}@example.com", "x-active-scope": "personal"}
 
 
 def test_create_agent_name_conflict_in_scope():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"X-Active-Scope": "personal"})
     h = _headers("agentuser")
     r = client.post("/agents/", json={"agent_name": "Alpha", "description": "a"}, headers=h)
     assert r.status_code == 201
@@ -18,7 +18,7 @@ def test_create_agent_name_conflict_in_scope():
 
 
 def test_agent_scope_change_conflict():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"X-Active-Scope": "personal"})
     h = _headers("scopeuser")
     # Create two personal agents
     r1 = client.post("/agents/", json={"agent_name": "A1", "description": "d"}, headers=h); assert r1.status_code == 201
@@ -26,7 +26,7 @@ def test_agent_scope_change_conflict():
 
 
 def test_agent_create_and_update():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"X-Active-Scope": "personal"})
     h = _headers("agentuser")
     # Create agent
     r = client.post("/agents/", json={"agent_name": "TestAgent", "description": "test agent"}, headers=h)
@@ -39,7 +39,7 @@ def test_agent_create_and_update():
 
 
 def test_get_agents_endpoint():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _headers("agentuser")
     # Create an agent first
     r = client.post("/agents/", json={"agent_name": "ListAgent", "description": "for listing"}, headers=h)
@@ -51,7 +51,7 @@ def test_get_agents_endpoint():
 
 
 def test_get_single_agent_endpoint():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _headers("agentuser")
     # Create an agent first
     r = client.post("/agents/", json={"agent_name": "SingleAgent", "description": "for single get"}, headers=h)

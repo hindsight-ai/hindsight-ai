@@ -8,6 +8,8 @@ from typing import Optional, Tuple, Dict, Any
 from fastapi import Query
 
 from fastapi import Header, HTTPException, status, Depends
+import os
+from sqlalchemy import text as _sql_text
 from sqlalchemy.orm import Session
 
 from core.db.database import get_db
@@ -208,9 +210,12 @@ def ensure_pat_allows_read(current_user: Dict[str, Any], target_org_id=None, *, 
 
 def get_scope_context(
     db: Session = Depends(get_db),
-    # Optional incoming hints
+    # Optional incoming hints (query params)
     scope: Optional[str] = Query(default=None),
     organization_id: Optional[str] = Query(default=None),
+    # Explicit scope headers (preferred when present)
+    x_active_scope: Optional[str] = Header(default=None, alias="X-Active-Scope"),
+    x_organization_id: Optional[str] = Header(default=None, alias="X-Organization-Id"),
     # Headers for PAT or oauth2-proxy
     authorization: Optional[str] = Header(default=None),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
@@ -228,11 +233,13 @@ def get_scope_context(
       Query hints may narrow to organization/public, final filtering enforced by repository layer.
     """
     # Normalize requested scope string
-    requested_scope = (scope or '').strip().lower() or None
+    # Prefer explicit headers if provided; otherwise fall back to query params
+    requested_scope = (x_active_scope or scope or '').strip().lower() or None
     requested_org_uuid = None
-    if organization_id:
+    org_hint = x_organization_id or organization_id
+    if org_hint:
         try:
-            requested_org_uuid = uuid.UUID(str(organization_id))
+            requested_org_uuid = uuid.UUID(str(org_hint))
         except Exception:
             requested_org_uuid = None
 
@@ -264,9 +271,30 @@ def get_scope_context(
         # No org restriction in PAT → accept requested scope when sensible; default to personal
         if requested_scope in {"organization", "public", "personal"}:
             if requested_scope == "organization":
-                return ScopeContext(scope="organization", organization_id=requested_org_uuid)
-            return ScopeContext(scope=requested_scope, organization_id=None)
-        return ScopeContext(scope="personal", organization_id=None)
+                ctx = ScopeContext(scope="organization", organization_id=requested_org_uuid)
+            else:
+                ctx = ScopeContext(scope=requested_scope, organization_id=None)
+        else:
+            ctx = ScopeContext(scope="personal", organization_id=None)
+        # Optionally set RLS GUCs for PAT contexts
+        try:
+            if os.getenv('HINDSIGHT_ENABLE_RLS', 'false').lower() == 'true':
+                try:
+                    db.execute(_sql_text("SET LOCAL hindsight.enable_rls = 'on'"))
+                except Exception:
+                    pass
+                try:
+                    db.execute(_sql_text("SET LOCAL hindsight.user_id = :uid"), {"uid": str(current_user.get('id'))})
+                except Exception:
+                    pass
+                if ctx.scope == 'organization' and ctx.organization_id:
+                    try:
+                        db.execute(_sql_text("SET LOCAL hindsight.org_id = :oid"), {"oid": str(ctx.organization_id)})
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return ctx
 
     # No PAT → try oauth2 headers to decide default
     name, email = resolve_identity_from_headers(
@@ -276,14 +304,37 @@ def get_scope_context(
         x_forwarded_email=x_forwarded_email,
     )
     if requested_scope in {"organization", "public", "personal"}:
-        if requested_scope == "organization":
-            return ScopeContext(scope="organization", organization_id=requested_org_uuid)
-        return ScopeContext(scope=requested_scope, organization_id=None)
+        ctx = ScopeContext(scope="organization", organization_id=requested_org_uuid) if requested_scope == "organization" else ScopeContext(scope=requested_scope, organization_id=None)
+        # We don't have a user id reliably in non-PAT contexts; only set org_id GUC when org scope
+        try:
+            if os.getenv('HINDSIGHT_ENABLE_RLS', 'false').lower() == 'true':
+                try:
+                    db.execute(_sql_text("SET LOCAL hindsight.enable_rls = 'on'"))
+                except Exception:
+                    pass
+                if ctx.scope == 'organization' and ctx.organization_id:
+                    try:
+                        db.execute(_sql_text("SET LOCAL hindsight.org_id = :oid"), {"oid": str(ctx.organization_id)})
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return ctx
 
     # Default based on presence of user identity
     if email:
-        return ScopeContext(scope="personal", organization_id=None)
-    return ScopeContext(scope="public", organization_id=None)
+        ctx = ScopeContext(scope="personal", organization_id=None)
+    else:
+        ctx = ScopeContext(scope="public", organization_id=None)
+    try:
+        if os.getenv('HINDSIGHT_ENABLE_RLS', 'false').lower() == 'true':
+            try:
+                db.execute(_sql_text("SET LOCAL hindsight.enable_rls = 'on'"))
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return ctx
 
 
 def _parse_uuid_maybe(val: Optional[str]):

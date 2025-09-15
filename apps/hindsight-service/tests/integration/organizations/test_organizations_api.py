@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from core.api.main import app
 import uuid
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 
 def auth(email="orguser@example.com", name="OrgUser"):

@@ -4,8 +4,7 @@ import memoryService from '../api/memoryService';
 import agentService from '../api/agentService';
 import notificationService from '../services/notificationService';
 import { Agent } from '../api/agentService';
-
-const API_BASE_URL = '/api';
+import { useOrg } from '../context/OrgContext';
 
 interface AddMemoryBlockModalProps {
   isOpen: boolean;
@@ -43,11 +42,18 @@ const AddMemoryBlockModal: React.FC<AddMemoryBlockModalProps> = ({ isOpen, onClo
   const [availableKeywords, setAvailableKeywords] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const { activeScope, activeOrgId } = useOrg() as any;
+  const [snapshotScope, setSnapshotScope] = useState<'personal' | 'organization' | 'public'>('personal');
+  const [snapshotOrgId, setSnapshotOrgId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       fetchAgents();
       fetchKeywords();
+      try {
+        setSnapshotScope((activeScope as any) || (sessionStorage.getItem('ACTIVE_SCOPE') as any) || 'personal');
+        setSnapshotOrgId(activeOrgId || sessionStorage.getItem('ACTIVE_ORG_ID'));
+      } catch {}
     }
   }, [isOpen]);
 
@@ -111,18 +117,11 @@ const AddMemoryBlockModal: React.FC<AddMemoryBlockModalProps> = ({ isOpen, onClo
       };
 
       console.log('Submitting memory block:', submitData); // Debug log
-      // TODO: Add createMemoryBlock method to memoryService
-      const resp = await fetch(`${API_BASE_URL}/memory-blocks/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submitData),
-        credentials: 'include'
-      });
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`);
-      }
-      await resp.json();
-      console.log('Memory block created successfully'); // Debug log
+      await memoryService.createMemoryBlock(
+        submitData,
+        { scopeOverride: { scope: snapshotScope, organizationId: snapshotOrgId || undefined } }
+      );
+      console.log('Memory block created successfully');
 
       // Show success notification
       notificationService.showSuccess('Memory block created successfully');

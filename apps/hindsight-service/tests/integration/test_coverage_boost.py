@@ -10,7 +10,7 @@ from core.api.main import app as main_app
 
 def test_health_endpoint_coverage():
     """Test health endpoint for basic coverage"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     
     # Test health endpoint
     r = client.get("/health")
@@ -21,7 +21,7 @@ def test_health_endpoint_coverage():
 
 def test_build_info_endpoint_coverage():
     """Test build info endpoint for coverage"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     
     # Test build info
     r = client.get("/build-info")
@@ -32,8 +32,8 @@ def test_build_info_endpoint_coverage():
 
 def test_user_info_endpoint_coverage():
     """Test user info endpoint for coverage"""
-    client = TestClient(main_app)
-    headers = {"x-auth-request-user": "test_user", "x-auth-request-email": "test@example.com"}
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
+    headers = {"x-auth-request-user": "test_user", "x-auth-request-email": "test@example.com", "x-active-scope": "personal"}
     
     # Test user info
     r = client.get("/user-info", headers=headers)
@@ -44,7 +44,7 @@ def test_user_info_endpoint_coverage():
 
 def test_error_handling_coverage():
     """Test error handling paths for coverage"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     
     # Test invalid endpoints for error handling
     r = client.get("/nonexistent-endpoint")
@@ -57,7 +57,7 @@ def test_error_handling_coverage():
 
 def test_llm_endpoints_coverage():
     """Test LLM-related endpoints for coverage (without mocking)"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     headers = {"x-auth-request-user": "llm_test", "x-auth-request-email": "llm@example.com"}
     
     # Create agent first
@@ -80,7 +80,7 @@ def test_llm_endpoints_coverage():
 
 def test_pagination_coverage():
     """Test pagination logic for coverage"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     headers = {"x-auth-request-user": "pagination_test", "x-auth-request-email": "page@example.com"}
     
     # Test pagination parameters
@@ -98,7 +98,7 @@ def test_pagination_coverage():
 
 def test_search_error_handling():
     """Test search error handling for coverage"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     headers = {"x-auth-request-user": "search_test", "x-auth-request-email": "search@example.com"}
     
     # Test empty search
@@ -118,7 +118,7 @@ def test_search_error_handling():
 
 def test_uuid_validation_coverage():
     """Test UUID validation paths for coverage"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     headers = {"x-auth-request-user": "uuid_test", "x-auth-request-email": "uuid@example.com"}
     
     # Test invalid UUIDs in various endpoints
@@ -139,7 +139,7 @@ def test_uuid_validation_coverage():
 
 def test_content_type_coverage():
     """Test different content types for coverage"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     headers = {"x-auth-request-user": "content_test", "x-auth-request-email": "content@example.com"}
     
     # Test POST with invalid content type
@@ -209,7 +209,7 @@ def test_middleware_coverage():
     auth_headers = {"x-auth-request-user": "large_test", "x-auth-request-email": "large@example.com"}
     r = client.post("/memory-blocks/", json=large_data, headers=auth_headers)
     # Should handle large requests
-    assert r.status_code in [200, 201, 413, 422]
+    assert r.status_code in [200, 201, 400, 413, 422]
 
 
 def test_agents_endpoint_coverage():

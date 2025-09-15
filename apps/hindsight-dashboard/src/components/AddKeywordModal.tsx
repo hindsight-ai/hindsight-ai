@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Portal from './Portal';
 import memoryService from '../api/memoryService';
+import { useOrg } from '../context/OrgContext';
 
 interface AddKeywordModalProps { isOpen: boolean; onClose: () => void; onSuccess?: () => void; }
 
@@ -8,15 +9,21 @@ const AddKeywordModal: React.FC<AddKeywordModalProps> = ({ isOpen, onClose, onSu
   const [keyword, setKeyword] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const { activeScope, activeOrgId } = useOrg() as any;
+  const [snapshotScope, setSnapshotScope] = useState<'personal' | 'organization' | 'public'>('personal');
+  const [snapshotOrgId, setSnapshotOrgId] = useState<string | null>(null);
 
-  useEffect(() => { if (isOpen) { setKeyword(''); setError(null); } }, [isOpen]);
+  useEffect(() => { if (isOpen) { setKeyword(''); setError(null); try { setSnapshotScope((activeScope as any) || (sessionStorage.getItem('ACTIVE_SCOPE') as any) || 'personal'); setSnapshotOrgId(activeOrgId || sessionStorage.getItem('ACTIVE_ORG_ID')); } catch {} } }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault(); e.stopPropagation();
     if (!keyword.trim()) { setError('Keyword cannot be empty'); return; }
     setLoading(true); setError(null);
     try {
-      await memoryService.createKeyword({ keyword: keyword.trim() });
+      await memoryService.createKeyword(
+        { keyword: keyword.trim() },
+        { scopeOverride: { scope: snapshotScope, organizationId: snapshotOrgId || undefined } }
+      );
       setKeyword(''); onClose(); onSuccess?.();
     } catch (err) {
       console.error('Failed to create keyword:', err);

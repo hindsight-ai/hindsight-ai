@@ -5,7 +5,11 @@ from core.db import models
 
 def seed_blocks(db):
     # create an agent to satisfy NOT NULL agent_id constraint
-    agent = models.Agent(agent_name="PruneAgent", visibility_scope="personal")
+    # create owner and agent to satisfy personal-owner DB constraint
+    owner = models.User(email=f"prune_owner_{uuid.uuid4().hex}@example.com", display_name="PruneOwner")
+    db.add(owner)
+    db.flush()
+    agent = models.Agent(agent_name="PruneAgent", visibility_scope="personal", owner_user_id=owner.id)
     db.add(agent)
     db.commit()
     db.refresh(agent)
@@ -15,6 +19,7 @@ def seed_blocks(db):
             visibility_scope="personal",
             agent_id=agent.agent_id,
             conversation_id=uuid.uuid4(),
+            owner_user_id=owner.id,
         )
         db.add(mb)
     db.commit()

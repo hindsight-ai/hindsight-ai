@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 from core.api.main import app
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 def auth(email="comp@example.com", name="Comp"):
     return {"x-auth-request-email": email, "x-auth-request-user": name}

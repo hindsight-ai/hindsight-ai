@@ -10,7 +10,11 @@ import types
 def test_compression_service_no_api_key_returns_error(db_session: Session):
     # Create agent and memory block
     agent_id = uuid.uuid4()
-    agent = models.Agent(agent_id=agent_id, agent_name="Compress Agent")
+    # assign owner to satisfy personal-owner DB constraint
+    owner = models.User(email=f"cmp_owner_{uuid.uuid4().hex}@example.com", display_name="CmpOwner")
+    db_session.add(owner)
+    db_session.flush()
+    agent = models.Agent(agent_id=agent_id, agent_name="Compress Agent", owner_user_id=owner.id)
     db_session.add(agent)
     mb = models.MemoryBlock(
         id=uuid.uuid4(),
@@ -18,6 +22,8 @@ def test_compression_service_no_api_key_returns_error(db_session: Session):
         conversation_id=uuid.uuid4(),
         content="Some detailed content about system performance and latency issues.",
         lessons_learned="Monitor query plans and add proper indexes",
+        visibility_scope="personal",
+        owner_user_id=owner.id,
     )
     db_session.add(mb)
     db_session.commit()
@@ -31,7 +37,10 @@ def test_compression_service_no_api_key_returns_error(db_session: Session):
 
 def test_compression_prompt_generation_structure(db_session: Session):
     agent_id = uuid.uuid4()
-    agent = models.Agent(agent_id=agent_id, agent_name="Prompt Agent")
+    owner = models.User(email=f"prompt_owner_{uuid.uuid4().hex}@example.com", display_name="PromptOwner")
+    db_session.add(owner)
+    db_session.flush()
+    agent = models.Agent(agent_id=agent_id, agent_name="Prompt Agent", owner_user_id=owner.id)
     db_session.add(agent)
     mb = models.MemoryBlock(
         id=uuid.uuid4(),
@@ -39,6 +48,8 @@ def test_compression_prompt_generation_structure(db_session: Session):
         conversation_id=uuid.uuid4(),
         content="Original content with multiple ideas and insights for compression.",
         lessons_learned="We learned that batching improves throughput",
+        visibility_scope="personal",
+        owner_user_id=owner.id,
     )
     db_session.add(mb)
     db_session.commit()
@@ -109,7 +120,10 @@ def _install_mock_gemini(success: bool = True, malformed: bool = False, shorter_
 def test_compression_success_path(db_session: Session):
     # Arrange original memory block
     agent_id = uuid.uuid4()
-    agent = models.Agent(agent_id=agent_id, agent_name="Success Agent")
+    owner = models.User(email=f"succ_owner_{uuid.uuid4().hex}@example.com", display_name="SuccOwner")
+    db_session.add(owner)
+    db_session.flush()
+    agent = models.Agent(agent_id=agent_id, agent_name="Success Agent", owner_user_id=owner.id)
     db_session.add(agent)
     content = "This is the original verbose content with many repeated details." * 2
     lessons = "Original lessons learned include optimizing queries and caching." * 2
@@ -119,6 +133,8 @@ def test_compression_success_path(db_session: Session):
         conversation_id=uuid.uuid4(),
         content=content,
         lessons_learned=lessons,
+        visibility_scope="personal",
+        owner_user_id=owner.id,
     )
     db_session.add(mb)
     db_session.commit()
@@ -143,7 +159,10 @@ def test_compression_success_path(db_session: Session):
 
 def test_compression_parse_failure_returns_error(db_session: Session):
     agent_id = uuid.uuid4()
-    agent = models.Agent(agent_id=agent_id, agent_name="Parse Agent")
+    owner = models.User(email=f"parse_owner_{uuid.uuid4().hex}@example.com", display_name="ParseOwner")
+    db_session.add(owner)
+    db_session.flush()
+    agent = models.Agent(agent_id=agent_id, agent_name="Parse Agent", owner_user_id=owner.id)
     db_session.add(agent)
     mb = models.MemoryBlock(
         id=uuid.uuid4(),
@@ -151,6 +170,8 @@ def test_compression_parse_failure_returns_error(db_session: Session):
         conversation_id=uuid.uuid4(),
         content="Content to trigger parse failure",
         lessons_learned="Lessons here",
+        visibility_scope="personal",
+        owner_user_id=owner.id,
     )
     db_session.add(mb)
     db_session.commit()

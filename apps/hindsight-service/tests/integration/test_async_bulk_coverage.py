@@ -13,7 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from core.api.main import app
 from core.async_bulk_operations import BulkOperationTask
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 class TestAsyncBulkOperationsCoverage:
     """Tests targeting specific uncovered lines in async_bulk_operations.py"""

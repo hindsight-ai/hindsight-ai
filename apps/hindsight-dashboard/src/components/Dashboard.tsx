@@ -37,6 +37,15 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, []);
 
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      fetchDashboardData();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, []);
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);

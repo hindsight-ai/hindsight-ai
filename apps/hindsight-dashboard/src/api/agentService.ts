@@ -50,14 +50,16 @@ const agentService = {
     return response.json();
   },
 
-  createAgent: async (data: Partial<Agent>): Promise<Agent> => {
+  createAgent: async (data: Partial<Agent>, opts?: { scopeOverride?: { scope: 'personal' | 'organization' | 'public'; organizationId?: string | null } }): Promise<Agent> => {
     if (isGuest()) { notificationService.showWarning('Guest mode is read-only. Sign in to create agents.'); throw new Error('Guest mode read-only'); }
     // Inject current org scope into create requests
     let payload: Partial<Agent> = { ...data };
     let searchParams: Record<string, any> | undefined = undefined;
     try {
-      const scope = sessionStorage.getItem('ACTIVE_SCOPE') || undefined;
-      const orgId = sessionStorage.getItem('ACTIVE_ORG_ID') || undefined;
+      const overrideScope = opts?.scopeOverride?.scope;
+      const overrideOrg = opts?.scopeOverride?.organizationId || undefined;
+      const scope = overrideScope || (sessionStorage.getItem('ACTIVE_SCOPE') || undefined);
+      const orgId = overrideScope ? (overrideScope === 'organization' ? (overrideOrg || undefined) : undefined) : (sessionStorage.getItem('ACTIVE_ORG_ID') || undefined);
       if (scope) {
         payload.visibility_scope = scope as any;
         // Also include as query params for backends that read scope from query on writes

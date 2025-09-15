@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from core.api.main import app
 from core.db import models
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 class TestBulkOperationsCoverage:
     """Tests targeting specific uncovered lines in bulk_operations.py"""

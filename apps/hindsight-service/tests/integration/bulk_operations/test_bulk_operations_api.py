@@ -31,7 +31,7 @@ def get_user(db, email):
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    return TestClient(app, headers={"X-Active-Scope": "personal"})
 
 
 def test_bulk_move_dry_run_and_start(client):

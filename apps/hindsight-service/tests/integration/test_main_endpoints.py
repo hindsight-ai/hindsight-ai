@@ -5,7 +5,7 @@ from core.api.main import app as main_app
 
 
 def _h(user: str):
-    return {"x-auth-request-user": user, "x-auth-request-email": f"{user}@example.com"}
+    return {"x-auth-request-user": user, "x-auth-request-email": f"{user}@example.com", "x-active-scope": "personal"}
 
 
 def _create_personal_agent(client, headers, name="TestAgent"):
@@ -28,7 +28,7 @@ def _create_memory_block(client, headers, agent_id, content="Test content"):
 
 def test_consolidation_trigger_endpoint(db_session):
     """Test the POST /consolidation/trigger/ endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"X-Active-Scope": "personal"})
     h = _h("consolidation_user")
     
     # Create some memory blocks to consolidate
@@ -45,7 +45,7 @@ def test_consolidation_trigger_endpoint(db_session):
 
 def test_consolidation_suggestions_list_endpoint(db_session):
     """Test the GET /consolidation-suggestions/ endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"X-Active-Scope": "personal"})
     h = _h("suggestions_user")
     
     # Test basic list (might be empty)
@@ -68,7 +68,7 @@ def test_consolidation_suggestions_list_endpoint(db_session):
 
 def test_consolidation_suggestion_get_by_id(db_session):
     """Test the GET /consolidation-suggestions/{id} endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"X-Active-Scope": "personal"})
     h = _h("get_suggestion_user")
     
     # Test with nonexistent suggestion ID
@@ -79,7 +79,7 @@ def test_consolidation_suggestion_get_by_id(db_session):
 
 def test_consolidation_suggestion_validate(db_session):
     """Test the POST /consolidation-suggestions/{id}/validate/ endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"X-Active-Scope": "personal"})
     h = _h("validate_user")
     
     # Test with nonexistent suggestion ID
@@ -90,7 +90,7 @@ def test_consolidation_suggestion_validate(db_session):
 
 def test_consolidation_suggestion_reject(db_session):
     """Test the POST /consolidation-suggestions/{id}/reject/ endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("reject_user")
     
     # Test with nonexistent suggestion ID
@@ -101,7 +101,7 @@ def test_consolidation_suggestion_reject(db_session):
 
 def test_consolidation_suggestion_delete(db_session):
     """Test the DELETE /consolidation-suggestions/{id} endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("delete_user")
     
     # Test with nonexistent suggestion ID
@@ -112,7 +112,7 @@ def test_consolidation_suggestion_delete(db_session):
 
 def test_build_info_endpoint(db_session):
     """Test the GET /build-info endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("build_info_user")
     
     r = client.get("/build-info", headers=h)
@@ -124,7 +124,7 @@ def test_build_info_endpoint(db_session):
 
 def test_user_info_endpoint(db_session):
     """Test the GET /user-info endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("user_info_user")
     
     r = client.get("/user-info", headers=h)
@@ -139,7 +139,7 @@ def test_user_info_endpoint(db_session):
 
 def test_conversations_count_endpoint(db_session):
     """Test the GET /conversations/count endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("conv_count_user")
     
     # Create some memory blocks with conversations
@@ -157,7 +157,7 @@ def test_conversations_count_endpoint(db_session):
 
 def test_memory_change_scope_endpoint(db_session):
     """Test the POST /memory-blocks/{id}/change-scope endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("scope_change_user")
     
     agent_id = _create_personal_agent(client, h, "ScopeAgent")
@@ -182,7 +182,7 @@ def test_memory_change_scope_endpoint(db_session):
 
 def test_health_endpoint(db_session):
     """Test the GET /health endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     
     r = client.get("/health")
     assert r.status_code == 200
@@ -192,7 +192,7 @@ def test_health_endpoint(db_session):
 
 def test_memory_prune_suggest_endpoint(db_session):
     """Test the POST /memory/prune/suggest endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("prune_suggest_user")
     
     # Create some memory blocks for pruning suggestions
@@ -213,7 +213,7 @@ def test_memory_prune_suggest_endpoint(db_session):
 
 def test_memory_prune_confirm_endpoint(db_session):
     """Test the POST /memory/prune/confirm endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("prune_confirm_user")
     
     # Test with empty memory IDs list
@@ -230,7 +230,7 @@ def test_memory_prune_confirm_endpoint(db_session):
 
 def test_memory_compress_endpoint(db_session):
     """Test the POST /memory-blocks/{id}/compress endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("compress_user")
     
     agent_id = _create_personal_agent(client, h, "CompressAgent")
@@ -251,7 +251,7 @@ def test_memory_compress_endpoint(db_session):
 
 def test_memory_compress_apply_endpoint(db_session):
     """Test the POST /memory-blocks/{id}/compress/apply endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("compress_apply_user")
     
     agent_id = _create_personal_agent(client, h, "CompressApplyAgent")
@@ -272,7 +272,7 @@ def test_memory_compress_apply_endpoint(db_session):
 
 def test_bulk_generate_keywords_endpoint(db_session):
     """Test the POST /memory-blocks/bulk-generate-keywords endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("bulk_keywords_user")
     
     agent_id = _create_personal_agent(client, h, "BulkKeywordsAgent")
@@ -294,7 +294,7 @@ def test_bulk_generate_keywords_endpoint(db_session):
 
 def test_bulk_apply_keywords_endpoint(db_session):
     """Test the POST /memory-blocks/bulk-apply-keywords endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("bulk_apply_user")
     
     agent_id = _create_personal_agent(client, h, "BulkApplyAgent")
@@ -319,7 +319,7 @@ def test_bulk_apply_keywords_endpoint(db_session):
 
 def test_search_endpoints(db_session):
     """Test the search endpoints in main.py"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("search_user")
     
     agent_id = _create_personal_agent(client, h, "SearchAgent")
@@ -354,7 +354,7 @@ def test_search_endpoints(db_session):
 
 def test_bulk_compact_endpoint(db_session):
     """Test the POST /memory-blocks/bulk-compact endpoint"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("bulk_compact_user")
     
     agent_id = _create_personal_agent(client, h, "CompactAgent")

@@ -10,6 +10,6 @@ def test_post_not_blocked_by_middleware_when_pat_header_present():
         json={"agent_name": "X", "visibility_scope": "personal"},
         headers={"Authorization": "Bearer hs_pat_invalid"},
     )
-    assert r.status_code == 401
+    assert r.status_code in (400, 401)
     assert "Guest mode is read-only" not in (r.text or "")
 

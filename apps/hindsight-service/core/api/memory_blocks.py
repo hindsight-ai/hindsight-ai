@@ -46,15 +46,16 @@ def create_memory_block_endpoint(
     memory_block: schemas.MemoryBlockCreate,
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context_or_pat),
+    scope_ctx = Depends(get_scoped_user_and_context),
 ):
     agent = crud.get_agent(db, agent_id=memory_block.agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     u, current_user = user_context
+    _user2, _current2, sc = scope_ctx
     memberships_by_org = current_user.get('memberships_by_org', {})
-    _scope_in = memory_block.visibility_scope or SCOPE_PERSONAL
-    scope = getattr(_scope_in, 'value', _scope_in)
-    org_id = str(memory_block.organization_id) if getattr(memory_block, 'organization_id', None) else None
+    scope = sc.scope or SCOPE_PERSONAL
+    org_id = str(sc.organization_id) if sc.organization_id and scope == SCOPE_ORGANIZATION else None
     if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
         raise HTTPException(status_code=403, detail="Only superadmin can create public data")
     if scope == SCOPE_ORGANIZATION:
@@ -69,7 +70,7 @@ def create_memory_block_endpoint(
     mb = memory_block.model_copy(update={
         'visibility_scope': scope,
         'owner_user_id': u.id if scope == SCOPE_PERSONAL else None,
-        'organization_id': memory_block.organization_id if scope == SCOPE_ORGANIZATION else None,
+        'organization_id': sc.organization_id if scope == SCOPE_ORGANIZATION else None,
     })
     db_memory_block = crud.create_memory_block(db=db, memory_block=mb)
     return db_memory_block

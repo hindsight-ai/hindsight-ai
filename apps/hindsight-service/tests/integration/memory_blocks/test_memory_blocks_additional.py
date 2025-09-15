@@ -4,11 +4,11 @@ from core.api.main import app as main_app
 
 
 def _headers(user: str):
-    return {"x-auth-request-user": user, "x-auth-request-email": f"{user}@example.com"}
+    return {"x-auth-request-user": user, "x-auth-request-email": f"{user}@example.com", "x-active-scope": "personal"}
 
 
 def test_memory_block_create_requires_agent():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _headers("user")
     # Try to create memory block without agent
     r = client.post("/memory-blocks/", json={"content": "test content", "conversation_id": str(uuid.uuid4())}, headers=h)
@@ -17,7 +17,7 @@ def test_memory_block_create_requires_agent():
 
 
 def test_memory_block_update():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _headers("user")
     # Create agent first
     r = client.post("/agents/", json={"agent_name": "MemBlockAgent", "description": "for memory blocks"}, headers=h)
@@ -46,7 +46,8 @@ def test_crud_create_and_get_memory_block(db_session):
         content="test content",
         agent_id=agent.agent_id,
         conversation_id=uuid.uuid4(),
-        visibility_scope="personal"
+        visibility_scope="personal",
+        owner_user_id=user.id
     )
     db.add(block); db.commit(); db.refresh(block)
     # Get memory block
@@ -56,7 +57,7 @@ def test_crud_create_and_get_memory_block(db_session):
 
 
 def test_memory_block_get_single():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _headers("user")
     # Create agent first
     r = client.post("/agents/", json={"agent_name": "SingleMemAgent", "description": "for single memory block"}, headers=h)
@@ -73,7 +74,7 @@ def test_memory_block_get_single():
 
 
 def test_memory_block_update_2():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _headers("user")
     # Create agent first
     r = client.post("/agents/", json={"agent_name": "UpdateMemAgent", "description": "for memory block update"}, headers=h)
@@ -90,7 +91,7 @@ def test_memory_block_update_2():
 
 
 def test_memory_block_archive():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _headers("user")
     # Create agent first
     r = client.post("/agents/", json={"agent_name": "ArchiveMemAgent", "description": "for memory block archive"}, headers=h)

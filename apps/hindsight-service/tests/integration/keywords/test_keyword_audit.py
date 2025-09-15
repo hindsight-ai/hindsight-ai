@@ -4,11 +4,11 @@ from core.api.main import app
 from unittest.mock import patch
 from core.db import models, crud
 
-client = TestClient(app)
+client = TestClient(app, headers={"x-active-scope": "personal"})
 
 
 def auth():
-    return {"x-auth-request-email": "kwtester@example.com", "x-auth-request-user": "Kw Tester"}
+    return {"x-auth-request-email": "kwtester@example.com", "x-auth-request-user": "Kw Tester", "x-active-scope": "personal"}
 
 
 def _setup_user_and_org(db):
@@ -31,23 +31,34 @@ def test_keyword_create_update_delete_audits(db_session):
     create_payload = {"keyword_text": "alpha", "visibility_scope": "organization", "organization_id": str(org_id)}
     # Patch membership lookup to show user as owner (write perms)
     # Patch in the module where it's imported by the active endpoints (main)
-    with patch("core.api.main.get_user_memberships") as mock_memberships:
+    with patch("core.api.deps.get_user_memberships") as mock_memberships:
         mock_memberships.return_value = [{"organization_id": str(org_id), "role": "owner", "can_write": True}]
-        r = client.post("/keywords/", json=create_payload, headers=auth())
+        # Ensure request scope is organization so the endpoint creates an org-scoped keyword
+        r = client.post(
+            "/keywords/",
+            json=create_payload,
+            headers={**auth(), "x-active-scope": "organization", "x-organization-id": str(org_id)},
+        )
     assert r.status_code == 201, r.text
     kw_id = r.json()["keyword_id"]
 
     # Update keyword text
     update_payload = {"keyword_text": "alpha2"}
-    with patch("core.api.main.get_user_memberships") as mock_memberships:
+    with patch("core.api.deps.get_user_memberships") as mock_memberships:
         mock_memberships.return_value = [{"organization_id": str(org_id), "role": "owner", "can_write": True}]
-        r2 = client.put(f"/keywords/{kw_id}", json=update_payload, headers=auth())
+        r2 = client.put(
+            f"/keywords/{kw_id}",
+            json=update_payload,
+            headers={**auth(), "x-active-scope": "organization", "x-organization-id": str(org_id)},
+        )
     assert r2.status_code == 200, r2.text
 
     # Delete keyword
-    with patch("core.api.main.get_user_memberships") as mock_memberships:
+    with patch("core.api.deps.get_user_memberships") as mock_memberships:
         mock_memberships.return_value = [{"organization_id": str(org_id), "role": "owner", "can_write": True}]
-        r3 = client.delete(f"/keywords/{kw_id}", headers=auth())
+        r3 = client.delete(
+            f"/keywords/{kw_id}", headers={**auth(), "x-active-scope": "organization", "x-organization-id": str(org_id)}
+        )
     assert r3.status_code == 204, r3.text
 
     # Verify audit logs

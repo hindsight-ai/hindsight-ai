@@ -166,6 +166,19 @@ const MemoryBlocksPage: React.FC = () => {
     fetchMemoryBlocks();
   }, [pagination.page]);
 
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      try {
+        setPagination(prev => ({ ...prev, page: 1 }));
+      } catch {}
+      fetchAgents();
+      fetchMemoryBlocks();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, [fetchAgents, fetchMemoryBlocks]);
+
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);

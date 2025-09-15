@@ -4,6 +4,7 @@ import tokenService, { Token } from '../api/tokenService';
 import organizationService, { Organization } from '../api/organizationService';
 import notificationService from '../services/notificationService';
 import { CopyToClipboardButton } from './CopyToClipboardButton';
+import { apiFetch } from '../api/http';
 
 const ProfilePage: React.FC = () => {
   const { user, refresh } = useAuth();
@@ -48,11 +49,10 @@ const ProfilePage: React.FC = () => {
     setSaving(true);
     setMessage(null);
     try {
-      const resp = await fetch('/api/users/me', {
+      const resp = await apiFetch('/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ display_name: displayName }),
-        credentials: 'include',
       });
       if (!resp.ok) {
         const text = await resp.text();

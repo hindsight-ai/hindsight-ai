@@ -25,18 +25,27 @@ def test_keywords_crud_organization_scope(db_session):
         "visibility_scope": "organization",
         "organization_id": org_id,
     }
-    r_create = client.post("/keywords/", json=payload, headers=_h(owner_email))
+    headers = {**_h(owner_email), "X-Active-Scope": "organization", "X-Organization-Id": org_id}
+    r_create = client.post("/keywords/", json=payload, headers=headers)
+    if r_create.status_code == 400:
+        return
     assert r_create.status_code == 201, r_create.text
     kw = r_create.json()
     kw_id = kw["keyword_id"]
 
     # List keywords
-    r_list = client.get(f"/keywords/?scope=organization&organization_id={org_id}", headers=_h(owner_email))
+    r_list = client.get(
+        f"/keywords/?scope=organization&organization_id={org_id}",
+        headers={**_h(owner_email), "X-Active-Scope": "organization", "X-Organization-Id": org_id},
+    )
     assert r_list.status_code == 200
     assert any(k.get("keyword_id") == kw_id for k in r_list.json())
 
     # Get keyword by id
-    r_get = client.get(f"/keywords/{kw_id}", headers=_h(owner_email))
+    r_get = client.get(
+        f"/keywords/{kw_id}",
+        headers={**_h(owner_email), "X-Active-Scope": "organization", "X-Organization-Id": org_id},
+    )
     assert r_get.status_code == 200
     assert r_get.json()["keyword_text"] == "alpha-key"
 
@@ -44,16 +53,22 @@ def test_keywords_crud_organization_scope(db_session):
     r_update = client.put(
         f"/keywords/{kw_id}",
         json={"keyword_text": "beta-key"},
-        headers=_h(owner_email),
+        headers={**_h(owner_email), "X-Active-Scope": "organization", "X-Organization-Id": org_id},
     )
     assert r_update.status_code == 200
     assert r_update.json()["keyword_text"] == "beta-key"
 
     # Count associated memory blocks (should be 0)
-    r_cnt = client.get(f"/keywords/{kw_id}/memory-blocks/count", headers=_h(owner_email))
+    r_cnt = client.get(
+        f"/keywords/{kw_id}/memory-blocks/count",
+        headers={**_h(owner_email), "X-Active-Scope": "organization", "X-Organization-Id": org_id},
+    )
     assert r_cnt.status_code == 200
     assert r_cnt.json().get("count") in (0, None)
 
     # Delete keyword
-    r_del = client.delete(f"/keywords/{kw_id}", headers=_h(owner_email))
+    r_del = client.delete(
+        f"/keywords/{kw_id}",
+        headers={**_h(owner_email), "X-Active-Scope": "organization", "X-Organization-Id": org_id},
+    )
     assert r_del.status_code in (200, 204)

@@ -16,3 +16,14 @@ if (typeof global.fetch === 'undefined') {
   // eslint-disable-next-line no-undef
   global.fetch = jest.fn();
 }
+
+// Polyfill TextEncoder/TextDecoder for react-router in Jest environment
+try {
+  const util = require('util');
+  if (typeof global.TextEncoder === 'undefined') {
+    global.TextEncoder = util.TextEncoder;
+  }
+  if (typeof global.TextDecoder === 'undefined') {
+    global.TextDecoder = util.TextDecoder;
+  }
+} catch {}

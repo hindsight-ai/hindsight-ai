@@ -5,7 +5,7 @@ from core.services.search_service import SearchService
 from core.db import models
 
 
-def seed_blocks(db: Session, agent_id):
+def seed_blocks(db: Session, agent_id, owner_id):
     contents = [
         "First block about python testing and coverage.",
         "Second block about search ranking algorithms.",
@@ -19,6 +19,8 @@ def seed_blocks(db: Session, agent_id):
             conversation_id=uuid.uuid4(),
             content=text,
             lessons_learned="",
+            visibility_scope="personal",
+            owner_user_id=owner_id,
         )
         db.add(mb)
         blocks.append(mb)
@@ -28,11 +30,15 @@ def seed_blocks(db: Session, agent_id):
 
 def test_hybrid_search_combines_scores(db_session: Session):
     agent_id = uuid.uuid4()
-    agent = models.Agent(agent_id=agent_id, agent_name="Hybrid Agent")
+    # create owner and agent to satisfy personal-owner constraint
+    owner = models.User(email=f"hybrid_owner_{uuid.uuid4().hex}@example.com", display_name="HybridOwner")
+    db_session.add(owner)
+    db_session.flush()
+    agent = models.Agent(agent_id=agent_id, agent_name="Hybrid Agent", owner_user_id=owner.id)
     db_session.add(agent)
     db_session.flush()
 
-    seed_blocks(db_session, agent_id)
+    seed_blocks(db_session, agent_id, owner.id)
     db_session.commit()
 
     service = SearchService()

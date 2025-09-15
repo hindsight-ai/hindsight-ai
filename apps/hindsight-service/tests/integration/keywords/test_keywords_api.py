@@ -2,7 +2,7 @@ import uuid
 from fastapi.testclient import TestClient
 from core.api.main import app  # corrected import path
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 # Helper to build auth headers
 

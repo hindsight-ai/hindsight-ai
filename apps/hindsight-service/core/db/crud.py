@@ -13,7 +13,7 @@ from .repositories import bulk_ops as repo_bulk
 from .repositories import audits as repo_audits
 import uuid
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import or_, and_, func, Text # Import func, and_, and Text
+from sqlalchemy import or_, and_, func, Text, cast, exists, select # Import func, and_, Text, cast, exists, select
 from .repositories import memory_blocks as repo_memories
 from typing import List, Optional
 from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
@@ -440,6 +440,62 @@ def get_consolidation_suggestions(db: Session, status: Optional[str] = None, gro
     
     return suggestions, total_items
 
+
+def get_consolidation_suggestions_scoped(
+    db: Session,
+    *,
+    status: Optional[str] = None,
+    group_id: Optional[uuid.UUID] = None,
+    skip: int = 0,
+    limit: int = 100,
+    scope_ctx: Optional[scope_utils.ScopeContext] = None,
+    current_user: Optional[dict] = None,
+):
+    """List consolidation suggestions with SQL-level scope narrowing via EXISTS.
+
+    This reduces cross-scope noise by ensuring at least one original memory
+    matches the active scope. Membership checks (can_read) should still be
+    enforced by callers at the API layer.
+    """
+    # Build a subquery that selects original memory ids as UUIDs
+    ids_subq = func.jsonb_array_elements_text(models.ConsolidationSuggestion.original_memory_ids)
+    ids_uuid = cast(ids_subq, models.UUIDType if hasattr(models, 'UUIDType') else Text)  # fallback
+    # SQLAlchemy may not have a UUIDType on models; cast to TEXT and compare via cast on column side
+
+    mb = models.MemoryBlock
+    # Build EXISTS predicate for scope
+    mem_ids_subq = cast(func.jsonb_array_elements_text(models.ConsolidationSuggestion.original_memory_ids), Text).label('mid')
+    # Map scope filters
+    filters = []
+    scope = getattr(scope_ctx, 'scope', None) if scope_ctx else None
+    if scope == 'organization' and getattr(scope_ctx, 'organization_id', None):
+        filters.append(mb.organization_id == scope_ctx.organization_id)
+        filters.append(mb.visibility_scope == 'organization')
+    elif scope == 'personal' and current_user and current_user.get('id'):
+        filters.append(mb.owner_user_id == current_user.get('id'))
+        filters.append(mb.visibility_scope == 'personal')
+    elif scope == 'public':
+        filters.append(mb.visibility_scope == 'public')
+
+    exists_cond = exists(
+        select(1).
+        where(
+            mb.id.in_(
+                select(cast(func.jsonb_array_elements_text(models.ConsolidationSuggestion.original_memory_ids), mb.id.type))
+            ),
+            *filters
+        )
+    )
+
+    query = db.query(models.ConsolidationSuggestion).filter(exists_cond)
+    if status:
+        query = query.filter(models.ConsolidationSuggestion.status == status)
+    if group_id:
+        query = query.filter(models.ConsolidationSuggestion.group_id == group_id)
+    total_items = query.count()
+    suggestions = query.offset(skip).limit(limit).all()
+    return suggestions, total_items
+
 def update_consolidation_suggestion(db: Session, suggestion_id: uuid.UUID, suggestion: schemas.ConsolidationSuggestionUpdate):
     db_suggestion = db.query(models.ConsolidationSuggestion).filter(models.ConsolidationSuggestion.suggestion_id == suggestion_id).first()
     if db_suggestion:
@@ -484,14 +540,23 @@ def apply_consolidation(db: Session, suggestion_id: uuid.UUID):
                     conversation_id=first_memory_block.conversation_id,
                     content=db_suggestion.suggested_content,
                     lessons_learned=db_suggestion.suggested_lessons_learned,
-                    metadata_col={"consolidated_from": [str(i) for i in norm_ids]}
+                    metadata_col={"consolidated_from": [str(i) for i in norm_ids]},
+                    visibility_scope=getattr(first_memory_block, 'visibility_scope', 'personal'),
+                    owner_user_id=getattr(first_memory_block, 'owner_user_id', None),
+                    organization_id=getattr(first_memory_block, 'organization_id', None),
                 )
                 db.add(new_memory_block)
                 db.flush()
 
                 # Add keywords to the new memory block
                 for keyword_text in db_suggestion.suggested_keywords or []:
-                    keyword = _get_or_create_keyword(db, keyword_text)
+                    keyword = _get_or_create_keyword(
+                        db,
+                        keyword_text,
+                        visibility_scope=new_memory_block.visibility_scope,
+                        owner_user_id=new_memory_block.owner_user_id,
+                        organization_id=new_memory_block.organization_id,
+                    )
                     db_mbk = models.MemoryBlockKeyword(memory_id=new_memory_block.id, keyword_id=keyword.keyword_id)
                     db.add(db_mbk)
 

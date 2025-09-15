@@ -155,4 +155,6 @@ def db(db_session):
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    # Provide a default active scope header to tests to avoid many tests failing
+    # with 'scope_required' when they don't set an explicit scope.
+    return TestClient(app, headers={"X-Active-Scope": "personal"})

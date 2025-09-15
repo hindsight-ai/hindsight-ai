@@ -11,7 +11,7 @@ from core.utils.role_permissions import get_role_permissions
 @pytest.fixture
 def client():
     """Test client fixture."""
-    return TestClient(app)
+    return TestClient(app, headers={"X-Active-Scope": "personal"})
 
 
 # Use the shared transactional db_session from tests/conftest.py

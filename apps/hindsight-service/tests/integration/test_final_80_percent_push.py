@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from core.api.main import app
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 class TestFinalCoveragePush:
     """Strategic tests to reach 80% coverage target"""

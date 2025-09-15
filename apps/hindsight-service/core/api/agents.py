@@ -33,13 +33,14 @@ def create_agent_endpoint(
     agent: schemas.AgentCreate,
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context_or_pat),
+    scope_ctx = Depends(get_scoped_user_and_context),
 ):
     u, current_user = user_context
-
-    _scope_in = getattr(agent, 'visibility_scope', SCOPE_PERSONAL) or SCOPE_PERSONAL
-    scope = getattr(_scope_in, 'value', _scope_in)
+    _user2, _current2, sc = scope_ctx
+    # Derive effective scope from context (headers/query), ignore conflicting body hints
+    scope = sc.scope or SCOPE_PERSONAL
     owner_user_id = u.id if scope == SCOPE_PERSONAL else None
-    org_id = getattr(agent, 'organization_id', None)
+    org_id = sc.organization_id if scope == SCOPE_ORGANIZATION else None
     if scope == SCOPE_ORGANIZATION:
         by_org = current_user.get('memberships_by_org', {})
         key = str(org_id) if org_id else None

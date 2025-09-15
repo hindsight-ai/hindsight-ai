@@ -8,7 +8,7 @@ def _seed_memory_block(db, content="Base Content"):
     db.add(user); db.commit(); db.refresh(user)
     agent = models.Agent(agent_name=f"CAgent {uuid.uuid4().hex[:5]}", visibility_scope="personal", owner_user_id=user.id)
     db.add(agent); db.commit(); db.refresh(agent)
-    mb = models.MemoryBlock(agent_id=agent.agent_id, conversation_id=uuid.uuid4(), content=content, lessons_learned="LL")
+    mb = models.MemoryBlock(agent_id=agent.agent_id, conversation_id=uuid.uuid4(), content=content, lessons_learned="LL", visibility_scope="personal", owner_user_id=user.id)
     db.add(mb); db.commit(); db.refresh(mb)
     return mb, agent
 

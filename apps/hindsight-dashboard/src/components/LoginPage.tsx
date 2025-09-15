@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import notificationService from '../services/notificationService';
+import { apiFetch } from '../api/http';
 
 const LoginPage: React.FC = () => {
   const { enterGuestMode, exitGuestMode } = useAuth();
@@ -16,7 +17,7 @@ const LoginPage: React.FC = () => {
       try { exitGuestMode(); } catch {}
       // Dev experience: try backend dev user; if unavailable, guide the user
       try {
-        const response = await fetch('/api/user-info', { credentials: 'include' });
+        const response = await apiFetch('/user-info');
         if (response.ok) {
           const userInfo = await response.json();
           if (userInfo?.authenticated) {

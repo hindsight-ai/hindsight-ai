@@ -20,12 +20,12 @@ from core.db.scope_utils import (
 
 def _h(user_id_prefix: str) -> dict:
     """Helper to create authentication headers"""
-    return {"x-auth-request-user": user_id_prefix, "x-auth-request-email": f"{user_id_prefix}@example.com"}
+    return {"x-auth-request-user": user_id_prefix, "x-auth-request-email": f"{user_id_prefix}@example.com", "x-active-scope": "personal"}
 
 
 def test_scope_utils_user_scope_filter(db_session):
     """Test user scope filtering"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"X-Active-Scope": "personal"})
     h = _h("scope_test_user")
     
     # Create test agent
@@ -63,7 +63,7 @@ def test_scope_utils_user_scope_filter(db_session):
 
 def test_scope_utils_agent_scope_filter(db_session):
     """Test agent scope filtering functionality"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"X-Active-Scope": "personal"})
     h = _h("agent_scope_user")
     
     # Create multiple agents
@@ -107,7 +107,7 @@ def test_scope_utils_agent_scope_filter(db_session):
 
 def test_scope_utils_org_scope_scenarios(db_session):
     """Test organization scope filtering scenarios"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("org_scope_user")
     
     # Test organization-related endpoints if they exist
@@ -124,7 +124,7 @@ def test_scope_utils_org_scope_scenarios(db_session):
 
 def test_scope_utils_permission_scenarios(db_session):
     """Test permission and access control scenarios"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h1 = _h("permission_user_1")
     h2 = _h("permission_user_2")
     
@@ -161,7 +161,7 @@ def test_scope_utils_permission_scenarios(db_session):
 
 def test_scope_utils_edge_cases(db_session):
     """Test edge cases in scope filtering"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("edge_case_user")
     
     # Test with empty results
@@ -188,7 +188,7 @@ def test_scope_utils_edge_cases(db_session):
 
 def test_scope_utils_search_with_scoping(db_session):
     """Test search functionality with scope filtering"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("search_scope_user")
     
     # Create agent and memory for searching
@@ -232,7 +232,7 @@ def test_scope_utils_search_with_scoping(db_session):
 
 def test_scope_utils_complex_queries(db_session):
     """Test complex query scenarios with scope filtering"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("complex_query_user")
     
     # Create test data
@@ -280,7 +280,7 @@ def test_scope_utils_complex_queries(db_session):
 
 def test_scope_utils_validation_and_security(db_session):
     """Test validation and security aspects of scope filtering"""
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _h("validation_user")
     
     # Test SQL injection attempts (should be prevented by scope filtering)

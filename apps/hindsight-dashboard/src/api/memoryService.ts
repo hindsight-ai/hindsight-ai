@@ -101,6 +101,17 @@ const memoryService = {
     const resp = await apiFetch(`/memory-blocks/${id}`);
     return jsonOrThrow(resp);
   },
+  createMemoryBlock: async (data: Record<string, any>, opts?: { scopeOverride?: { scope: 'personal' | 'organization' | 'public'; organizationId?: string | null } }) => {
+    guardGuest('Sign in to create memory blocks.');
+    const resp = await apiFetch('/memory-blocks/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      ensureTrailingSlash: true,
+      scopeOverride: opts?.scopeOverride,
+    });
+    return jsonOrThrow(resp);
+  },
   updateMemoryBlock: async (id: string, data: Partial<MemoryBlock>) => { guardGuest('Sign in to edit memory blocks.'); const resp = await apiFetch(`/memory-blocks/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return jsonOrThrow(resp); },
   archiveMemoryBlock: async (id: string) => { guardGuest('Sign in to archive memory blocks.'); const resp = await apiFetch(`/memory-blocks/${id}/archive`, { method: 'POST' }); return jsonOrThrow(resp); },
   deleteMemoryBlock: async (id: string) => { guardGuest('Sign in to delete memory blocks.'); const resp = await apiFetch(`/memory-blocks/${id}/hard-delete`, { method: 'DELETE' }); if (!resp.ok && resp.status !== 204) { authFail(resp.status); throw new Error(`HTTP error ${resp.status}`); } if (resp.status === 204) { return; } try { return await resp.json(); } catch { return; } },
@@ -111,7 +122,7 @@ const memoryService = {
     return jsonOrThrow(resp);
   },
   getKeywords: async (filters: Record<string, any> = {}) => { const params = new URLSearchParams(filters); const resp = await apiFetch('/keywords/', { ensureTrailingSlash: true, searchParams: params }); return jsonOrThrow(resp); },
-  createKeyword: async (data: Record<string, any>) => { guardGuest('Sign in to create keywords.'); const resp = await apiFetch('/keywords/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return jsonOrThrow(resp); },
+  createKeyword: async (data: Record<string, any>, opts?: { scopeOverride?: { scope: 'personal' | 'organization' | 'public'; organizationId?: string | null } }) => { guardGuest('Sign in to create keywords.'); const resp = await apiFetch('/keywords/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), scopeOverride: opts?.scopeOverride }); return jsonOrThrow(resp); },
   updateKeyword: async (id: string, data: Record<string, any>) => { guardGuest('Sign in to update keywords.'); const resp = await apiFetch(`/keywords/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return jsonOrThrow(resp); },
   deleteKeyword: async (id: string) => { guardGuest('Sign in to delete keywords.'); const resp = await apiFetch(`/keywords/${id}`, { method: 'DELETE' }); return jsonOrThrow(resp); },
   getKeywordMemoryBlocks: async (keywordId: string, skip = 0, limit = 50) => { const params = new URLSearchParams({ skip: String(skip), limit: String(limit) }); const resp = await apiFetch(`/keywords/${keywordId}/memory-blocks/`, { ensureTrailingSlash: true, searchParams: params }); return jsonOrThrow(resp); },

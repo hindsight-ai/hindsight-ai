@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Portal from './Portal';
 import agentService from '../api/agentService';
+import { useOrg } from '../context/OrgContext';
 
 interface AddAgentModalProps {
   isOpen: boolean;
@@ -12,11 +13,19 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
   const [agentName, setAgentName] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const { activeScope, activeOrgId } = useOrg() as any;
+  const [snapshotScope, setSnapshotScope] = useState<'personal' | 'organization' | 'public'>('personal');
+  const [snapshotOrgId, setSnapshotOrgId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setAgentName('');
       setError(null);
+      // Snapshot scope at open time
+      try {
+        setSnapshotScope((activeScope as any) || (sessionStorage.getItem('ACTIVE_SCOPE') as any) || 'personal');
+        setSnapshotOrgId(activeOrgId || sessionStorage.getItem('ACTIVE_ORG_ID'));
+      } catch {}
     }
   }, [isOpen]);
 
@@ -33,7 +42,10 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
     setError(null);
 
     try {
-      await agentService.createAgent({ agent_name: agentName.trim() });
+      await agentService.createAgent(
+        { agent_name: agentName.trim() },
+        { scopeOverride: { scope: snapshotScope, organizationId: snapshotOrgId || undefined } }
+      );
       setAgentName('');
       onClose();
       if (onSuccess) {

@@ -21,8 +21,7 @@ export interface CurrentUserInfo {
 const authService = {
   getCurrentUser: async (): Promise<CurrentUserInfo> => {
     try {
-      // Always hit /api for user-info to check auth, regardless of guest mode
-      const response = await fetch('/api/user-info', { credentials: 'include', redirect: 'follow' });
+      const response = await apiFetch('/user-info', { credentials: 'include' });
       if (!response.ok) {
         if (response.status === 401) {
           return { authenticated: false };

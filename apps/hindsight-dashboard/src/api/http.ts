@@ -14,6 +14,9 @@ export const apiBasePath = (): string => {
     const runtime = (typeof window !== 'undefined' && (window as any).__ENV__?.HINDSIGHT_SERVICE_API_URL) || null;
     const build = (typeof process !== 'undefined' && (process as any).env?.VITE_HINDSIGHT_SERVICE_API_URL) || null;
     const base = runtime || build || '/api';
+    // If base is an absolute URL (http/https), keep it as-is for both guest and auth.
+    // Only switch to "/guest-api" when we're using relative, same-origin proxying.
+    if (/^https?:\/\//i.test(base)) return base;
     return isGuest() ? '/guest-api' : base;
   } catch {
     return isGuest() ? '/guest-api' : '/api';
@@ -27,7 +30,7 @@ export const apiBase = (): string => {
   try {
     if (typeof window !== 'undefined') {
       // If we have an absolute URL, upgrade http to https if the app is running on https
-      if (basePath.startsWith('http')) {
+      if (/^https?:\/\//i.test(basePath)) {
         const isHttps = window.location.protocol === 'https:';
         const url = new URL(basePath);
         if (isHttps && url.protocol === 'http:') {
@@ -58,10 +61,11 @@ export type ApiFetchInit = RequestInit & {
   searchParams?: Record<string, any> | URLSearchParams;
   ensureTrailingSlash?: boolean;
   noScope?: boolean; // opt out of automatic scope injection
+  scopeOverride?: { scope: 'personal' | 'organization' | 'public'; organizationId?: string | null };
 };
 
-export const apiFetch = (path: string, init: ApiFetchInit = {}): Promise<Response> => {
-  const { searchParams, ensureTrailingSlash, noScope, ...rest } = init;
+export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<Response> => {
+  const { searchParams, ensureTrailingSlash, noScope, scopeOverride, ...rest } = init;
   let url = ensureTrailingSlash ? apiUrlDir(path) : apiUrl(path);
 
   // Start with provided params
@@ -72,24 +76,27 @@ export const apiFetch = (path: string, init: ApiFetchInit = {}): Promise<Respons
     }
   }
 
-  // Inject scope/org for GET/HEAD by default, unless noScope=true
+  // Inject scope/org for ALL methods by default, unless noScope=true
   const method = (rest.method || 'GET').toUpperCase();
-  if (!noScope && (method === 'GET' || method === 'HEAD')) {
+  let activeScope: string | undefined;
+  let activeOrgId: string | undefined;
+  if (!noScope) {
     try {
-      const existingScope = usp.get('scope');
-      const existingOrg = usp.get('organization_id');
-      let scope = existingScope;
-      let orgId = existingOrg;
+      // Respect explicit override first
+      if (scopeOverride?.scope) {
+        activeScope = scopeOverride.scope;
+        if (scopeOverride.scope === 'organization' && scopeOverride.organizationId) {
+          activeOrgId = scopeOverride.organizationId || undefined;
+        }
+      } else {
+        activeScope = sessionStorage.getItem('ACTIVE_SCOPE') || undefined;
+        if (!activeScope && isGuest()) activeScope = 'public';
+        activeOrgId = sessionStorage.getItem('ACTIVE_ORG_ID') || undefined;
+      }
 
-      if (!scope) {
-        scope = sessionStorage.getItem('ACTIVE_SCOPE') || undefined;
-        if (!scope && isGuest()) scope = 'public';
-      }
-      if (!orgId) {
-        orgId = sessionStorage.getItem('ACTIVE_ORG_ID') || undefined;
-      }
-      if (scope) usp.set('scope', scope);
-      if (scope === 'organization' && orgId) usp.set('organization_id', orgId);
+      // Add query params for compatibility
+      if (activeScope) usp.set('scope', activeScope);
+      if (activeScope === 'organization' && activeOrgId) usp.set('organization_id', activeOrgId);
     } catch {}
   }
 
@@ -98,6 +105,65 @@ export const apiFetch = (path: string, init: ApiFetchInit = {}): Promise<Respons
     url = `${url}${sep}${usp.toString()}`;
   }
 
-  const req: RequestInit = { credentials: 'include', ...rest };
-  return fetch(url, req);
+  // Merge headers with scope headers
+  // Merge headers while preserving original casing (important for tests that access headers via object keys)
+  const headersObj: Record<string, string> = {};
+  const src = (rest.headers as any);
+  if (src) {
+    if (typeof src.forEach === 'function') {
+      try { src.forEach((v: string, k: string) => { headersObj[k] = v; }); } catch {}
+    } else if (Array.isArray(src)) {
+      for (const [k, v] of src) { headersObj[k as string] = String(v); }
+    } else if (typeof src === 'object') {
+      for (const k of Object.keys(src)) { headersObj[k] = String((src as any)[k]); }
+    }
+  }
+  if (!noScope && activeScope) {
+    headersObj['X-Active-Scope'] = activeScope;
+    if (activeScope === 'organization' && activeOrgId) {
+      headersObj['X-Organization-Id'] = activeOrgId;
+    }
+  }
+
+  // Dev-time guardrails: warn on writes without scope
+  const __DEV__ = (() => { try { return (typeof process !== 'undefined' && (process as any).env && (process as any).env.NODE_ENV !== 'production'); } catch { return false; } })();
+  if (__DEV__) {
+    const isWrite = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+    if (isWrite && !noScope && !activeScope) {
+      // eslint-disable-next-line no-console
+      console.warn('[apiFetch] write without active scope');
+    }
+  }
+
+  const req: RequestInit = { credentials: 'include', ...rest, headers: headersObj };
+
+  try {
+    const res = await fetch(url, req);
+    // If backend is unreachable via proxy (/api) in local dev, try direct fallbacks.
+    if (!res.ok && res.status === 502 && (apiBasePath() === '/api' || apiBasePath() === '/guest-api')) {
+      // Try localhost and host.docker.internal fallbacks
+      const candidates = ['http://localhost:8000', 'http://127.0.0.1:8000', 'http://host.docker.internal:8000'];
+      for (const base of candidates) {
+        try {
+          const directUrl = (ensureTrailingSlash ? `${base}${path}`.replace(/([^/])$/, '$1/') : `${base}${path}`);
+          const res2 = await fetch(directUrl, req);
+          if (res2.ok || res2.status !== 502) return res2;
+        } catch {}
+      }
+    }
+    return res;
+  } catch (e) {
+    // Network error: attempt direct fallbacks in dev scenario
+    if (apiBasePath() === '/api' || apiBasePath() === '/guest-api') {
+      const candidates = ['http://localhost:8000', 'http://127.0.0.1:8000', 'http://host.docker.internal:8000'];
+      for (const base of candidates) {
+        try {
+          const directUrl = (ensureTrailingSlash ? `${base}${path}`.replace(/([^/])$/, '$1/') : `${base}${path}`);
+          const res2 = await fetch(directUrl, req);
+          return res2;
+        } catch {}
+      }
+    }
+    throw e;
+  }
 };

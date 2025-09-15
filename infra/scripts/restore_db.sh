@@ -95,7 +95,8 @@ fi
 
 # Run Alembic migrations inside the service container to avoid requiring local 'uv'
 # This uses the compose configuration so the container has the correct env (DATABASE_URL)
-docker compose $DOCKER_COMPOSE_FILES run --rm hindsight-service \
+# Run Alembic directly, bypassing the service entrypoint to avoid dev-mode resets
+docker compose $DOCKER_COMPOSE_FILES run --rm --entrypoint "" hindsight-service \
   sh -lc "cd /app && uv run alembic upgrade \"$TARGET_REVISION\""
 
 if [ $? -eq 0 ]; then

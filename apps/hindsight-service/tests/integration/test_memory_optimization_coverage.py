@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from core.api.main import app
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 class TestMemoryOptimizationCoverage:
     """Tests targeting specific uncovered lines in memory_optimization.py"""

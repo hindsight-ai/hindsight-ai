@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from core.api.main import app
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 class TestMemoryBlocksFrontendIssue:
     """Tests to reproduce and prevent the frontend memory blocks loading issue"""

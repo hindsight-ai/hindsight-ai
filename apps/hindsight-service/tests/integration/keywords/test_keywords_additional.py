@@ -4,11 +4,11 @@ from core.api.main import app as main_app
 
 
 def _headers(user: str):
-    return {"x-auth-request-user": user, "x-auth-request-email": f"{user}@example.com"}
+    return {"x-auth-request-user": user, "x-auth-request-email": f"{user}@example.com", "x-active-scope": "personal"}
 
 
 def test_keyword_get_single():
-    client = TestClient(main_app)
+    client = TestClient(main_app, headers={"x-active-scope": "personal"})
     h = _headers("user")
     # Create agent first
     r = client.post("/agents/", json={"agent_name": "KeywordAgent", "description": "for keywords"}, headers=h)

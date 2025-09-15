@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from core.api.main import app
 
-client = TestClient(app)
+client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 class TestMainScopeChangeCoverage:
     """Tests targeting specific uncovered lines in main.py scope changes"""

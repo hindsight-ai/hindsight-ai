@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from core.db import crud, schemas, models
 from core.api.permissions import can_read, can_write
-from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_read
+from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_read, ensure_pat_allows_write
 from core.audit import log as audit_log, AuditAction, AuditStatus
 from core.db.database import get_db
 
@@ -90,18 +90,53 @@ def get_consolidation_suggestions_endpoint(
     )
 
     user, current_user, scope_ctx = scoped
-    # Fetch suggestions then filter to those with at least one visible memory
-    raw_suggestions, total_items = crud.get_consolidation_suggestions(
+    # Enforce PAT read permissions based on requested scope
+    ensure_pat_allows_read(current_user, getattr(scope_ctx, 'organization_id', None))
+
+    # Fetch suggestions narrowed by SQL to the current scope to reduce cross-scope noise
+    raw_suggestions, _total_items = crud.get_consolidation_suggestions_scoped(
         db=db,
         status=status,
         group_id=group_id,
         skip=skip,
         limit=limit,
+        scope_ctx=scope_ctx,
+        current_user=current_user,
     )
-    suggestions = [s for s in raw_suggestions if _user_can_view_suggestion(db, s, current_user)]
+    def _in_scope(mem) -> bool:
+        try:
+            sc = getattr(scope_ctx, 'scope', None)
+            if sc == 'organization':
+                return getattr(mem, 'organization_id', None) == getattr(scope_ctx, 'organization_id', None)
+            if sc == 'personal':
+                return getattr(mem, 'owner_user_id', None) == (current_user or {}).get('id')
+            if sc == 'public':
+                return getattr(mem, 'visibility_scope', None) == 'public'
+            # Default: treat as personal unless specified
+            return getattr(mem, 'owner_user_id', None) == (current_user or {}).get('id')
+        except Exception:
+            return False
+
+    scoped_suggestions = []
+    for s in raw_suggestions:
+        ok = False
+        for mid in (s.original_memory_ids or []):
+            try:
+                mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
+            except Exception:
+                mem = None
+            if not mem:
+                continue
+            if can_read(mem, current_user) and _in_scope(mem):
+                ok = True
+                break
+        if ok:
+            scoped_suggestions.append(s)
+
+    total_items = len(scoped_suggestions)
     total_pages = math.ceil(total_items / limit) if limit > 0 else 0
 
-    return {"items": suggestions, "total_items": total_items, "total_pages": total_pages}
+    return {"items": scoped_suggestions, "total_items": total_items, "total_pages": total_pages}
 
 
 @router.get(
@@ -143,6 +178,17 @@ def validate_consolidation_suggestion_endpoint(
         raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
     if not _user_can_view_suggestion(db, suggestion, current_user):
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+    # PAT enforcement for write in org context (derive org if applicable)
+    try:
+        org_id = None
+        for mid in (suggestion.original_memory_ids or []):
+            mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
+            if mem and getattr(mem, 'organization_id', None):
+                org_id = mem.organization_id
+                break
+        ensure_pat_allows_write(current_user, org_id)
+    except Exception:
+        pass
 
     try:
         crud.apply_consolidation(db, suggestion_id=suggestion_id)
@@ -209,6 +255,17 @@ def reject_consolidation_suggestion_endpoint(
     # Mutating action: require write permission on all originals
     if not _user_can_write_suggestion(db, suggestion, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
+    # PAT enforcement for write on org context
+    try:
+        org_id = None
+        for mid in (suggestion.original_memory_ids or []):
+            mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
+            if mem and getattr(mem, 'organization_id', None):
+                org_id = mem.organization_id
+                break
+        ensure_pat_allows_write(current_user, org_id)
+    except Exception:
+        pass
     if not _user_can_view_suggestion(db, suggestion, current_user):
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
 
