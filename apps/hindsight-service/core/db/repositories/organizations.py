@@ -69,9 +69,27 @@ def delete_organization(db: Session, organization_id: uuid.UUID):
 
 
 def create_organization_member(db: Session, organization_id: uuid.UUID, member: schemas.OrganizationMemberCreate):
+    # Ensure can_read/can_write are set according to role defaults if not provided
+    member_dict = member.model_dump()
+    if 'can_read' not in member_dict or member_dict.get('can_read') is None:
+        try:
+            from core.utils.role_permissions import get_role_permissions
+            role_perms = get_role_permissions(member_dict.get('role'))
+            member_dict['can_read'] = role_perms.get('can_read', True)
+        except Exception:
+            # fall back to schema/db defaults
+            member_dict['can_read'] = True
+    if 'can_write' not in member_dict or member_dict.get('can_write') is None:
+        try:
+            from core.utils.role_permissions import get_role_permissions
+            role_perms = get_role_permissions(member_dict.get('role'))
+            member_dict['can_write'] = role_perms.get('can_write', False)
+        except Exception:
+            member_dict['can_write'] = False
+
     db_member = models.OrganizationMembership(
         organization_id=organization_id,
-        **member.model_dump(),
+        **member_dict,
     )
     db.add(db_member)
     db.commit()

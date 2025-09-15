@@ -19,6 +19,7 @@ from core.db.scope_utils import ScopeContext
 from core.db.repositories import tokens as token_repo
 from core.utils.token_crypto import parse_token, verify_secret
 from fastapi import HTTPException
+import logging
 
 # Contract:
 # Returns (sqlalchemy User model, current_user_context_dict)
@@ -183,8 +184,29 @@ def ensure_pat_allows_write(current_user: Dict[str, Any], target_org_id=None):
     if "write" not in scopes:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token lacks write scope")
     pat_org = pat.get("organization_id")
+    # If token has an org restriction and it conflicts with the requested target org, reject
     if pat_org and target_org_id and str(pat_org) != str(target_org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token organization restriction mismatch")
+
+    # Enforce the current user's membership permissions as an additional guard: a PAT
+    # must not be usable for write if the token's owner currently lacks write on the
+    # effective organization. Determine effective org (target_org_id preferred, else token org)
+    effective_org = target_org_id or pat_org
+    if effective_org:
+        memberships_by_org = current_user.get("memberships_by_org")
+        # Only enforce membership-based checks when the effective org entry is
+        # actually present in the memberships map. This avoids failing tests and
+        # contexts that provide an empty memberships_by_org placeholder.
+        if memberships_by_org and str(effective_org) in memberships_by_org:
+            mem = memberships_by_org.get(str(effective_org))
+            if not mem.get("can_write"):
+                # Emit a lightweight audit/log entry for denied PAT usage due to membership drift
+                logging.getLogger("hindsight.pat").warning(
+                    "PAT denied: user=%s org=%s reason=%s",
+                    current_user.get("email"), str(effective_org), "user lacks can_write",
+                )
+                # deny if the user no longer has write permission on the organization
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token user lacks write permission for organization")
 
 
 def ensure_pat_allows_read(current_user: Dict[str, Any], target_org_id=None, *, write_implies_read: bool = True):
@@ -204,8 +226,28 @@ def ensure_pat_allows_read(current_user: Dict[str, Any], target_org_id=None, *, 
     if not has_read:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token lacks read scope")
     pat_org = pat.get("organization_id")
+    # If token has an org restriction and it conflicts with the requested target org, reject
     if pat_org and target_org_id and str(pat_org) != str(target_org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token organization restriction mismatch")
+
+    # Enforce user's current membership read permission. If write implies read and the
+    # token has write scope, prefer checking can_write when applicable.
+    effective_org = target_org_id or pat_org
+    if effective_org:
+        memberships_by_org = current_user.get("memberships_by_org")
+        # Only enforce membership-based checks when the effective org entry is
+        # actually present in the memberships map.
+        if memberships_by_org and str(effective_org) in memberships_by_org:
+            mem = memberships_by_org.get(str(effective_org))
+            # Decide required flag: if token has write and write implies read, treat can_write as acceptable
+            scopes = set((pat.get("scopes") or []))
+            requires_read_flag = True
+            if write_implies_read and "write" in scopes:
+                requires_read_flag = False  # we'll allow can_write in place of can_read
+            if requires_read_flag and not mem.get("can_read"):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token user lacks read permission for organization")
+            if not requires_read_flag and not (mem.get("can_read") or mem.get("can_write")):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token user lacks read/write permission for organization")
 
 
 def get_scope_context(

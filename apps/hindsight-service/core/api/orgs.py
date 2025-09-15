@@ -16,7 +16,7 @@ from core.db import models, schemas
 from core.api.deps import get_current_user_context
 from core.api.auth import get_or_create_user
 from core.api.permissions import can_manage_org
-from core.utils.role_permissions import get_allowed_roles, get_manage_roles
+from core.utils.role_permissions import get_allowed_roles, get_manage_roles, get_role_permissions
 
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -334,8 +334,15 @@ def add_member(
 
     email = (payload.get("email") or "").strip().lower()
     role = (payload.get("role") or "viewer")
-    can_read = bool(payload.get("can_read", True))
-    can_write = bool(payload.get("can_write", False))
+    # Pre-validate role against allowed set to avoid DB integrity errors
+    allowed_roles = get_allowed_roles()
+    if role not in allowed_roles:
+        raise HTTPException(status_code=422, detail="Invalid role")
+
+    # Derive default permissions from role configuration unless explicitly provided
+    role_perms = get_role_permissions(role)
+    can_read = bool(payload.get("can_read", role_perms.get("can_read", True)))
+    can_write = bool(payload.get("can_write", role_perms.get("can_write", False)))
     if not email:
         raise HTTPException(status_code=422, detail="Email is required")
     # Pre-validate role against allowed set to avoid DB integrity errors
@@ -478,11 +485,29 @@ def update_member(
 
     old_role = m.role
     if "role" in payload and payload["role"]:
+        # Validate role
+        allowed_roles = get_allowed_roles()
+        if payload["role"] not in allowed_roles:
+            raise HTTPException(status_code=422, detail="Invalid role")
         m.role = payload["role"]
     if "can_read" in payload:
         m.can_read = bool(payload["can_read"])
     if "can_write" in payload:
         m.can_write = bool(payload["can_write"])
+    # If role changed and explicit can_write/can_read not provided, apply role defaults
+    if old_role != (payload.get("role") or old_role):
+        # role was changed by payload; apply defaults if not explicitly overridden
+        if "can_read" not in payload or "can_write" not in payload:
+            try:
+                role_perms = get_role_permissions(m.role)
+                if "can_read" not in payload:
+                    m.can_read = bool(role_perms.get("can_read", True))
+                if "can_write" not in payload:
+                    m.can_write = bool(role_perms.get("can_write", False))
+            except ValueError:
+                # Shouldn't happen because we validated above, but guard anyway
+                raise HTTPException(status_code=422, detail="Invalid role")
+
     db.commit()
 
     if old_role != m.role:
@@ -812,7 +837,18 @@ def accept_invitation(
 
     # Add member
     from core.db import schemas
-    member_data = schemas.OrganizationMemberCreate(user_id=accept_user_id, role=db_invitation.role)
+    # Validate role on the invitation and use role defaults for can_read/can_write
+    allowed_roles = get_allowed_roles()
+    if (db_invitation.role or "") not in allowed_roles:
+        raise HTTPException(status_code=422, detail="Invalid role on invitation")
+
+    role_perms = get_role_permissions(db_invitation.role)
+    member_data = schemas.OrganizationMemberCreate(
+        user_id=accept_user_id,
+        role=db_invitation.role,
+        can_read=role_perms.get("can_read", True),
+        can_write=role_perms.get("can_write", False),
+    )
     db_member = crud.create_organization_member(db, organization_id=org_id, member=member_data)
 
     # Update invitation

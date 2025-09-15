@@ -40,9 +40,6 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
   const [newOrgData, setNewOrgData] = useState<CreateOrganizationData>({ name: '', slug: '' });
   const [addMemberMode, setAddMemberMode] = useState(false);
   const [newMemberData, setNewMemberData] = useState<AddMemberData>({ email: '', role: 'viewer' });
-  const [inviteMode, setInviteMode] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('viewer');
   const [showModeConfirmation, setShowModeConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
@@ -539,12 +536,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                       >
                         + Invite Member
                       </button>
-                      <button
-                        onClick={() => setInviteMode(true)}
-                        className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition"
-                      >
-                        + Invite
-                      </button>
+                      {/* Removed duplicate '+ Invite' button — use '+ Invite Member' which sends an invitation and requires accept/decline by the invitee */}
                       {canManageOrganization(selectedOrg) && (
                         <button
                           onClick={() => setShowDeleteConfirmation(true)}
@@ -608,65 +600,7 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({ onClose
                   </form>
                 )}
 
-                {/* Invitation Create Form */}
-                {inviteMode && (user?.is_superadmin || isUserMember(selectedOrg.id)) && (
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      if (!selectedOrg) return;
-                      try {
-                        // Prevent duplicate pending invite client-side
-                        const dup = invitations.find((i) => (i.email || '').toLowerCase() === inviteEmail.toLowerCase() && (i.status || '').toLowerCase() === 'pending');
-                        if (dup) {
-                          notificationService.showInfo('A pending invitation already exists for this email');
-                          return;
-                        }
-                        await organizationService.createInvitation(selectedOrg.id, { email: inviteEmail, role: inviteRole });
-                        notificationService.showSuccess('Invitation sent');
-                        setInviteEmail('');
-                        setInviteRole('viewer');
-                        setInviteMode(false);
-                        await fetchInvitations(selectedOrg.id);
-                      } catch (error: any) {
-                        notificationService.showError(`Failed to send invitation: ${error?.message || 'Unknown error'}`);
-                      }
-                    }}
-                    className="mb-4 p-4 border rounded bg-blue-50"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                      <input
-                        type="email"
-                        placeholder="Invitee Email"
-                        value={inviteEmail}
-                        onChange={(e) => setInviteEmail(e.target.value)}
-                        className="px-3 py-2 border rounded"
-                        required
-                      />
-                      <select
-                        value={inviteRole}
-                        onChange={(e) => setInviteRole(e.target.value)}
-                        className="px-3 py-2 border rounded"
-                      >
-                        <option value="viewer">Viewer</option>
-                        <option value="editor">Editor</option>
-                        <option value="admin">Admin</option>
-                        <option value="owner">Owner</option>
-                      </select>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="submit" className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700">
-                        Send Invitation
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setInviteMode(false)}
-                        className="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                )}
+                {/* Invitation creation is handled via the '+ Invite Member' quick form which sends invitations. The Invitations section below remains for listing, resending, revoking, and accepting invites. */}
 
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border border-gray-300">
