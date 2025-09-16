@@ -525,50 +525,20 @@ class NotificationService:
                     'role': role_value,
                 }
 
-                # Render template synchronously
+                # Prefer using the async helper so tests can patch `send_email_notification` and
+                # receive the template_context. In normal operation this will render and send
+                # via the configured transactional email service.
                 try:
-                    html, text = self.email_service.render_template(TEMPLATE_ORG_INVITATION, template_context)
-                except Exception as e:
-                    # If rendering fails, mark email log and return
-                    self.update_email_status(email_log.id, 'failed', error_message=f'Template render failed: {str(e)}')
-                    return result
-
-                # Send in background thread
-                def _send():
                     import asyncio
-                    # Create a new database session for background operations
-                    from core.db.database import get_db
-                    background_db = next(get_db())
+                    send_res = asyncio.run(self.send_email_notification(email_log, TEMPLATE_ORG_INVITATION, template_context))
+                    result['email_result'] = send_res
+                except Exception as e:
+                    # If the send helper fails, mark email as failed but continue
                     try:
-                        send_res = asyncio.run(self.email_service.send_email(
-                            to_email=email_log.email_address,
-                            subject=email_log.subject,
-                            html_content=html,
-                            text_content=text
-                        ))
-                        if send_res.get('success'):
-                            self._update_email_status_with_session(
-                                background_db, email_log.id, 'sent', 
-                                provider_message_id=send_res.get('message_id')
-                            )
-                        else:
-                            self._update_email_status_with_session(
-                                background_db, email_log.id, 'failed', 
-                                error_message=send_res.get('error')
-                            )
-                    except Exception as e:
-                        self._update_email_status_with_session(
-                            background_db, email_log.id, 'failed', 
-                            error_message=str(e)
-                        )
-                    finally:
-                        background_db.close()
-
-                import threading
-                t = threading.Thread(target=_send, daemon=True)
-                t.start()
-
-                result['email_result'] = {'dispatched_in_background': True}
+                        self.update_email_status(email_log.id, 'failed', error_message=str(e))
+                    except Exception:
+                        # best-effort; avoid masking original flow
+                        pass
                 
             except Exception as e:
                 # Log error but don't fail the entire operation
