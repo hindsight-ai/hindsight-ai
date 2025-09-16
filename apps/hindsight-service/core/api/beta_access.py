@@ -45,7 +45,7 @@ def review_beta_access_request(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     service = BetaAccessService(db)
-    result = service.review_beta_access_request(request_id, decision, user.email, reason)
+    result = service.review_beta_access_request(request_id, decision, user.email, reason, user.id)
     if not result['success']:
         raise HTTPException(status_code=400, detail=result['message'])
     return result

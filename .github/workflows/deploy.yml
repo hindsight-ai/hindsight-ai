@@ -198,6 +198,7 @@ jobs:
             cat <<EOF > .env
             HINDSIGHT_SERVICE_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-service:${{ github.sha }}
             HINDSIGHT_DASHBOARD_IMAGE=ghcr.io/${{ github.repository_owner }}/hindsight-dashboard:${{ github.sha }}
+            DEV_MODE=false
             APP_HOST=${{ secrets.APP_HOST }}
             APP_BASE_URL=https://${{ secrets.APP_HOST }}
             TRAEFIK_DASHBOARD_HOST=${{ secrets.TRAEFIK_DASHBOARD_HOST }}

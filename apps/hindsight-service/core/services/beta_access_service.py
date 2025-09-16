@@ -43,7 +43,7 @@ class BetaAccessService:
         return {'success': True, 'request_id': request.id}
 
     def review_beta_access_request(self, request_id: uuid.UUID, decision: str, reviewer_email: str,
-                                   reason: Optional[str] = None) -> Dict[str, Any]:
+                                   reason: Optional[str] = None, actor_user_id: Optional[uuid.UUID] = None) -> Dict[str, Any]:
         """Review a beta access request: accept or deny."""
         if decision not in ['accepted', 'denied']:
             return {'success': False, 'message': 'Invalid decision.'}
@@ -65,7 +65,7 @@ class BetaAccessService:
 
         # Audit log
         audit_log(self.db, action=AuditAction.BETA_ACCESS_REVIEW, status=AuditStatus.SUCCESS,
-                  target_type='beta_access_request', target_id=request_id, actor_user_id=None,  # Admin
+                  target_type='beta_access_request', target_id=request_id, actor_user_id=actor_user_id,
                   metadata={'decision': decision, 'reviewer_email': reviewer_email})
 
         return {'success': True}

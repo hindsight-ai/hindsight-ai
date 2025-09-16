@@ -49,7 +49,7 @@ services:
     environment:
       OAUTH2_PROXY_PROVIDER: google
       OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
-      OAUTH2_PROXY_REDIRECT_URL: https://app.hindsight-ai.com/oauth2/callback
+      OAUTH2_PROXY_REDIRECT_URL: https://${APP_HOST}/oauth2/callback
       # Reverse-proxy mode: send authenticated traffic to the dashboard service
       OAUTH2_PROXY_UPSTREAMS: http://hindsight-dashboard:80
       OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: true
