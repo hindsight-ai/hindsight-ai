@@ -1,24 +1,62 @@
 {
   "name": "hindsight-mcp",
-  "version": "1.0.0",
-  "description": "MCP server for AI Agent Memory System",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for the Hindsight AI memory service",
   "main": "build/index.js",
-  "scripts": {
-    "build": "tsc",
-    "start": "node build/index.js",
-    "dev": "nodemon --watch src --exec \"ts-node src/index.ts\""
+  "types": "build/index.d.ts",
+  "files": [
+    "build",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "require": "./build/index.js",
+      "import": "./build/index.js",
+      "types": "./build/index.d.ts"
+    }
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "scripts": {
+    "clean": "rimraf build",
+    "build": "tsc -p tsconfig.json",
+    "start": "node build/index.js",
+    "dev": "nodemon --watch src --exec \"ts-node src/index.ts\"",
+    "watch": "tsc -p tsconfig.json --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "hindsight",
+    "memory",
+    "ai"
+  ],
+  "author": "Hindsight AI",
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hindsight-ai/hindsight-ai"
+  },
+  "bugs": {
+    "url": "https://github.com/hindsight-ai/hindsight-ai/issues"
+  },
+  "homepage": "https://github.com/hindsight-ai/hindsight-ai/tree/staging/mcp-servers/hindsight-mcp",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
   "devDependencies": {
     "@types/node": "^20.12.12",
     "nodemon": "^3.1.0",
+    "rimraf": "^5.0.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
-    "axios": "^1.7.2"
+    "axios": "^1.7.2",
+    "hindsight-mcp": "^0.1.0"
   }
 }
