@@ -89,8 +89,14 @@ async def enforce_readonly_for_guests(request: Request, call_next):
         # In dev mode, allow; authentication is handled by route dependencies
         import os
         is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
-        
+
         if not is_dev_mode:
+            try:
+                path = request.url.path or ""
+            except Exception:
+                path = ""
+            if path.startswith("/beta-access/review/") and path.endswith("/token"):
+                return await call_next(request)
             h = request.headers
             user_present = (
                 h.get("x-auth-request-user")
@@ -284,7 +290,15 @@ def get_user_info(
     if is_dev_mode:
         email = "dev@localhost"
         user = get_or_create_user(db, email=email, display_name="Development User")
-        
+        if getattr(user, "beta_access_status", "") != "accepted":
+            user.beta_access_status = "accepted"
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+            else:
+                db.refresh(user)
+
         # Comment out automatic superadmin privileges for dev user to test non-superadmin functionality
         # if not user.is_superadmin:
         #     user.is_superadmin = True

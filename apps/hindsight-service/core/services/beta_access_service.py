@@ -4,6 +4,8 @@ Beta access service: handles beta access requests, reviews, and notifications.
 
 import uuid
 from typing import Optional, Dict, Any
+from datetime import datetime, timezone
+import secrets
 from sqlalchemy.orm import Session
 
 from core.db import models
@@ -34,7 +36,7 @@ class BetaAccessService:
         self._send_request_confirmation_email(email)
 
         # Send notification to admin
-        self._send_admin_notification_email(request.id, email)
+        self._send_admin_notification_email(request.id, email, request.review_token)
 
         # Audit log (only for authenticated users)
         if user_id is not None:
@@ -49,27 +51,31 @@ class BetaAccessService:
         if decision not in ['accepted', 'denied']:
             return {'success': False, 'message': 'Invalid decision.'}
 
-        request = beta_repo.update_beta_access_request_status(
-            self.db, request_id, decision, reviewer_email, reason
-        )
+        request = beta_repo.get_beta_access_request(self.db, request_id)
         if not request:
             return {'success': False, 'message': 'Request not found.'}
+        if request.status != 'pending':
+            return {'success': False, 'message': f"Request already {request.status}."}
 
-        # Update user status if accepted
-        if decision == 'accepted' and request.user_id:
-            beta_repo.update_user_beta_access_status(self.db, request.user_id, 'accepted')
-            self._send_acceptance_email(request.email)
-        elif decision == 'denied':
-            if request.user_id:
-                beta_repo.update_user_beta_access_status(self.db, request.user_id, 'denied')
-            self._send_denial_email(request.email, reason)
+        return self._finalize_review(request, decision, reviewer_email, reason, actor_user_id, via_token=False)
 
-        # Audit log
-        audit_log(self.db, action=AuditAction.BETA_ACCESS_REVIEW, status=AuditStatus.SUCCESS,
-                  target_type='beta_access_request', target_id=request_id, actor_user_id=actor_user_id,
-                  metadata={'decision': decision, 'reviewer_email': reviewer_email})
+    def review_beta_access_request_with_token(self, request_id: uuid.UUID, token: str, decision: str) -> Dict[str, Any]:
+        """Allow admin to review a request via emailed token links."""
+        if decision not in ['accepted', 'denied']:
+            return {'success': False, 'message': 'Invalid decision.'}
 
-        return {'success': True}
+        request = beta_repo.get_beta_access_request(self.db, request_id)
+        if not request:
+            return {'success': False, 'message': 'Request not found.'}
+        if request.status != 'pending':
+            return {'success': False, 'message': f"Request already {request.status}."}
+
+        if not request.review_token or not secrets.compare_digest(request.review_token, token):
+            return {'success': False, 'message': 'Invalid or already used review token.'}
+        if request.token_expires_at and datetime.now(timezone.utc) > request.token_expires_at:
+            return {'success': False, 'message': 'Review token expired.'}
+
+        return self._finalize_review(request, decision, 'beta-access-token', None, None, via_token=True)
 
     def get_beta_access_status(self, user_id: uuid.UUID) -> Optional[str]:
         """Get beta access status for a user."""
@@ -83,9 +89,12 @@ class BetaAccessService:
         """Send confirmation email to user after request."""
         self.notification_service.notify_beta_access_request_confirmation(email)
 
-    def _send_admin_notification_email(self, request_id: uuid.UUID, email: str):
+    def _send_admin_notification_email(self, request_id: uuid.UUID, email: str, review_token: Optional[str]):
         """Send notification to admin with accept/deny links."""
-        self.notification_service.notify_beta_access_admin_notification(request_id, email)
+        if review_token:
+            self.notification_service.notify_beta_access_admin_notification(request_id, email, review_token)
+        else:
+            self.notification_service.notify_beta_access_admin_notification(request_id, email, None)
 
     def _send_acceptance_email(self, email: str):
         """Send acceptance email to user."""
@@ -94,3 +103,62 @@ class BetaAccessService:
     def _send_denial_email(self, email: str, reason: Optional[str]):
         """Send denial email to user."""
         self.notification_service.notify_beta_access_denial(email, reason)
+
+    def _finalize_review(
+        self,
+        request: models.BetaAccessRequest,
+        decision: str,
+        reviewer_email: str,
+        reason: Optional[str],
+        actor_user_id: Optional[uuid.UUID],
+        via_token: bool = False,
+    ) -> Dict[str, Any]:
+        updated = beta_repo.update_beta_access_request_status(
+            self.db,
+            request.id,
+            decision,
+            reviewer_email,
+            reason,
+        )
+        if not updated:
+            return {'success': False, 'message': 'Request not found.'}
+
+        if decision == 'accepted':
+            if updated.user_id:
+                beta_repo.update_user_beta_access_status(self.db, updated.user_id, 'accepted')
+            else:
+                self._update_user_status_by_email(updated.email, 'accepted')
+            self._send_acceptance_email(updated.email)
+            message = f"Beta access approved for {updated.email}."
+        else:
+            if updated.user_id:
+                beta_repo.update_user_beta_access_status(self.db, updated.user_id, 'denied')
+            else:
+                self._update_user_status_by_email(updated.email, 'denied')
+            self._send_denial_email(updated.email, reason)
+            message = f"Beta access request denied for {updated.email}."
+
+        metadata = {'decision': decision, 'reviewer_email': reviewer_email}
+        if via_token:
+            metadata['via_token'] = True
+
+        log_actor_id = actor_user_id if actor_user_id is not None else updated.user_id
+        if log_actor_id is not None:
+            audit_log(
+                self.db,
+                action=AuditAction.BETA_ACCESS_REVIEW,
+                status=AuditStatus.SUCCESS,
+                target_type='beta_access_request',
+                target_id=request.id,
+                actor_user_id=log_actor_id,
+                metadata=metadata,
+            )
+
+        return {'success': True, 'request_id': request.id, 'message': message}
+
+    def _update_user_status_by_email(self, email: str, status: str) -> bool:
+        user = self.db.query(models.User).filter(models.User.email == email).first()
+        if not user:
+            return False
+        beta_repo.update_user_beta_access_status(self.db, user.id, status)
+        return True

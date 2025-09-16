@@ -558,77 +558,123 @@ class NotificationService:
     def notify_beta_access_invitation(self, user_email: str) -> Dict[str, Any]:
         """Send invitation email to request beta access."""
         result = {}
-        email_log = self.create_email_notification_log(
-            user_id=None,  # No user yet
-            email_address=user_email,
-            event_type='beta_access_invitation',
-            subject="Request Beta Access to Hindsight AI"
-        )
-        result['email_log'] = email_log
+        # Skip email notification logging for beta access invitations since no user exists yet
         try:
-            import asyncio
+            from inspect import iscoroutinefunction, isawaitable
+
             html_content, text_content = self.email_service.render_template(
                 TEMPLATE_BETA_ACCESS_INVITATION,
                 {'request_url': 'https://app.hindsight.ai/beta-access/request'}
             )
-            send_res = asyncio.run(self.email_service.send_email(
-                to_email=user_email,
-                subject="Request Beta Access to Hindsight AI",
-                html_content=html_content,
-                text_content=text_content,
-            ))
-            if send_res.get('success'):
-                self.update_email_status(email_log.id, 'sent', provider_message_id=send_res.get('message_id'))
+
+            send_fn = getattr(self.email_service, 'send_email')
+            # If the implementation is an async function, run it. If it returns an awaitable,
+            # run that as well. Otherwise call it synchronously.
+            if iscoroutinefunction(send_fn):
+                import asyncio
+                send_res = asyncio.run(send_fn(
+                    to_email=user_email,
+                    subject="Request Beta Access to Hindsight AI",
+                    html_content=html_content,
+                    text_content=text_content,
+                ))
             else:
-                self.update_email_status(email_log.id, 'failed', error_message=send_res.get('error'))
+                send_res = send_fn(
+                    to_email=user_email,
+                    subject="Request Beta Access to Hindsight AI",
+                    html_content=html_content,
+                    text_content=text_content,
+                )
+                if isawaitable(send_res):
+                    import asyncio
+                    send_res = asyncio.run(send_res)
+            if send_res.get('success'):
+                result['success'] = True
+                result['message_id'] = send_res.get('message_id')
+            else:
+                result['success'] = False
+                result['error'] = send_res.get('error', 'Unknown error')
         except Exception as e:
-            self.update_email_status(email_log.id, 'failed', error_message=str(e))
+            result['success'] = False
+            result['error'] = str(e)
         return result
 
     def notify_beta_access_request_confirmation(self, user_email: str) -> Dict[str, Any]:
         """Send confirmation email after beta access request."""
         result = {}
-        email_log = self.create_email_notification_log(
-            user_id=None,
-            email_address=user_email,
-            event_type='beta_access_request_confirmation',
-            subject="Beta Access Request Received"
-        )
-        result['email_log'] = email_log
+        # Skip email notification logging for beta access confirmations since user may not exist yet
         try:
-            import asyncio
+            from inspect import iscoroutinefunction, isawaitable
+
             html_content, text_content = self.email_service.render_template(
                 TEMPLATE_BETA_ACCESS_REQUEST_CONFIRMATION,
                 {}
             )
-            send_res = asyncio.run(self.email_service.send_email(
-                to_email=user_email,
-                subject="Beta Access Request Received",
-                html_content=html_content,
-                text_content=text_content,
-            ))
-            if send_res.get('success'):
-                self.update_email_status(email_log.id, 'sent', provider_message_id=send_res.get('message_id'))
+
+            send_fn = getattr(self.email_service, 'send_email')
+            if iscoroutinefunction(send_fn):
+                import asyncio
+                send_res = asyncio.run(send_fn(
+                    to_email=user_email,
+                    subject="Beta Access Request Received",
+                    html_content=html_content,
+                    text_content=text_content,
+                ))
             else:
-                self.update_email_status(email_log.id, 'failed', error_message=send_res.get('error'))
+                send_res = send_fn(
+                    to_email=user_email,
+                    subject="Beta Access Request Received",
+                    html_content=html_content,
+                    text_content=text_content,
+                )
+                if isawaitable(send_res):
+                    import asyncio
+                    send_res = asyncio.run(send_res)
+            if send_res.get('success'):
+                result['success'] = True
+                result['message_id'] = send_res.get('message_id')
+            else:
+                result['success'] = False
+                result['error'] = send_res.get('error', 'Unknown error')
         except Exception as e:
-            self.update_email_status(email_log.id, 'failed', error_message=str(e))
+            result['success'] = False
+            result['error'] = str(e)
         return result
 
-    def notify_beta_access_admin_notification(self, request_id: uuid.UUID, user_email: str) -> Dict[str, Any]:
+    def notify_beta_access_admin_notification(self, request_id: uuid.UUID, user_email: str, review_token: Optional[str]) -> Dict[str, Any]:
         """Send notification to admin with accept/deny links."""
         result = {}
-        email_log = self.create_email_notification_log(
-            user_id=None,
-            email_address='ibarz.jean@gmail.com',  # Admin email
-            event_type='beta_access_admin_notification',
-            subject=f"Beta Access Request from {user_email}"
-        )
-        result['email_log'] = email_log
+        # Skip email notification logging for admin notifications
         try:
-            import asyncio
-            accept_url = f"https://app.hindsight.ai/beta-access/review/{request_id}?decision=accepted"
-            deny_url = f"https://app.hindsight.ai/beta-access/review/{request_id}?decision=denied"
+            from inspect import iscoroutinefunction, isawaitable
+            from urllib.parse import urlencode
+            try:
+                from core.utils.urls import get_app_base_url
+                base_url = get_app_base_url()
+            except Exception:
+                base_url = 'https://app.hindsight.ai'
+
+            if review_token:
+                accept_qs = urlencode({
+                    'beta_review': str(request_id),
+                    'beta_decision': 'accepted',
+                    'decision': 'accepted',
+                    'beta_token': review_token,
+                    'token': review_token,
+                })
+                deny_qs = urlencode({
+                    'beta_review': str(request_id),
+                    'beta_decision': 'denied',
+                    'decision': 'denied',
+                    'beta_token': review_token,
+                    'token': review_token,
+                })
+                accept_url = f"{base_url}/login?{accept_qs}"
+                deny_url = f"{base_url}/login?{deny_qs}"
+            else:
+                accept_url = f"{base_url}/beta-access/review/{request_id}?decision=accepted"
+                deny_url = f"{base_url}/beta-access/review/{request_id}?decision=denied"
+
             html_content, text_content = self.email_service.render_template(
                 TEMPLATE_BETA_ACCESS_ADMIN_NOTIFICATION,
                 {
@@ -636,81 +682,121 @@ class NotificationService:
                     'request_id': str(request_id),
                     'accept_url': accept_url,
                     'deny_url': deny_url,
-                    'requested_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+                    'requested_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'),
+                    'review_token': review_token,
                 }
             )
-            send_res = asyncio.run(self.email_service.send_email(
-                to_email='ibarz.jean@gmail.com',
-                subject=f"Beta Access Request from {user_email}",
-                html_content=html_content,
-                text_content=text_content,
-            ))
-            if send_res.get('success'):
-                self.update_email_status(email_log.id, 'sent', provider_message_id=send_res.get('message_id'))
+
+            send_fn = getattr(self.email_service, 'send_email')
+            if iscoroutinefunction(send_fn):
+                import asyncio
+                send_res = asyncio.run(send_fn(
+                    to_email='ibarz.jean@gmail.com',
+                    subject=f"Beta Access Request from {user_email}",
+                    html_content=html_content,
+                    text_content=text_content,
+                ))
             else:
-                self.update_email_status(email_log.id, 'failed', error_message=send_res.get('error'))
+                send_res = send_fn(
+                    to_email='ibarz.jean@gmail.com',
+                    subject=f"Beta Access Request from {user_email}",
+                    html_content=html_content,
+                    text_content=text_content,
+                )
+                if isawaitable(send_res):
+                    import asyncio
+                    send_res = asyncio.run(send_res)
+            if send_res.get('success'):
+                result['success'] = True
+                result['message_id'] = send_res.get('message_id')
+            else:
+                result['success'] = False
+                result['error'] = send_res.get('error', 'Unknown error')
         except Exception as e:
-            self.update_email_status(email_log.id, 'failed', error_message=str(e))
+            result['success'] = False
+            result['error'] = str(e)
         return result
 
     def notify_beta_access_acceptance(self, user_email: str) -> Dict[str, Any]:
         """Send acceptance email to user."""
         result = {}
-        email_log = self.create_email_notification_log(
-            user_id=None,
-            email_address=user_email,
-            event_type='beta_access_acceptance',
-            subject="Beta Access Granted"
-        )
-        result['email_log'] = email_log
+        # Skip email notification logging for beta access acceptance
         try:
-            import asyncio
+            from inspect import iscoroutinefunction, isawaitable
             html_content, text_content = self.email_service.render_template(
                 TEMPLATE_BETA_ACCESS_ACCEPTANCE,
                 {'login_url': 'https://app.hindsight.ai/login'}
             )
-            send_res = asyncio.run(self.email_service.send_email(
-                to_email=user_email,
-                subject="Beta Access Granted",
-                html_content=html_content,
-                text_content=text_content,
-            ))
-            if send_res.get('success'):
-                self.update_email_status(email_log.id, 'sent', provider_message_id=send_res.get('message_id'))
+
+            send_fn = getattr(self.email_service, 'send_email')
+            if iscoroutinefunction(send_fn):
+                import asyncio
+                send_res = asyncio.run(send_fn(
+                    to_email=user_email,
+                    subject="Beta Access Granted",
+                    html_content=html_content,
+                    text_content=text_content,
+                ))
             else:
-                self.update_email_status(email_log.id, 'failed', error_message=send_res.get('error'))
+                send_res = send_fn(
+                    to_email=user_email,
+                    subject="Beta Access Granted",
+                    html_content=html_content,
+                    text_content=text_content,
+                )
+                if isawaitable(send_res):
+                    import asyncio
+                    send_res = asyncio.run(send_res)
+            if send_res.get('success'):
+                result['success'] = True
+                result['message_id'] = send_res.get('message_id')
+            else:
+                result['success'] = False
+                result['error'] = send_res.get('error', 'Unknown error')
         except Exception as e:
-            self.update_email_status(email_log.id, 'failed', error_message=str(e))
+            result['success'] = False
+            result['error'] = str(e)
         return result
 
     def notify_beta_access_denial(self, user_email: str, reason: Optional[str] = None) -> Dict[str, Any]:
         """Send denial email to user."""
         result = {}
-        email_log = self.create_email_notification_log(
-            user_id=None,
-            email_address=user_email,
-            event_type='beta_access_denial',
-            subject="Beta Access Request Update"
-        )
-        result['email_log'] = email_log
+        # Skip email notification logging for beta access denial
         try:
-            import asyncio
+            from inspect import iscoroutinefunction, isawaitable
             html_content, text_content = self.email_service.render_template(
                 TEMPLATE_BETA_ACCESS_DENIAL,
                 {'decision_reason': reason or ''}
             )
-            send_res = asyncio.run(self.email_service.send_email(
-                to_email=user_email,
-                subject="Beta Access Request Update",
-                html_content=html_content,
-                text_content=text_content,
-            ))
-            if send_res.get('success'):
-                self.update_email_status(email_log.id, 'sent', provider_message_id=send_res.get('message_id'))
+
+            send_fn = getattr(self.email_service, 'send_email')
+            if iscoroutinefunction(send_fn):
+                import asyncio
+                send_res = asyncio.run(send_fn(
+                    to_email=user_email,
+                    subject="Beta Access Request Update",
+                    html_content=html_content,
+                    text_content=text_content,
+                ))
             else:
-                self.update_email_status(email_log.id, 'failed', error_message=send_res.get('error'))
+                send_res = send_fn(
+                    to_email=user_email,
+                    subject="Beta Access Request Update",
+                    html_content=html_content,
+                    text_content=text_content,
+                )
+                if isawaitable(send_res):
+                    import asyncio
+                    send_res = asyncio.run(send_res)
+            if send_res.get('success'):
+                result['success'] = True
+                result['message_id'] = send_res.get('message_id')
+            else:
+                result['success'] = False
+                result['error'] = send_res.get('error', 'Unknown error')
         except Exception as e:
-            self.update_email_status(email_log.id, 'failed', error_message=str(e))
+            result['success'] = False
+            result['error'] = str(e)
         return result
 
     def notify_membership_added(

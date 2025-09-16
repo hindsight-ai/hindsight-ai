@@ -1,5 +1,21 @@
 // Centralized HTTP helpers for consistent API URL handling
 
+const getCookie = (name: string): string | null => {
+  if (typeof document === 'undefined') return null;
+  try {
+    const cookies = document.cookie ? document.cookie.split(';') : [];
+    for (const entry of cookies) {
+      const [rawKey, ...rest] = entry.split('=');
+      if (!rawKey) continue;
+      if (rawKey.trim() === name) {
+        const value = rest.join('=');
+        return value ? decodeURIComponent(value) : '';
+      }
+    }
+  } catch {}
+  return null;
+};
+
 export const isGuest = (): boolean => {
   try {
     return typeof window !== 'undefined' && sessionStorage.getItem('GUEST_MODE') === 'true';
@@ -122,6 +138,16 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
     headersObj['X-Active-Scope'] = activeScope;
     if (activeScope === 'organization' && activeOrgId) {
       headersObj['X-Organization-Id'] = activeOrgId;
+    }
+  }
+
+  const methodNeedsCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+  if (methodNeedsCsrf) {
+    // Forward oauth2-proxy CSRF token for write operations when present
+    const hasCsrfHeader = Object.keys(headersObj).some((key) => key.toLowerCase() === 'x-csrf-token');
+    if (!hasCsrfHeader) {
+      const token = getCookie('_oauth2_proxy_csrf');
+      if (token) headersObj['X-CSRF-Token'] = token;
     }
   }
 

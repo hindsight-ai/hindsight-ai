@@ -28,6 +28,13 @@ if [ ! -f .env ]; then
     fi
 fi
 
+# Ensure DEV_MODE is set for local development before validation
+if ! grep -q '^DEV_MODE=' .env; then
+    echo 'DEV_MODE=true' >> .env
+    echo "Added DEV_MODE=true to .env for local development."
+fi
+export DEV_MODE=$(grep '^DEV_MODE=' .env | cut -d= -f2-)
+
 # Validate environment variables before starting services
 echo "Validating environment variables..."
 if ! bash check_env.sh; then

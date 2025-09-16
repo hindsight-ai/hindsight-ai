@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../api/http';
+import notificationService from '../services/notificationService';
 
 const BetaAccessRequestPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -6,11 +9,27 @@ const BetaAccessRequestPage: React.FC = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [isDisclaimerAccepted, setIsDisclaimerAccepted] = useState(false);
+  const { user, loading } = useAuth();
+
+  const accountEmail = useMemo(() => {
+    const raw = (user as any)?.email;
+    return typeof raw === 'string' ? raw.trim() : '';
+  }, [user]);
+
+  useEffect(() => {
+    if (accountEmail) {
+      setEmail(accountEmail);
+    } else {
+      setEmail('');
+    }
+  }, [accountEmail]);
+
+  const isSubmitDisabled = isSubmitting || !email.trim();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) {
-      setError('Email is required');
+      setError('Unable to determine your account email. Please refresh and try again.');
       return;
     }
     if (!isDisclaimerAccepted) {
@@ -22,24 +41,28 @@ const BetaAccessRequestPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/beta-access/request', {
+      const response = await apiFetch('/beta-access/request', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
+        noScope: true,
         body: JSON.stringify({ email: email.trim() }),
       });
 
       if (response.ok) {
         setIsSubmitted(true);
+        notificationService.showSuccess('Beta access request sent! Check your email for confirmation.');
       } else if (response.status === 400) {
         setError('You have already requested beta access. Please wait for approval.');
+        notificationService.showWarning('You have already requested beta access. We will reach out once it is reviewed.');
       } else {
         setError('Failed to submit request. Please try again.');
+        notificationService.showError('Unable to submit your beta access request. Please try again.');
       }
     } catch (err) {
       setError('Network error. Please check your connection and try again.');
+      notificationService.showNetworkError();
     } finally {
       setIsSubmitting(false);
     }
@@ -112,12 +135,12 @@ const BetaAccessRequestPage: React.FC = () => {
               type="email"
               id="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="your.email@example.com"
+              readOnly
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-not-allowed"
+              placeholder={loading ? 'Loading account email...' : 'your.email@example.com'}
               required
             />
-          </div>
+            </div>
 
           <div>
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
@@ -160,7 +183,7 @@ const BetaAccessRequestPage: React.FC = () => {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitDisabled}
             className="w-full flex items-center justify-center px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
           >
             {isSubmitting ? (

@@ -27,6 +27,7 @@ import BetaAccessRequestPage from './components/BetaAccessRequestPage';
 import BetaAccessPendingPage from './components/BetaAccessPendingPage';
 import BetaAccessDeniedPage from './components/BetaAccessDeniedPage';
 import organizationService from './api/organizationService';
+import betaAccessService from './api/betaAccessService';
 import notificationService from './services/notificationService';
 
 interface UserInfo {
@@ -54,14 +55,14 @@ function AppContent() {
       const acceptId = params.get('accept_invite');
       const declineId = params.get('decline_invite');
       const org = params.get('org');
-      const token = params.get('token') || undefined;
+      const tokenParam = params.get('token') || undefined;
       if (org && (acceptId || declineId)) {
         try {
           if (acceptId) {
-            await organizationService.acceptInvitation(org, acceptId, token);
+            await organizationService.acceptInvitation(org, acceptId, tokenParam);
             notificationService.showSuccess('Invitation accepted');
           } else if (declineId) {
-            await organizationService.declineInvitation(org, declineId, token);
+            await organizationService.declineInvitation(org, declineId, tokenParam);
             notificationService.showInfo('Invitation declined');
           }
         } catch (e: any) {
@@ -80,6 +81,53 @@ function AppContent() {
           } else {
             notificationService.showError(`Failed to process invitation: ${msg || 'Unknown error'}`);
           }
+        }
+      }
+
+      const betaReviewId = params.get('beta_review');
+      const betaDecision = (params.get('beta_decision') || params.get('decision'))?.toLowerCase();
+      const betaToken = params.get('beta_token') || tokenParam;
+      if (betaReviewId && betaDecision && betaToken) {
+        if (betaDecision === 'accepted' || betaDecision === 'denied') {
+          try {
+            const result = await betaAccessService.reviewWithToken(betaReviewId, betaDecision as 'accepted' | 'denied', betaToken);
+            if (betaDecision === 'accepted') {
+              notificationService.showSuccess(result?.message || 'Beta access request approved successfully.');
+            } else {
+              notificationService.showInfo(result?.message || 'Beta access request denied.');
+            }
+          } catch (e: any) {
+            const detail = String(e?.message || '');
+            const lower = detail.toLowerCase();
+            if (lower.includes('expired')) {
+              notificationService.showWarning('This beta access review link has expired.');
+            } else if (lower.includes('token')) {
+              notificationService.showWarning('Invalid beta access review token.');
+            } else {
+              notificationService.showError(`Failed to update beta access request: ${detail || 'Unknown error'}`);
+            }
+          } finally {
+            params.delete('beta_review');
+            params.delete('beta_decision');
+            params.delete('decision');
+            params.delete('beta_token');
+            params.delete('token');
+            const cleaned = params.toString();
+            const hash = window.location.hash || '';
+            const newUrl = `${window.location.pathname}${cleaned ? `?${cleaned}` : ''}${hash}`;
+            try { window.history.replaceState(null, '', newUrl); } catch {}
+          }
+        } else {
+          notificationService.showWarning('Invalid beta access review decision provided.');
+          params.delete('beta_review');
+          params.delete('beta_decision');
+          params.delete('decision');
+          params.delete('beta_token');
+          params.delete('token');
+          const cleaned = params.toString();
+          const hash = window.location.hash || '';
+          const newUrl = `${window.location.pathname}${cleaned ? `?${cleaned}` : ''}${hash}`;
+          try { window.history.replaceState(null, '', newUrl); } catch {}
         }
       }
       // After processing invites, check beta access status before redirecting

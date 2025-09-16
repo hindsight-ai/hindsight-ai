@@ -53,7 +53,16 @@ def get_current_user_context(
         if not email:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     user = get_or_create_user(db, email=email, display_name=name)
-    
+
+    if is_dev_mode and getattr(user, "beta_access_status", "") != "accepted":
+        user.beta_access_status = "accepted"
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+        else:
+            db.refresh(user)
+
     # Check beta access status and send invitation if needed
     if user.beta_access_status == 'pending':
         # Check if user already has a pending request

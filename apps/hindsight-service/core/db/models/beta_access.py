@@ -14,3 +14,5 @@ class BetaAccessRequest(Base):
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     reviewer_email = Column(Text, nullable=True)
     decision_reason = Column(Text, nullable=True)
+    review_token = Column(Text, nullable=True, unique=True)
+    token_expires_at = Column(DateTime(timezone=True), nullable=True)

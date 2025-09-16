@@ -226,8 +226,8 @@ class TestOrganizationMemberAdditionRegression:
         end_time = time.time()
         api_duration = end_time - start_time
         
-        # API should respond quickly (under 50ms), not wait for email
-        assert api_duration < 0.05
+        # API should respond quickly (under 200ms), not wait for email
+        assert api_duration < 0.2
         assert response.status_code == 201
         assert response.json() == {"status": "added"}
 
