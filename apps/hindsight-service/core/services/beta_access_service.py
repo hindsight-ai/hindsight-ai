@@ -36,9 +36,10 @@ class BetaAccessService:
         # Send notification to admin
         self._send_admin_notification_email(request.id, email)
 
-        # Audit log
-        audit_log(self.db, action=AuditAction.BETA_ACCESS_REQUEST, status=AuditStatus.SUCCESS,
-                  target_type='beta_access_request', target_id=request.id, actor_user_id=user_id)
+        # Audit log (only for authenticated users)
+        if user_id is not None:
+            audit_log(self.db, action=AuditAction.BETA_ACCESS_REQUEST, status=AuditStatus.SUCCESS,
+                      target_type='beta_access_request', target_id=request.id, actor_user_id=user_id)
 
         return {'success': True, 'request_id': request.id}
 

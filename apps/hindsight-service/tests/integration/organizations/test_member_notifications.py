@@ -216,6 +216,10 @@ class TestMemberNotifications:
         """Test that email failure doesn't prevent member addition."""
         owner, organization = org_owner_context
         
+        # Ensure owner has beta access to avoid beta access invitation email
+        owner.beta_access_status = 'approved'
+        db_session.commit()
+        
         # Mock email service to raise an exception
         mock_service_instance = MagicMock()
         mock_service_instance.render_template.side_effect = Exception("Email service error")
@@ -455,11 +459,15 @@ class TestNotificationEventTypesAndTemplates:
     """Test that notifications use correct event types and template names."""
 
     @patch('core.services.transactional_email_service.get_transactional_email_service')
-    def test_membership_added_uses_correct_event_type_and_template(self, mock_email_service, client: TestClient, org_owner_context):
+    def test_membership_added_uses_correct_event_type_and_template(self, mock_email_service, client: TestClient, org_owner_context, db_session):
         """Test that membership added notifications use correct event type and template."""
         from core.services.notification_service import EVENT_ORG_MEMBERSHIP_ADDED, TEMPLATE_MEMBERSHIP_ADDED
 
         owner, organization = org_owner_context
+        
+        # Ensure owner has beta access to avoid beta access invitation email
+        owner.beta_access_status = 'approved'
+        db_session.commit()
 
         # Mock the email service
         mock_service_instance = MagicMock()
@@ -504,6 +512,10 @@ class TestNotificationEventTypesAndTemplates:
         from core.services.notification_service import EVENT_ORG_ROLE_CHANGED, TEMPLATE_ROLE_CHANGED
 
         owner, organization = org_owner_context
+        
+        # Ensure owner has beta access to avoid beta access invitation email
+        owner.beta_access_status = 'approved'
+        db_session.commit()
 
         # Create a member first
         member_email = "role_change_test@example.com"
@@ -575,6 +587,10 @@ class TestNotificationEventTypesAndTemplates:
         from core.services.notification_service import EVENT_ORG_MEMBERSHIP_REMOVED, TEMPLATE_MEMBERSHIP_REMOVED
 
         owner, organization = org_owner_context
+        
+        # Ensure owner has beta access to avoid beta access invitation email
+        owner.beta_access_status = 'approved'
+        db_session.commit()
 
         # Create a member first
         member_email = "removal_test@example.com"
