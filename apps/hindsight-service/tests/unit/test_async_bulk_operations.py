@@ -224,6 +224,114 @@ class TestBulkOperationTask:
             assert mock_delete.call_count == 3
             assert mock_operation.status == "completed"
 
+    @pytest.mark.asyncio
+    async def test_move_memory_blocks_success(self, sample_operation_data, mock_db):
+        """Memory blocks should be reassigned without errors."""
+        task = BulkOperationTask(
+            operation_id=sample_operation_data["operation_id"],
+            task_type="bulk_move",
+            actor_user_id=sample_operation_data["actor_user_id"],
+            organization_id=sample_operation_data["organization_id"],
+            payload=sample_operation_data["payload"],
+        )
+
+        blocks = [Mock(id=uuid.uuid4()) for _ in range(2)]
+        mock_db.query.return_value.filter.return_value.all.return_value = blocks
+
+        errors: list[str] = []
+        moved = await task._move_memory_blocks(
+            mock_db,
+            sample_operation_data["organization_id"],
+            uuid.uuid4(),
+            uuid.uuid4(),
+            errors,
+        )
+
+        assert moved == 2
+        assert errors == []
+
+    @pytest.mark.asyncio
+    async def test_move_keywords_records_generic_failure(self, sample_operation_data, mock_db):
+        """Generic exceptions while moving keywords are captured and logged."""
+        task = BulkOperationTask(
+            operation_id=sample_operation_data["operation_id"],
+            task_type="bulk_move",
+            actor_user_id=sample_operation_data["actor_user_id"],
+            organization_id=sample_operation_data["organization_id"],
+            payload=sample_operation_data["payload"],
+        )
+
+        keywords = [Mock(keyword_id=uuid.uuid4()) for _ in range(2)]
+        mock_db.query.return_value.filter.return_value.all.return_value = keywords
+
+        commit_calls = {"count": 0}
+
+        def commit_side_effect():
+            commit_calls["count"] += 1
+            if commit_calls["count"] >= 2:
+                raise Exception("boom")
+
+        mock_db.commit.side_effect = commit_side_effect
+
+        errors: list[str] = []
+        moved = await task._move_keywords(
+            mock_db,
+            sample_operation_data["organization_id"],
+            uuid.uuid4(),
+            uuid.uuid4(),
+            errors,
+        )
+
+        assert moved == 1
+        assert len(errors) == 1
+        assert "Failed to move keyword" in errors[0]
+        mock_db.rollback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_memory_blocks_records_errors(self, sample_operation_data, mock_db):
+        """Deleting memory blocks surfaces exceptions as error entries."""
+        task = BulkOperationTask(
+            operation_id=sample_operation_data["operation_id"],
+            task_type="bulk_delete",
+            actor_user_id=sample_operation_data["actor_user_id"],
+            organization_id=sample_operation_data["organization_id"],
+            payload={"resource_types": ["memory_blocks"]},
+        )
+
+        blocks = [Mock(id=uuid.uuid4()) for _ in range(2)]
+        mock_db.query.return_value.filter.return_value.all.return_value = blocks
+
+        with patch('core.async_bulk_operations.crud.delete_memory_block') as mock_delete:
+            mock_delete.side_effect = [True, Exception("fail")]
+            errors: list[str] = []
+            deleted = await task._delete_memory_blocks(mock_db, sample_operation_data["organization_id"], errors)
+
+        assert deleted == 1
+        assert len(errors) == 1
+        assert "Failed to delete memory block" in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_delete_keywords_success(self, sample_operation_data, mock_db):
+        """Keyword deletion success path increments counter."""
+        task = BulkOperationTask(
+            operation_id=sample_operation_data["operation_id"],
+            task_type="bulk_delete",
+            actor_user_id=sample_operation_data["actor_user_id"],
+            organization_id=sample_operation_data["organization_id"],
+            payload={"resource_types": ["keywords"]},
+        )
+
+        keywords = [Mock(keyword_id=uuid.uuid4()) for _ in range(3)]
+        mock_db.query.return_value.filter.return_value.all.return_value = keywords
+
+        with patch('core.async_bulk_operations.crud.delete_keyword') as mock_delete:
+            mock_delete.return_value = True
+            errors: list[str] = []
+            deleted = await task._delete_keywords(mock_db, sample_operation_data["organization_id"], errors)
+
+        assert deleted == 3
+        assert errors == []
+
 
 class TestAsyncBulkOperationsManager:
     """Test the AsyncBulkOperationsManager class."""

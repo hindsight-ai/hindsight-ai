@@ -6,7 +6,7 @@ Centralizes business logic for consistent handling across the app.
 import uuid
 from datetime import datetime, timedelta, UTC
 from typing import Optional, List, Dict, Any
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import and_, desc
 
 from core.db import models
@@ -41,6 +41,20 @@ class NotificationService:
     
     def __init__(self, db: Session, email_service: Optional[_Any] = None):
         self.db = db
+        self._session_factory: Optional[sessionmaker] = None
+        try:
+            bind = db.get_bind() if hasattr(db, "get_bind") else getattr(db, "bind", None)
+            if bind is not None:
+                engine = getattr(bind, "engine", bind)
+                self._session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        except Exception:
+            self._session_factory = None
+        if self._session_factory is None:
+            try:
+                from core.db.database import SessionLocal as _SessionLocal
+                self._session_factory = _SessionLocal  # type: ignore[assignment]
+            except Exception:
+                self._session_factory = None
         # Import the transactional email factory lazily so tests that patch
         # core.services.transactional_email_service.get_transactional_email_service
         # will be effective. If an explicit email_service is provided, use it.
@@ -301,7 +315,38 @@ class NotificationService:
         
         self.db.commit()
         return True
-    
+
+    def _safe_update_email_status(
+        self,
+        email_log_id: uuid.UUID,
+        status: str,
+        provider_message_id: Optional[str] = None,
+        error_message: Optional[str] = None
+    ) -> bool:
+        if self._session_factory is not None:
+            session = None
+            try:
+                session = self._session_factory()
+                return self._update_email_status_with_session(
+                    session,
+                    email_log_id,
+                    status,
+                    provider_message_id=provider_message_id,
+                    error_message=error_message,
+                )
+            finally:
+                if session is not None:
+                    try:
+                        session.close()
+                    except Exception:
+                        pass
+        return self.update_email_status(
+            email_log_id,
+            status,
+            provider_message_id=provider_message_id,
+            error_message=error_message,
+        )
+
     def _update_email_status_with_session(
         self,
         db_session: Session,
@@ -873,6 +918,14 @@ class NotificationService:
                     }
 
                     # Render template synchronously (so patched render_template gets called)
+                    def _update(status: str, message_id: Optional[str] = None, error: Optional[str] = None) -> None:
+                        self._safe_update_email_status(
+                            email_log.id,
+                            status,
+                            provider_message_id=message_id,
+                            error_message=error,
+                        )
+
                     try:
                         html, text = self.email_service.render_template(TEMPLATE_MEMBERSHIP_ADDED, context)
                     except Exception as e:
@@ -891,11 +944,11 @@ class NotificationService:
                                 text_content=text
                             ))
                             if send_res.get('success'):
-                                self.update_email_status(email_log.id, 'sent', provider_message_id=send_res.get('message_id'))
+                                _update('sent', message_id=send_res.get('message_id'))
                             else:
-                                self.update_email_status(email_log.id, 'failed', error_message=send_res.get('error'))
+                                _update('failed', error=send_res.get('error'))
                         except Exception as e:
-                            self.update_email_status(email_log.id, 'failed', error_message=str(e))
+                            _update('failed', error=str(e))
 
                     import threading
                     t = threading.Thread(target=_send, daemon=True)
@@ -903,7 +956,7 @@ class NotificationService:
 
                     result['email_result'] = {'dispatched_in_background': True}
             except Exception as e:
-                self.update_email_status(email_log.id, 'failed', error_message=f"Email dispatch error: {str(e)}")
+                self._safe_update_email_status(email_log.id, 'failed', error_message=f"Email dispatch error: {str(e)}")
         
         return result
 
@@ -973,11 +1026,11 @@ class NotificationService:
                             text_content=text
                         ))
                         if send_res.get('success'):
-                            self.update_email_status(log.id, 'sent', provider_message_id=send_res.get('message_id'))
+                            self._safe_update_email_status(log.id, 'sent', provider_message_id=send_res.get('message_id'))
                         else:
-                            self.update_email_status(log.id, 'failed', error_message=send_res.get('error'))
+                            self._safe_update_email_status(log.id, 'failed', error_message=send_res.get('error'))
                     except Exception as e:
-                        self.update_email_status(log.id, 'failed', error_message=str(e))
+                        self._safe_update_email_status(log.id, 'failed', error_message=str(e))
 
                 import threading
                 t = threading.Thread(target=_send, daemon=True)
@@ -985,7 +1038,7 @@ class NotificationService:
 
                 result['email_result'] = {'dispatched_in_background': True}
             except Exception as e:
-                self.update_email_status(log.id, 'failed', error_message=f"Email dispatch error: {str(e)}")
+                self._safe_update_email_status(log.id, 'failed', error_message=f"Email dispatch error: {str(e)}")
 
         return result
 
@@ -1051,11 +1104,11 @@ class NotificationService:
                             text_content=text
                         ))
                         if send_res.get('success'):
-                            self.update_email_status(log.id, 'sent', provider_message_id=send_res.get('message_id'))
+                            self._safe_update_email_status(log.id, 'sent', provider_message_id=send_res.get('message_id'))
                         else:
-                            self.update_email_status(log.id, 'failed', error_message=send_res.get('error'))
+                            self._safe_update_email_status(log.id, 'failed', error_message=send_res.get('error'))
                     except Exception as e:
-                        self.update_email_status(log.id, 'failed', error_message=str(e))
+                        self._safe_update_email_status(log.id, 'failed', error_message=str(e))
 
                 import threading
                 t = threading.Thread(target=_send, daemon=True)
@@ -1063,7 +1116,7 @@ class NotificationService:
 
                 result['email_result'] = {'dispatched_in_background': True}
             except Exception as e:
-                self.update_email_status(log.id, 'failed', error_message=f"Email dispatch error: {str(e)}")
+                self._safe_update_email_status(log.id, 'failed', error_message=f"Email dispatch error: {str(e)}")
 
         return result
 

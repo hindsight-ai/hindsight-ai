@@ -119,9 +119,11 @@ def db_session(_engine, _SessionLocal):
     finally:
         _current_session.reset(token)
         _GLOBAL_SESSION = None
-        session.close()
-        trans.rollback()
-        connection.close()
+        try:
+            trans.rollback()
+        finally:
+            session.close()
+            connection.close()
 
 # FastAPI dependency override so app endpoints use our transactional session
 import core.db.database as db_module
