@@ -712,6 +712,40 @@ def resend_invitation(
         pass
     db.commit()
     db.refresh(db_invitation)
+
+    # Send the invitation email
+    try:
+        organization = db.query(models.Organization).filter(models.Organization.id == org_id).first()
+        invitee_user = db.query(models.User).filter(models.User.email == db_invitation.email).first()
+
+        if organization:
+            from core.utils.urls import build_login_invite_link
+            accept_url = build_login_invite_link(
+                invitation_id=str(db_invitation.id), org_id=str(org_id), email=db_invitation.email, action="accept", token=db_invitation.token
+            )
+            decline_url = build_login_invite_link(
+                invitation_id=str(db_invitation.id), org_id=str(org_id), email=db_invitation.email, action="decline", token=db_invitation.token
+            )
+
+            from core.services.notification_service import NotificationService
+            notification_service = NotificationService(db)
+            notification_service.notify_organization_invitation(
+                invitee_user_id=invitee_user.id if invitee_user else None,
+                invitee_email=db_invitation.email,
+                inviter_name=user.display_name or user.email,
+                inviter_user_id=user.id,
+                organization_name=organization.name,
+                invitation_id=db_invitation.id,
+                accept_url=accept_url,
+                decline_url=decline_url,
+                role=db_invitation.role
+            )
+    except Exception as e:
+        # Log error but don't fail the resend operation
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to send notification for invitation resend {db_invitation.id}: {str(e)}")
+
     from core.audit import log, AuditAction, AuditStatus
     log(
         db,

@@ -297,6 +297,52 @@ class NotificationService:
         self.db.commit()
         return True
     
+    def _update_email_status_with_session(
+        self,
+        db_session: Session,
+        email_log_id: uuid.UUID,
+        status: str,
+        provider_message_id: Optional[str] = None,
+        error_message: Optional[str] = None
+    ) -> bool:
+        """
+        Update the status of an email notification using a specific database session.
+        
+        Args:
+            db_session: Database session to use for the update
+            email_log_id: ID of the email log entry
+            status: New status ('sent', 'failed', 'bounced', 'delivered')
+            provider_message_id: Message ID from email service provider
+            error_message: Error details if failed
+        
+        Returns:
+            True if update successful, False if log not found
+        """
+        email_log = db_session.query(models.EmailNotificationLog).filter(
+            models.EmailNotificationLog.id == email_log_id
+        ).first()
+        
+        if not email_log:
+            return False
+        
+        email_log.status = status
+        if provider_message_id:
+            email_log.provider_message_id = provider_message_id
+        if error_message:
+            email_log.error_message = error_message
+        
+        # Set appropriate timestamp based on status
+        now = datetime.now(UTC)
+        if status == 'sent':
+            email_log.sent_at = now
+        elif status == 'delivered':
+            email_log.delivered_at = now
+        elif status == 'bounced':
+            email_log.bounced_at = now
+        
+        db_session.commit()
+        return True
+    
     async def send_email_notification(
         self,
         email_log: models.EmailNotificationLog,
@@ -490,6 +536,9 @@ class NotificationService:
                 # Send in background thread
                 def _send():
                     import asyncio
+                    # Create a new database session for background operations
+                    from core.db.database import get_db
+                    background_db = next(get_db())
                     try:
                         send_res = asyncio.run(self.email_service.send_email(
                             to_email=email_log.email_address,
@@ -498,11 +547,22 @@ class NotificationService:
                             text_content=text
                         ))
                         if send_res.get('success'):
-                            self.update_email_status(email_log.id, 'sent', provider_message_id=send_res.get('message_id'))
+                            self._update_email_status_with_session(
+                                background_db, email_log.id, 'sent', 
+                                provider_message_id=send_res.get('message_id')
+                            )
                         else:
-                            self.update_email_status(email_log.id, 'failed', error_message=send_res.get('error'))
+                            self._update_email_status_with_session(
+                                background_db, email_log.id, 'failed', 
+                                error_message=send_res.get('error')
+                            )
                     except Exception as e:
-                        self.update_email_status(email_log.id, 'failed', error_message=str(e))
+                        self._update_email_status_with_session(
+                            background_db, email_log.id, 'failed', 
+                            error_message=str(e)
+                        )
+                    finally:
+                        background_db.close()
 
                 import threading
                 t = threading.Thread(target=_send, daemon=True)
