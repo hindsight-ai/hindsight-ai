@@ -42,6 +42,7 @@ from core.api.notifications import router as notifications_router
 from core.api.consolidation import router as consolidation_router
 from core.api.support import router as support_router
 from core.api.users import router as users_router
+from core.api.beta_access import router as beta_access_router
 from core.api.permissions import can_read, can_write, can_manage_org
 from core.utils.scopes import (
     ALL_SCOPES,
@@ -297,6 +298,7 @@ def get_user_info(
             "email": user.email,
             "display_name": user.display_name,
             "is_superadmin": bool(user.is_superadmin),
+            "beta_access_status": user.beta_access_status,
             "memberships": memberships,
         }
 
@@ -320,6 +322,7 @@ def get_user_info(
                 "email": user.email,
                 "display_name": user.display_name,
                 "is_superadmin": bool(getattr(user, "is_superadmin", False)),
+                "beta_access_status": user.beta_access_status,
                 "memberships": memberships,
                 "pat": current_user.get("pat") or None,
             }
@@ -349,6 +352,7 @@ def get_user_info(
             "email": user.email,
             "display_name": user.display_name,
             "is_superadmin": bool(user.is_superadmin),
+            "beta_access_status": user.beta_access_status,
             "memberships": memberships,
         }
 
@@ -373,6 +377,7 @@ def get_user_info(
         "email": user.email,
         "display_name": user.display_name,
         "is_superadmin": bool(user.is_superadmin),
+        "beta_access_status": user.beta_access_status,
         "memberships": memberships,
     }
 
@@ -1269,6 +1274,7 @@ app.include_router(bulk_operations_router)
 app.include_router(notifications_router)
 app.include_router(consolidation_router)
 app.include_router(support_router)
+app.include_router(beta_access_router)
 
 # Include memory optimization router
 try:

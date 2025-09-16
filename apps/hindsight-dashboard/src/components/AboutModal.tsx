@@ -3,6 +3,7 @@ import Portal from './Portal';
 import { getBuildInfo } from '../api/memoryService';
 import memoryService from '../api/memoryService';
 import notificationService from '../services/notificationService';
+import { VITE_VERSION, VITE_BUILD_SHA, VITE_BUILD_TIMESTAMP, VITE_DASHBOARD_IMAGE_TAG } from '../lib/viteEnv';
 import { useAuth } from '../context/AuthContext';
 
 interface BuildInfo {
@@ -54,13 +55,13 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
       });
     }
     
-    // Get frontend build information from environment variables
+    // Get frontend build information from environment variables (via wrapper)
     const frontendData = {
       service_name: "AI Agent Memory Dashboard",
-      version: import.meta.env.VITE_VERSION || "unknown",
-      build_sha: import.meta.env.VITE_BUILD_SHA || "unknown",
-      build_timestamp: import.meta.env.VITE_BUILD_TIMESTAMP || "unknown",
-      image_tag: import.meta.env.VITE_DASHBOARD_IMAGE_TAG || "unknown"
+      version: VITE_VERSION || "unknown",
+      build_sha: VITE_BUILD_SHA || "unknown",
+      build_timestamp: VITE_BUILD_TIMESTAMP || "unknown",
+      image_tag: VITE_DASHBOARD_IMAGE_TAG || "unknown"
     };
     setFrontendInfo(frontendData);
     

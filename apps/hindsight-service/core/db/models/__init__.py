@@ -16,6 +16,7 @@ from .memory import MemoryBlock, FeedbackLog, MemoryBlockKeyword, ConsolidationS
 from .audit import AuditLog
 from .bulk_ops import BulkOperation
 from .notifications import UserNotificationPreference, Notification, EmailNotificationLog
+from .beta_access import BetaAccessRequest
 from .tokens import PersonalAccessToken
 
 __all__ = [
@@ -43,6 +44,7 @@ __all__ = [
     "UserNotificationPreference",
     "Notification",
     "EmailNotificationLog",
+    "BetaAccessRequest",
     # tokens
     "PersonalAccessToken",
 ]

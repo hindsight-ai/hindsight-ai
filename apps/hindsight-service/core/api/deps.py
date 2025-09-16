@@ -18,6 +18,7 @@ from core.db import models
 from core.db.scope_utils import ScopeContext
 from core.db.repositories import tokens as token_repo
 from core.utils.token_crypto import parse_token, verify_secret
+from core.services.beta_access_service import BetaAccessService
 from fastapi import HTTPException
 import logging
 
@@ -53,6 +54,21 @@ def get_current_user_context(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     user = get_or_create_user(db, email=email, display_name=name)
     
+    # Check beta access status and send invitation if needed
+    if user.beta_access_status == 'pending':
+        # Check if user already has a pending request
+        from core.db.repositories import beta_access as beta_repo
+        existing_request = beta_repo.get_beta_access_request_by_email(db, user.email)
+        if not existing_request or existing_request.status != 'pending':
+            # Send invitation email for users without beta access who haven't requested it yet
+            try:
+                from core.services.notification_service import NotificationService
+                notification_service = NotificationService(db)
+                notification_service.notify_beta_access_invitation(user.email)
+            except Exception as e:
+                # Log error but don't fail authentication
+                logging.getLogger("hindsight.auth").warning(f"Failed to send beta access invitation to {user.email}: {e}")
+    
     # Comment out automatic superadmin privileges for dev user to test non-superadmin functionality
     # if is_dev_mode and email == "dev@localhost" and not user.is_superadmin:
     #     user.is_superadmin = True
@@ -67,6 +83,7 @@ def get_current_user_context(
         "email": user.email,
         "display_name": user.display_name,
         "is_superadmin": bool(getattr(user, "is_superadmin", False)),
+        "beta_access_status": user.beta_access_status,
         "memberships": memberships,
         "memberships_by_org": memberships_by_org,
     }

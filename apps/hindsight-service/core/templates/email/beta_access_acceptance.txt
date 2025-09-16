@@ -1,0 +1,20 @@
+Beta Access Granted - Welcome to Hindsight AI!
+
+Welcome to the Beta!
+Your access to Hindsight AI has been approved
+
+Hello!
+
+Great news! Your request for beta access to Hindsight AI has been approved. You now have full access to the platform.
+
+What you can do now:
+- Access all Hindsight AI features
+- Manage your AI memory and knowledge
+- Collaborate with other beta users
+- Provide feedback to help us improve
+
+Start Using Hindsight AI: {{ login_url }}
+
+Thank you for joining our beta program! Your feedback and participation will help us build the best AI memory management platform possible.
+
+If you have any questions or need help getting started, please don't hesitate to contact our support team.

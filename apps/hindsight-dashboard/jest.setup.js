@@ -1,4 +1,5 @@
-import '@testing-library/jest-dom';
+// Use CommonJS require for setup to avoid mixing ESM/CJS in Jest setup
+require('@testing-library/jest-dom');
 
 // Default URL for JSDOM to avoid URL-related errors
 if (typeof window !== 'undefined' && !window.location) {
@@ -19,11 +20,38 @@ if (typeof global.fetch === 'undefined') {
 
 // Polyfill TextEncoder/TextDecoder for react-router in Jest environment
 try {
-  const util = require('util');
-  if (typeof global.TextEncoder === 'undefined') {
-    global.TextEncoder = util.TextEncoder;
+  // Destructure TextEncoder/TextDecoder from util if available (Node >= 11)
+  const { TextEncoder, TextDecoder } = require('util');
+  if (typeof global.TextEncoder === 'undefined' && typeof TextEncoder !== 'undefined') {
+    global.TextEncoder = TextEncoder;
   }
-  if (typeof global.TextDecoder === 'undefined') {
-    global.TextDecoder = util.TextDecoder;
+  if (typeof global.TextDecoder === 'undefined' && typeof TextDecoder !== 'undefined') {
+    global.TextDecoder = TextDecoder;
   }
-} catch {}
+} catch (e) {
+  // ignore if util/TextEncoder not available
+}
+
+// Mock ESM-only packages that Jest cannot transform (e.g. react-resizable-panels)
+// This creates a simple CommonJS-compatible stub so imports succeed during tests.
+try {
+  // Only set up mocks if Jest globals are available
+  if (typeof jest !== 'undefined') {
+    jest.mock('react-resizable-panels', () => ({
+      PanelGroup: ({ children }) => children || null,
+      Panel: ({ children }) => children || null,
+      PanelResizeHandle: () => null,
+    }));
+    // Provide a predictable mock for our viteEnv wrapper used across components
+    jest.mock('./src/lib/viteEnv', () => ({
+      VITE_DEV_MODE: false,
+      VITE_VERSION: 'test',
+      VITE_BUILD_SHA: 'test-sha',
+      VITE_BUILD_TIMESTAMP: 'test-ts',
+      VITE_DASHBOARD_IMAGE_TAG: 'test-tag',
+      rawImportMetaEnv: {},
+    }));
+  }
+} catch (e) {
+  // ignore in environments without jest
+}

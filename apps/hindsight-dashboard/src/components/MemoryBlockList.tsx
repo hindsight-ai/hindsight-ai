@@ -41,7 +41,9 @@ interface SortState {
   order: 'asc' | 'desc';
 }
 
-const MemoryBlockList = () => {
+import { VITE_DEV_MODE } from '../lib/viteEnv';
+
+const MemoryBlockList: React.FC = () => {
   const [memoryBlocks, setMemoryBlocks] = useState<UIMemoryBlock[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,8 +83,8 @@ const MemoryBlockList = () => {
   const [selectedMemoryBlocks, setSelectedMemoryBlocks] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState<boolean>(true); // State for toggling filter visibility - always visible for better UX
   const [availableAgentIds, setAvailableAgentIds] = useState<string[]>([]); // New state for agent IDs
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null); // Track when data was last updated
   const [showAdvancedSearch, setShowAdvancedSearch] = useState<boolean>(false); // State for advanced search toggle
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Debounce logic for search term
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -689,7 +691,7 @@ const MemoryBlockList = () => {
               </button>
 
               {/* Test buttons for feedback system - only show in development mode */}
-              {import.meta.env.DEV && (
+              {VITE_DEV_MODE && (
                 <>
                   <button
                     className="test-save-button"

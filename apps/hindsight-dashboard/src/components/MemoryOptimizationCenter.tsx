@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, FC } from 'react';
+import { VITE_DEV_MODE } from '../lib/viteEnv';
 import { useNavigate } from 'react-router-dom';
 import memoryService from '../api/memoryService';
 import agentService from '../api/agentService';
@@ -727,7 +728,7 @@ const MemoryOptimizationCenter: FC = () => {
                 Back to Memory Blocks
               </button>
               {/* Only show debug panel button in development mode */}
-              {import.meta.env.VITE_DEV_MODE === 'true' || import.meta.env.DEV && (
+              {VITE_DEV_MODE && (
                 <button
                   onClick={() => setShowDebugPanel(!showDebugPanel)}
                   className="bg-purple-600 text-white rounded-md px-4 py-2 text-sm font-medium hover:bg-purple-700"
@@ -1081,8 +1082,8 @@ const MemoryOptimizationCenter: FC = () => {
         }}
       />
 
-      {/* Debug Panel - Only show in development mode */}
-      {import.meta.env.DEV && showDebugPanel && (
+  {/* Debug Panel - Only show in development mode */}
+  {VITE_DEV_MODE && showDebugPanel && (
         <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-medium text-yellow-800">🔧 Debug Panel</h3>

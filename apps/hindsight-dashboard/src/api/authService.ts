@@ -15,6 +15,7 @@ export interface CurrentUserInfo {
   email?: string;
   display_name?: string;
   is_superadmin?: boolean;
+  beta_access_status?: 'pending' | 'accepted' | 'denied';
   memberships?: OrganizationMembership[];
 }
 

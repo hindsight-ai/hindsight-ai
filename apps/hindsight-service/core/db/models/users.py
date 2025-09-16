@@ -12,6 +12,8 @@ class User(Base):
     is_superadmin = Column(Boolean, nullable=False, default=False)
     auth_provider = Column(String, nullable=True)
     external_subject = Column(String, nullable=True)
+    # Beta access status: 'accepted'|'pending'|'denied'
+    beta_access_status = Column(String, nullable=False, default='pending')
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 

@@ -1,0 +1,20 @@
+New Beta Access Request - Hindsight AI
+
+Beta Access Request
+A new user wants to join the beta program
+
+Hello Admin,
+
+A new user has requested access to the Hindsight AI beta program.
+
+Request Details:
+User Email: {{ user_email }}
+Requested At: {{ requested_at }}
+Request ID: {{ request_id }}
+
+Please review this request and decide whether to grant or deny beta access.
+
+Accept Request: {{ accept_url }}
+Deny Request: {{ deny_url }}
+
+You can also review all pending requests in the admin dashboard.

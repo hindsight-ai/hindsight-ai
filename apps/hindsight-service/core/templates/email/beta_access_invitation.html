@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Join the Hindsight AI Beta - Request Access{% endblock %}
+
+{% block header_title %}Join Our Beta Program!{% endblock %}
+{% block header_subtitle %}Help us test the future of AI memory management{% endblock %}
+
+{% block content %}
+<h2>You're Invited to Join the Hindsight AI Beta</h2>
+
+<p>Hello!</p>
+
+<p>Thank you for your interest in Hindsight AI. We're currently in a closed beta phase and would love to have you test our platform.</p>
+
+<p>Hindsight AI helps teams manage their AI memory and knowledge effectively. As a beta tester, you'll get early access to:</p>
+
+<ul style="margin: 16px 0; padding-left: 24px; color: #475569;">
+    <li>Advanced AI memory management tools</li>
+    <li>Collaborative knowledge sharing features</li>
+    <li>Cutting-edge AI memory optimization</li>
+    <li>Exclusive beta community access</li>
+</ul>
+
+<div class="button-container">
+    <a href="{{ request_url }}" class="button">Request Beta Access</a>
+</div>
+
+<p style="margin-top: 32px; color: #64748b; font-size: 14px;">
+    Your request will be reviewed by our team. We'll notify you once a decision has been made.
+</p>
+
+<p style="color: #64748b; font-size: 14px;">
+    If you have any questions about the beta program, feel free to reply to this email.
+</p>
+{% endblock %}

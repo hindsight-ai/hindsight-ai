@@ -1,0 +1,21 @@
+Join the Hindsight AI Beta - Request Access
+
+You're Invited to Join Our Beta Program!
+Help us test the future of AI memory management
+
+Hello!
+
+Thank you for your interest in Hindsight AI. We're currently in a closed beta phase and would love to have you test our platform.
+
+Hindsight AI helps teams manage their AI memory and knowledge effectively. As a beta tester, you'll get early access to:
+
+- Advanced AI memory management tools
+- Collaborative knowledge sharing features
+- Cutting-edge AI memory optimization
+- Exclusive beta community access
+
+Request Beta Access: {{ request_url }}
+
+Your request will be reviewed by our team. We'll notify you once a decision has been made.
+
+If you have any questions about the beta program, feel free to reply to this email.

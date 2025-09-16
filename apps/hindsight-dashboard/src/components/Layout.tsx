@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar';
 import MainContent from './MainContent';
+import { VITE_DEV_MODE } from '../lib/viteEnv';
 
 interface LayoutProps {
   title: string;
@@ -24,7 +25,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, onOpenAbout, onToggleD
           isOpen={sidebarOpen} 
           onClose={closeSidebar} 
           onCollapseChange={handleSidebarCollapse} 
-          onToggleDebugPanel={import.meta.env.VITE_DEV_MODE === 'true' || import.meta.env.DEV ? onToggleDebugPanel : undefined} 
+          onToggleDebugPanel={VITE_DEV_MODE ? onToggleDebugPanel : undefined} 
         />
       </div>
       <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-16 ml-0' : 'lg:ml-64 ml-0'}`}>

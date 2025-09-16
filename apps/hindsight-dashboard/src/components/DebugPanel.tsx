@@ -1,5 +1,6 @@
 import React from 'react';
 import notificationService from '../services/notificationService';
+import { VITE_DEV_MODE } from '../lib/viteEnv';
 
 interface DebugPanelProps {
   visible?: boolean;
@@ -7,7 +8,7 @@ interface DebugPanelProps {
 
 const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
   // Only show in development mode OR when explicitly made visible
-  const isDevMode = import.meta.env.VITE_DEV_MODE === 'true' || import.meta.env.DEV;
+  const isDevMode = VITE_DEV_MODE;
   if (!isDevMode && !visible) {
     return null;
   }

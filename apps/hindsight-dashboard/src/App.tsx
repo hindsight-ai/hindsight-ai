@@ -23,6 +23,9 @@ import { NotificationProvider } from './context/NotificationContext';
 import LoginPage from './components/LoginPage';
 import ProfilePage from './components/ProfilePage';
 import TokensPage from './components/TokensPage';
+import BetaAccessRequestPage from './components/BetaAccessRequestPage';
+import BetaAccessPendingPage from './components/BetaAccessPendingPage';
+import BetaAccessDeniedPage from './components/BetaAccessDeniedPage';
 import organizationService from './api/organizationService';
 import notificationService from './services/notificationService';
 
@@ -79,7 +82,17 @@ function AppContent() {
           }
         }
       }
-      try { window.location.replace('/dashboard'); } catch { window.location.href = '/dashboard'; }
+      // After processing invites, check beta access status before redirecting
+      const betaStatus = (user as any).beta_access_status;
+      if (betaStatus === 'pending') {
+        try { window.location.replace('/beta-access/pending'); } catch { window.location.href = '/beta-access/pending'; }
+      } else if (betaStatus === 'denied') {
+        try { window.location.replace('/beta-access/denied'); } catch { window.location.href = '/beta-access/denied'; }
+      } else if (!betaStatus) {
+        try { window.location.replace('/beta-access/request'); } catch { window.location.href = '/beta-access/request'; }
+      } else {
+        try { window.location.replace('/dashboard'); } catch { window.location.href = '/dashboard'; }
+      }
     };
 
     if (!loading && user && (user as UserInfo).authenticated && location.pathname === '/login') {
@@ -90,7 +103,19 @@ function AppContent() {
   useEffect(() => {
     if (!loading && location.pathname === '/') {
       if (user && (user as UserInfo).authenticated) {
-        try { window.location.replace('/dashboard'); } catch { window.location.href = '/dashboard'; }
+        // Check beta access status and redirect accordingly
+        const betaStatus = (user as any).beta_access_status;
+        if (betaStatus === 'pending') {
+          try { window.location.replace('/beta-access/pending'); } catch { window.location.href = '/beta-access/pending'; }
+        } else if (betaStatus === 'denied') {
+          try { window.location.replace('/beta-access/denied'); } catch { window.location.href = '/beta-access/denied'; }
+        } else if (!betaStatus) {
+          // No beta access record, redirect to request page
+          try { window.location.replace('/beta-access/request'); } catch { window.location.href = '/beta-access/request'; }
+        } else {
+          // betaStatus === 'accepted' or any other value, go to dashboard
+          try { window.location.replace('/dashboard'); } catch { window.location.href = '/dashboard'; }
+        }
       } else if (!guest) {
         try { window.location.replace('/login'); } catch { window.location.href = '/login'; }
       }
@@ -101,8 +126,40 @@ function AppContent() {
     return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Loading…</div></div>);
   }
   if (location.pathname === '/login') return <LoginPage />;
+  if (location.pathname === '/beta-access/request') return <BetaAccessRequestPage />;
+  if (location.pathname === '/beta-access/pending') return <BetaAccessPendingPage />;
+  if (location.pathname === '/beta-access/denied') return <BetaAccessDeniedPage />;
   if (!guest && (!user || !(user as UserInfo).authenticated) && location.pathname !== '/login') {
     return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Redirecting to login…</div></div>);
+  }
+
+  // Check beta access status for dashboard routes
+  const isDashboardRoute = location.pathname.startsWith('/dashboard') || 
+                          location.pathname === '/profile' || 
+                          location.pathname === '/tokens' ||
+                          location.pathname.startsWith('/memory-blocks') ||
+                          location.pathname === '/keywords' ||
+                          location.pathname === '/agents' ||
+                          location.pathname === '/analytics' ||
+                          location.pathname.startsWith('/consolidation-suggestions') ||
+                          location.pathname.startsWith('/archived-memory-blocks') ||
+                          location.pathname.startsWith('/pruning-suggestions') ||
+                          location.pathname === '/memory-optimization-center' ||
+                          location.pathname === '/support';
+
+  if (isDashboardRoute && user && (user as UserInfo).authenticated) {
+    const betaStatus = (user as any).beta_access_status;
+    if (betaStatus === 'pending') {
+      try { window.location.replace('/beta-access/pending'); } catch { window.location.href = '/beta-access/pending'; }
+      return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Redirecting…</div></div>);
+    } else if (betaStatus === 'denied') {
+      try { window.location.replace('/beta-access/denied'); } catch { window.location.href = '/beta-access/denied'; }
+      return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Redirecting…</div></div>);
+    } else if (!betaStatus) {
+      try { window.location.replace('/beta-access/request'); } catch { window.location.href = '/beta-access/request'; }
+      return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Redirecting…</div></div>);
+    }
+    // If betaStatus === 'accepted' or any other value, allow access to dashboard
   }
 
   const getPageTitle = (pathname: string): string => {

@@ -27,6 +27,9 @@ class AuditAction(str, Enum):
     INVITATION_REVOKE = "invitation_revoke"
     INVITATION_ACCEPT = "invitation_accept"
     INVITATION_DECLINE = "invitation_decline"
+    # Beta Access
+    BETA_ACCESS_REQUEST = "beta_access_request"
+    BETA_ACCESS_REVIEW = "beta_access_review"
     # Agent
     AGENT_CREATE = "agent_create"
     AGENT_UPDATE = "agent_update"
