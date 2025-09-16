@@ -21,6 +21,16 @@ DEPLOYMENT_REQUIRED_VARS=(
   "OAUTH2_PROXY_COOKIE_SECRET"
 )
 
+# Variables that must have specific values in deployment
+DEPLOYMENT_SPECIFIC_VARS=(
+  "DEV_MODE=false"
+)
+
+# Arrays to track validation issues
+MISSING_VARS=()
+EMPTY_VARS=()
+INVALID_VARS=()
+
 if [[ "$IS_DEPLOYMENT" == "true" ]]; then
   echo "🔍 Running in deployment environment (staging/production) - all variables required"
 else
@@ -61,6 +71,21 @@ while IFS= read -r line; do
   fi
 done < "$EXAMPLE_FILE"
 
+# Validate deployment-specific variables
+if [[ "$IS_DEPLOYMENT" == "true" ]]; then
+  for spec in "${DEPLOYMENT_SPECIFIC_VARS[@]}"; do
+    VAR_NAME=$(echo "$spec" | cut -d= -f1)
+    EXPECTED_VALUE=$(echo "$spec" | cut -d= -f2-)
+    VAR_VALUE=$(grep "^$VAR_NAME=" "$ENV_FILE" | cut -d= -f2-)
+    
+    if ! grep -q "^$VAR_NAME=" "$ENV_FILE"; then
+      MISSING_VARS+=("$VAR_NAME")
+    elif [[ "$VAR_VALUE" != "$EXPECTED_VALUE" ]]; then
+      INVALID_VARS+=("$VAR_NAME (expected: $EXPECTED_VALUE, got: $VAR_VALUE)")
+    fi
+  done
+fi
+
 # Report results
 if [ ${#MISSING_VARS[@]} -ne 0 ]; then
   echo "❌ Missing environment variables:"
@@ -76,7 +101,14 @@ if [ ${#EMPTY_VARS[@]} -ne 0 ]; then
   done
 fi
 
-if [ ${#MISSING_VARS[@]} -eq 0 ] && [ ${#EMPTY_VARS[@]} -eq 0 ]; then
+if [ ${#INVALID_VARS[@]} -ne 0 ]; then
+  echo "❌ Invalid environment variables:"
+  for var in "${INVALID_VARS[@]}"; do
+    echo "  - $var"
+  done
+fi
+
+if [ ${#MISSING_VARS[@]} -eq 0 ] && [ ${#EMPTY_VARS[@]} -eq 0 ] && [ ${#INVALID_VARS[@]} -eq 0 ]; then
   echo "✅ All required environment variables are set and non-empty!"
   exit 0
 else

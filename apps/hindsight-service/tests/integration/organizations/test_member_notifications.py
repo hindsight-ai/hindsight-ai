@@ -58,9 +58,13 @@ class TestMemberNotifications:
         assert meta.get("role") == "editor"
 
     @patch('core.services.transactional_email_service.get_transactional_email_service')
-    def test_add_member_sends_email(self, mock_email_service, client: TestClient, org_owner_context):
+    def test_add_member_sends_email(self, mock_email_service, client: TestClient, org_owner_context, db_session):
         """Test that adding a member triggers email sending."""
         owner, organization = org_owner_context
+        
+        # Ensure owner has beta access to avoid beta access invitation email
+        owner.beta_access_status = 'approved'
+        db_session.commit()
         
         # Mock the email service
         mock_service_instance = MagicMock()
