@@ -6,8 +6,8 @@ export interface CreateMemoryBlockPayload {
   conversation_id: string; // UUID
   content: string; // Main content of the memory block
   errors?: string;
-  lessons_learned: string;
-  metadata_col?: Record<string, any>; // JSON (aligns with backend field name)
+  lessons_learned?: string;
+  metadata_col?: Record<string, any>;
   visibility_scope?: 'personal' | 'organization' | 'public';
   organization_id?: string;
 }
@@ -20,7 +20,7 @@ export interface MemoryBlock {
   timestamp: string; // TIMESTAMP
   content: string;
   errors: string | null;
-  lessons_learned: string;
+  lessons_learned?: string | null;
   metadata_col?: Record<string, any> | null;
   feedback_score: number;
   created_at: string; // TIMESTAMP
@@ -41,7 +41,6 @@ export interface CreateAgentPayload {
 }
 
 export interface RetrieveMemoriesPayload {
-  query_text?: string;
   keywords: string; // CSV keywords for search
   agent_id: string;
   conversation_id?: string;
@@ -49,9 +48,9 @@ export interface RetrieveMemoriesPayload {
 }
 
 export interface ReportFeedbackPayload {
-  memory_block_id: string; // UUID
+  memory_id: string; // UUID
   feedback_type: 'positive' | 'negative' | 'neutral';
-  comment?: string;
+  feedback_details?: string;
 }
 
 export interface AdvancedSearchPayload {
@@ -74,10 +73,26 @@ export interface GetAllMemoryBlocksResponse {
   total_pages: number;
 }
 
+export interface MemoryServiceClientConfig {
+  baseUrl: string;
+  apiToken?: string;
+  headerName?: 'Authorization' | 'X-API-Key';
+  scope?: 'personal' | 'organization' | 'public';
+  organizationId?: string;
+}
+
 export class MemoryServiceClient {
   private client: AxiosInstance;
 
-  constructor(baseURL: string, apiToken?: string, headerName: 'Authorization' | 'X-API-Key' = 'Authorization') {
+  constructor(config: MemoryServiceClientConfig) {
+    const {
+      baseUrl,
+      apiToken,
+      headerName = 'Authorization',
+      scope,
+      organizationId,
+    } = config;
+
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (apiToken) {
       if (headerName === 'Authorization') {
@@ -86,7 +101,14 @@ export class MemoryServiceClient {
         headers['X-API-Key'] = apiToken;
       }
     }
-    this.client = axios.create({ baseURL, headers });
+    if (scope) {
+      headers['X-Active-Scope'] = scope;
+    }
+    if (organizationId) {
+      headers['X-Organization-Id'] = organizationId;
+    }
+
+    this.client = axios.create({ baseURL: baseUrl, headers });
   }
 
   async whoAmI(): Promise<any> {
@@ -207,8 +229,8 @@ export class MemoryServiceClient {
    * @param payload The feedback data.
    * @returns A success message.
    */
-  async reportMemoryFeedback(payload: ReportFeedbackPayload): Promise<string> {
-    const response = await this.client.post<string>(`/memory-blocks/${payload.memory_block_id}/feedback/`, payload);
+  async reportMemoryFeedback(payload: ReportFeedbackPayload): Promise<MemoryBlock> {
+    const response = await this.client.post<MemoryBlock>(`/memory-blocks/${payload.memory_id}/feedback/`, payload);
     return response.data;
   }
 }

@@ -9,7 +9,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import axios, { AxiosError } from 'axios';
-import { MemoryServiceClient, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload, AdvancedSearchPayload } from './client/MemoryServiceClient';
+import { MemoryServiceClient, MemoryServiceClientConfig, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload, AdvancedSearchPayload } from './client/MemoryServiceClient';
 
 // --- Configuration ---
 const MEMORY_SERVICE_BASE_URL = process.env.MEMORY_SERVICE_BASE_URL || 'http://localhost:8000'; // Default to localhost:8000
@@ -17,6 +17,7 @@ const DEFAULT_AGENT_ID = process.env.DEFAULT_AGENT_ID;
 const DEFAULT_CONVERSATION_ID = process.env.DEFAULT_CONVERSATION_ID;
 const API_TOKEN = process.env.HINDSIGHT_API_TOKEN || process.env.HINDSIGHT_API_KEY;
 const API_HEADER: 'Authorization' | 'X-API-Key' = process.env.HINDSIGHT_API_KEY ? 'X-API-Key' : 'Authorization';
+const ACTIVE_SCOPE_ENV = process.env.HINDSIGHT_ACTIVE_SCOPE as ('personal' | 'organization' | 'public' | undefined);
 const DEFAULT_ORGANIZATION_ID = process.env.HINDSIGHT_ORGANIZATION_ID;
 
 if (!MEMORY_SERVICE_BASE_URL) {
@@ -28,21 +29,12 @@ const isValidCreateMemoryBlockPayload = (payload: any): payload is CreateMemoryB
   return (
     typeof payload === 'object' &&
     payload !== null &&
-    typeof payload.agent_id === 'string' && // Added agent_id check
+    typeof payload.agent_id === 'string' &&
     typeof payload.conversation_id === 'string' &&
-    typeof payload.lessons_learned === 'string' &&
+    typeof payload.content === 'string' &&
+    (payload.lessons_learned === undefined || typeof payload.lessons_learned === 'string') &&
     (payload.errors === undefined || typeof payload.errors === 'string') &&
-    (payload.metadata === undefined || typeof payload.metadata === 'object')
-  );
-};
-
-const isValidRetrieveMemoryBlocksByConversationIdPayload = (payload: any): payload is { conversation_id: string; agent_id?: string; limit?: number } => {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    (payload.conversation_id === undefined || typeof payload.conversation_id === 'string') && // Made optional
-    (payload.agent_id === undefined || typeof payload.agent_id === 'string') &&
-    (payload.limit === undefined || typeof payload.limit === 'number')
+    (payload.metadata_col === undefined || typeof payload.metadata_col === 'object')
   );
 };
 
@@ -50,20 +42,10 @@ const isValidRetrieveMemoriesPayload = (payload: any): payload is RetrieveMemori
   return (
     typeof payload === 'object' &&
     payload !== null &&
-    typeof payload.query_text === 'string' &&
-    Array.isArray(payload.keywords) && // Changed to check for array
-    payload.keywords.every((item: any) => typeof item === 'string') && // Ensure all items are strings
-    (payload.agent_id === undefined || typeof payload.agent_id === 'string') && // Made optional
+    typeof payload.keywords === 'string' &&
+    payload.keywords.trim().length > 0 &&
+    typeof payload.agent_id === 'string' &&
     (payload.conversation_id === undefined || typeof payload.conversation_id === 'string') &&
-    (payload.limit === undefined || typeof payload.limit === 'number')
-  );
-};
-
-const isValidRetrieveAllMemoryBlocksPayload = (payload: any): payload is { agent_id?: string; limit?: number } => {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    (payload.agent_id === undefined || typeof payload.agent_id === 'string') &&
     (payload.limit === undefined || typeof payload.limit === 'number')
   );
 };
@@ -72,9 +54,9 @@ const isValidReportFeedbackPayload = (payload: any): payload is ReportFeedbackPa
   return (
     typeof payload === 'object' &&
     payload !== null &&
-    typeof payload.memory_block_id === 'string' &&
+    typeof payload.memory_id === 'string' &&
     ['positive', 'negative', 'neutral'].includes(payload.feedback_type) &&
-    (payload.comment === undefined || typeof payload.comment === 'string')
+    (payload.feedback_details === undefined || typeof payload.feedback_details === 'string')
   );
 };
 
@@ -119,7 +101,24 @@ const server = new Server(
 );
 
 // --- MemoryServiceClient Instance ---
-const memoryServiceClient = new MemoryServiceClient(MEMORY_SERVICE_BASE_URL, API_TOKEN, API_HEADER);
+const resolvedScope: 'personal' | 'organization' | 'public' | undefined = ACTIVE_SCOPE_ENV || (DEFAULT_ORGANIZATION_ID ? 'organization' : undefined);
+if (resolvedScope === 'organization' && !DEFAULT_ORGANIZATION_ID) {
+  console.warn('[hindsight-mcp] HINDSIGHT_ACTIVE_SCOPE resolved to organization but no HINDSIGHT_ORGANIZATION_ID provided. Falling back to personal scope.');
+}
+
+const clientConfig: MemoryServiceClientConfig = {
+  baseUrl: MEMORY_SERVICE_BASE_URL,
+  apiToken: API_TOKEN,
+  headerName: API_HEADER,
+};
+if (resolvedScope && (resolvedScope !== 'organization' || DEFAULT_ORGANIZATION_ID)) {
+  clientConfig.scope = resolvedScope;
+}
+if (resolvedScope === 'organization' && DEFAULT_ORGANIZATION_ID) {
+  clientConfig.organizationId = DEFAULT_ORGANIZATION_ID;
+}
+
+const memoryServiceClient = new MemoryServiceClient(clientConfig);
 
 // --- Tool Handlers ---
 
@@ -184,16 +183,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {
-            query_text: {
-              type: "string",
-              description: "The query text to find relevant memories (required, often duplicates keywords).",
-            },
             keywords: {
-              type: "array",
-              items: {
-                type: "string"
-              },
-              description: "Keywords to search for relevant memories (required, often duplicates query_text).",
+              description: "Keywords to search for relevant memories. Accepts a comma-separated string or an array of keyword strings.",
+              oneOf: [
+                { type: "string" },
+                { type: "array", items: { type: "string" } }
+              ],
             },
             agent_id: {
               type: "string",
@@ -208,7 +203,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Optional maximum number of memories to retrieve (default: 10).",
             },
           },
-          required: ["query_text", "keywords"],
+          required: ["keywords"],
         },
       },
       {
@@ -226,7 +221,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               "description": "Optional maximum number of memories to retrieve (default: 50).",
             },
           },
-          required: ["agent_id"]
+          required: []
         },
       },
       {
@@ -266,9 +261,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               enum: ["positive", "negative", "neutral"],
               description: "Type of feedback (positive, negative, or neutral) (required).",
             },
+            feedback_details: {
+              type: "string",
+              description: "Optional comment or context regarding the feedback.",
+            },
             comment: {
               type: "string",
-              description: "Optional comment regarding the feedback.",
+              description: "Deprecated alias for feedback_details (will be removed in a future release).",
             },
           },
           required: ["memory_block_id", "feedback_type"],
@@ -462,26 +461,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const agent_id = (typedArgs?.agent_id as string | undefined) || DEFAULT_AGENT_ID;
       const conversation_id = (typedArgs?.conversation_id as string | undefined) || DEFAULT_CONVERSATION_ID;
 
-      if (!typedArgs.query_text || typeof typedArgs.query_text !== 'string') {
-        throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for retrieve_relevant_memories. 'query_text' (string) is required.");
-      }
-      if (!Array.isArray(typedArgs.keywords) || !typedArgs.keywords.every((item: any) => typeof item === 'string')) {
-        throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for retrieve_relevant_memories. 'keywords' (array of strings) is required.");
+      if (!typedArgs.keywords) {
+        throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for retrieve_relevant_memories. 'keywords' is required as a comma-separated string or array of strings.");
       }
       if (!agent_id) {
         throw new McpError(ErrorCode.InvalidParams, "Agent ID is required for retrieve_relevant_memories and not provided via arguments or DEFAULT_AGENT_ID environment variable.");
       }
 
-      const processedKeywords = typedArgs.keywords
-        .map((keyword: string) => keyword.trim()) // Trim whitespace from each keyword
-        .filter((keyword: string) => keyword.length > 0); // Filter out empty strings
+      let keywordCsv: string | undefined;
+      if (Array.isArray(typedArgs.keywords)) {
+        const processed = typedArgs.keywords
+          .map((keyword: any) => typeof keyword === 'string' ? keyword.trim() : '')
+          .filter((keyword: string) => keyword.length > 0);
+        keywordCsv = processed.join(',');
+      } else if (typeof typedArgs.keywords === 'string') {
+        keywordCsv = typedArgs.keywords
+          .split(',')
+          .map((keyword: string) => keyword.trim())
+          .filter((keyword: string) => keyword.length > 0)
+          .join(',');
+      }
+
+      if (!keywordCsv) {
+        throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for retrieve_relevant_memories. Provide at least one keyword.");
+      }
 
       const payload: RetrieveMemoriesPayload = {
-        keywords: processedKeywords.join(','),
+        keywords: keywordCsv,
         agent_id: agent_id,
         conversation_id: conversation_id,
         limit: typedArgs.limit,
       };
+
+      if (!isValidRetrieveMemoriesPayload(payload)) {
+        throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for retrieve_relevant_memories. Keywords must resolve to a non-empty string.");
+      }
 
       const result = await memoryServiceClient.retrieveRelevantMemories(payload);
       return {
@@ -491,16 +505,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // --- report_memory_feedback ---
     else if (toolName === "report_memory_feedback") {
-      if (!isValidReportFeedbackPayload(typedArgs)) {
+      if (!typedArgs || typeof typedArgs.memory_block_id !== 'string' || !['positive', 'negative', 'neutral'].includes(typedArgs.feedback_type)) {
         throw new McpError(
           ErrorCode.InvalidParams,
           "Invalid arguments for report_memory_feedback. Requires 'memory_block_id' (string) and 'feedback_type' ('positive', 'negative', or 'neutral')."
         );
       }
-      const payload: ReportFeedbackPayload = typedArgs;
+      const payload: ReportFeedbackPayload = {
+        memory_id: typedArgs.memory_block_id,
+        feedback_type: typedArgs.feedback_type,
+        feedback_details: typeof typedArgs.feedback_details === 'string'
+          ? typedArgs.feedback_details
+          : (typeof typedArgs.comment === 'string' ? typedArgs.comment : undefined),
+      };
+
+      if (!isValidReportFeedbackPayload(payload)) {
+        throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for report_memory_feedback. Optional comment must be a string if provided.");
+      }
+
       const result = await memoryServiceClient.reportMemoryFeedback(payload);
+      const summary = {
+        id: result.id,
+        content: result.content,
+        errors: result.errors,
+        feedback_score: result.feedback_score,
+      };
       return {
-        content: [{ type: "text", text: `Successfully reported feedback for memory block ${payload.memory_block_id}: ${result}` }]
+        content: [{ type: "text", text: `Feedback recorded. Updated memory: ${JSON.stringify(summary, null, 2)}` }]
       };
     }
 
