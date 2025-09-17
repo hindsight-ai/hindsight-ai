@@ -4,6 +4,7 @@ import OrganizationManagement from './OrganizationManagement';
 
 const UserAccountButton: React.FC = () => {
   const { user, loading, exitGuestMode } = useAuth();
+  const superadmin = Boolean(user?.is_superadmin);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showOrgManagement, setShowOrgManagement] = useState(false);
 
@@ -73,7 +74,7 @@ const UserAccountButton: React.FC = () => {
               </p>
               <p className="text-xs text-gray-500 flex flex-wrap items-center gap-1">
                 <span>{user.email === 'dev@localhost' ? 'Development Mode' : 'Signed in'}</span>
-                {user.is_superadmin && (
+                {superadmin && (
                   <span className="ml-0 px-1 bg-red-100 text-red-800 rounded text-xs">Superadmin</span>
                 )}
                 {user.beta_access_admin && (

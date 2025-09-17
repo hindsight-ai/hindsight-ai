@@ -25,6 +25,7 @@ services:
       SUPPORT_CONTACT_MIN_INTERVAL_SECONDS: ${SUPPORT_CONTACT_MIN_INTERVAL_SECONDS}
       PRUNING_BATCH_SIZE: ${PRUNING_BATCH_SIZE}
       PRUNING_MAX_ITERATIONS: ${PRUNING_MAX_ITERATIONS}
+      LOG_LEVEL: ${LOG_LEVEL}
     develop:
       watch:
         - path: ./apps/hindsight-service
@@ -36,7 +37,7 @@ services:
     ports:
       - "3000:80"
     environment:
-      VITE_DEV_MODE: "true"
+      VITE_DEV_MODE: ${DEV_MODE}
     develop:
       watch:
         - path: ./apps/hindsight-dashboard
