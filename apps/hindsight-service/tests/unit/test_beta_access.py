@@ -782,6 +782,7 @@ class TestBetaAccessAPI:
     def test_request_beta_access_endpoint_dev_mode_defaults(self, client, db_session: Session, monkeypatch):
         """DEV_MODE should auto-provision the development account without headers."""
         monkeypatch.setenv('DEV_MODE', 'true')
+        monkeypatch.setenv('APP_BASE_URL', 'http://localhost:3000')
 
         with patch('core.services.beta_access_service.NotificationService') as mock_notification:
             response = client.post("/beta-access/request")
@@ -793,6 +794,14 @@ class TestBetaAccessAPI:
         assert request.email == "dev@localhost"
         mock_notification.return_value.notify_beta_access_request_confirmation.assert_called_once_with("dev@localhost")
         mock_notification.return_value.notify_beta_access_admin_notification.assert_called_once()
+
+    def test_request_beta_access_endpoint_dev_mode_misconfiguration(self, client, monkeypatch):
+        monkeypatch.setenv('DEV_MODE', 'true')
+        monkeypatch.setenv('APP_BASE_URL', 'https://app-staging.hindsight-ai.com')
+
+        response = client.post("/beta-access/request")
+        assert response.status_code == 500
+        assert response.json().get('detail') == 'DEV_MODE misconfigured'
 
     def test_request_beta_access_endpoint_requires_email(self, client, monkeypatch):
         """Non-dev mode requests without identity should return 401."""
@@ -1206,6 +1215,7 @@ class TestAuthDepsBetaAccess:
 
     def test_get_current_user_context_dev_mode_auto_accepts(self, db_session: Session, monkeypatch):
         monkeypatch.setenv('DEV_MODE', 'true')
+        monkeypatch.setenv('APP_BASE_URL', 'http://localhost:3000')
 
         from core.api import deps
 

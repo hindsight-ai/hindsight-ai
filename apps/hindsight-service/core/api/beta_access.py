@@ -17,6 +17,7 @@ from core.services.beta_access_service import BetaAccessService
 from core.db import schemas, models
 from core.db.repositories import beta_access as beta_repo
 from core.audit import audit_log, AuditAction, AuditStatus
+from core.utils.runtime import dev_mode_active
 
 
 router = APIRouter(prefix="/beta-access", tags=["beta-access"])
@@ -63,8 +64,10 @@ def request_beta_access(
     # Resolve email from headers locally to avoid module-level dependency import issues
     from core.api.auth import resolve_identity_from_headers, get_or_create_user
     # Respect DEV_MODE: only default to dev@localhost when DEV_MODE == "true"
-    import os
-    is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+    try:
+        is_dev_mode = dev_mode_active()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DEV_MODE misconfigured") from exc
     if is_dev_mode:
         user_email = "dev@localhost"
         display_name = "Development User"

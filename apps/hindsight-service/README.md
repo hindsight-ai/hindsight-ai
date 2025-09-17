@@ -64,7 +64,8 @@ Important env vars (see `.env.example`):
   - Dev: `http://localhost:3000`
 - `ADMIN_EMAILS`: Comma-separated emails to elevate as superadmins on first login. Required for accessing admin-only routes such as the beta access console.
 - `BETA_ACCESS_ADMINS`: Optional comma-separated emails allowed to review beta access requests without being full superadmins.
-- `DEV_MODE`: Set to `true` locally to bypass SSO with `dev@localhost` and auto-mark beta access as accepted for quicker manual testing.
+- `DEV_MODE`: **Local development only.** When `true` the API impersonates `dev@localhost` as a superadmin. The backend will refuse to start with `DEV_MODE=true` unless it is running on `localhost`. Always set `DEV_MODE=false` (or unset) in staging and production.
+- `ALLOW_DEV_MODE`: Optional safety valve for automated tests. Leave set to `false` outside controlled test environments.
 
 ## 🔐 Permissions & Scopes
 

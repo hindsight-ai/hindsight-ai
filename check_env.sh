@@ -86,6 +86,20 @@ if [[ "$IS_DEPLOYMENT" == "true" ]]; then
   done
 fi
 
+# Additional guardrails for DEV_MODE irrespective of deployment detection
+DEV_MODE_VALUE=$(grep '^DEV_MODE=' "$ENV_FILE" | cut -d= -f2-)
+if [[ -n "$DEV_MODE_VALUE" && "${DEV_MODE_VALUE,,}" == "true" ]]; then
+  APP_BASE_URL_VALUE=$(grep '^APP_BASE_URL=' "$ENV_FILE" | cut -d= -f2-)
+  ALLOW_DEV_MODE_VALUE=$(grep '^ALLOW_DEV_MODE=' "$ENV_FILE" | cut -d= -f2-)
+  if [[ -n "$APP_BASE_URL_VALUE" ]]; then
+    if [[ "$APP_BASE_URL_VALUE" != *localhost* && "$APP_BASE_URL_VALUE" != *127.0.0.1* && "$APP_BASE_URL_VALUE" != *::1* ]]; then
+      INVALID_VARS+=("DEV_MODE (requires APP_BASE_URL pointing at localhost when true)")
+    fi
+  elif [[ "${ALLOW_DEV_MODE_VALUE,,}" != "true" ]]; then
+    INVALID_VARS+=("DEV_MODE (requires APP_BASE_URL or ALLOW_DEV_MODE=true when enabling dev impersonation)")
+  fi
+fi
+
 # Report results
 if [ ${#MISSING_VARS[@]} -ne 0 ]; then
   echo "❌ Missing environment variables:"

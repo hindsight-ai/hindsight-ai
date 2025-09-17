@@ -56,6 +56,7 @@ from core.utils.scopes import (
     SCOPE_PERSONAL,
 )
 from core.services.search_service import SearchService
+from core.utils.runtime import dev_mode_active
 
 # Database schema is managed by Alembic migrations.
 
@@ -290,7 +291,11 @@ def get_user_info(
     - Dev mode (DEV_MODE=true): returns a stable dev user and ensures it exists.
     - Normal mode: reads headers set by oauth2-proxy, upserts user, and returns memberships.
     """
-    is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+    try:
+        is_dev_mode = dev_mode_active()
+    except RuntimeError as exc:
+        logger.error("DEV_MODE misconfiguration detected: %s", exc)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DEV_MODE misconfigured")
 
     if is_dev_mode:
         email = "dev@localhost"

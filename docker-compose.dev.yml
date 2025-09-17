@@ -12,7 +12,7 @@ services:
     environment:
       APP_BASE_URL: ${APP_BASE_URL}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
-      DEV_MODE: "true"
+      DEV_MODE: ${DEV_MODE}
       BUILD_SHA: ${BACKEND_BUILD_SHA}
       BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}
       IMAGE_TAG: ${BACKEND_IMAGE_TAG}

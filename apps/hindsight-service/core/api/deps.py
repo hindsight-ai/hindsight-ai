@@ -23,6 +23,7 @@ from core.db import models
 from core.db.scope_utils import ScopeContext
 from core.db.repositories import tokens as token_repo
 from core.utils.token_crypto import parse_token, verify_secret
+from core.utils.runtime import dev_mode_active
 import logging
 
 # Contract:
@@ -36,10 +37,11 @@ def get_current_user_context(
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
 ) -> Tuple[Any, Dict[str, Any]]:
-    import os
-    
     # Check for dev mode first
-    is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+    try:
+        is_dev_mode = dev_mode_active()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DEV_MODE misconfigured") from exc
     
     if is_dev_mode:
         # In dev mode, use dev@localhost user

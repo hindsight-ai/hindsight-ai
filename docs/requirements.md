@@ -128,7 +128,8 @@ The delete button state refresh functionality has been validated using comprehen
    - **Self-Protection**: Users cannot remove themselves or change their own role
    - **Real-time Updates**: Changes are immediately reflected in the UI with success/error notifications
    - **Immediate UI State Refresh**: Delete buttons and other role-dependent controls appear immediately after organization creation or switching without requiring panel close/reopen
-7) **Dev Mode Experience**: In local development, "Sign In" automatically authenticates as `dev@localhost` with superadmin privileges, enabling full testing of organization management features without OAuth setup.
+7) **Dev Mode Experience**: In local development only (when `APP_BASE_URL` resolves to `localhost`), "Sign In" automatically authenticates as `dev@localhost` with superadmin privileges, enabling full testing without OAuth setup. Remote environments must run with `DEV_MODE=false`; the API refuses to start otherwise.
+8) **Profile Privileges Panel**: The dashboard profile page lists only privileges that are actually granted. Superadmin and beta-access-admin badges appear when enabled; otherwise the panel shows a neutral "No elevated privileges" indicator alongside the user's beta access status.
 
 Roadmap Reference
 - Execution ordering, phased delivery plan, and acceptance criteria for in-progress governance & UX work are tracked in `docs/roadmap.md`. This requirements file defines the target state; the roadmap file defines how we get there iteratively.

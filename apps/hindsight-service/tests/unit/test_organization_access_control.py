@@ -180,7 +180,7 @@ class TestOrganizationEndpoints:
 
     def test_dev_mode_allows_organization_creation(self, client: TestClient):
         """Test that DEV_MODE bypasses guest mode restrictions."""
-        with patch.dict('os.environ', {'DEV_MODE': 'true'}):
+        with patch.dict('os.environ', {'DEV_MODE': 'true', 'APP_BASE_URL': 'http://localhost:3000'}):
             with patch('core.api.deps.get_current_user_context') as mock_auth:
                 # Mock dev user
                 dev_user_id = uuid.uuid4()

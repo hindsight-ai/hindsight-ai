@@ -34,10 +34,10 @@ if [ ! -f .env ]; then
     fi
 fi
 
-# Ensure DEV_MODE is set for local development before validation
+# Ensure DEV_MODE is defined; default to false so it must be explicitly enabled
 if ! grep -q '^DEV_MODE=' .env; then
-    echo 'DEV_MODE=true' >> .env
-    echo "Added DEV_MODE=true to .env for local development."
+    echo 'DEV_MODE=false' >> .env
+    echo "Added DEV_MODE=false to .env (enable manually for local impersonation)."
 fi
 export DEV_MODE=$(grep '^DEV_MODE=' .env | cut -d= -f2-)
 

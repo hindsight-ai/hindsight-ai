@@ -54,30 +54,31 @@ const ProfilePage: React.FC = () => {
       <section className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-2xl">
         <div className="px-4 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">Account Privileges</h3>
-          <p className="text-sm text-gray-500">These flags come from your administrator and determine access to internal tools.</p>
+          <p className="text-sm text-gray-500">Badges indicate elevated access granted by an administrator.</p>
         </div>
-        <dl className="px-4 py-4 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-            <dt className="text-sm text-gray-600">Superadmin access</dt>
-            <dd>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${superadminEnabled ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'}`}>
-                {superadminEnabled ? 'Enabled' : 'Not granted'}
+        <div className="px-4 py-4 space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {superadminEnabled && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                Superadmin access
               </span>
-            </dd>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-            <dt className="text-sm text-gray-600">Beta access admin</dt>
-            <dd>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${betaAdminEnabled ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-600'}`}>
-                {betaAdminEnabled ? 'Enabled' : 'Not granted'}
+            )}
+            {betaAdminEnabled && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800">
+                Beta access admin
               </span>
-            </dd>
+            )}
+            {!superadminEnabled && !betaAdminEnabled && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                No elevated privileges
+              </span>
+            )}
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-            <dt className="text-sm text-gray-600">Beta access status</dt>
-            <dd className="text-sm font-medium text-gray-900 capitalize">{betaStatus}</dd>
+          <div className="pt-2">
+            <p className="text-sm text-gray-600">Beta access status</p>
+            <p className="text-sm font-medium text-gray-900 capitalize">{betaStatus}</p>
           </div>
-        </dl>
+        </div>
       </section>
 
       <form onSubmit={onSave} className="max-w-md space-y-4">

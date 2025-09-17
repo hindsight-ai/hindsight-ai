@@ -11,12 +11,12 @@ fi
 # Ensure pytest is available in the project env; prefer uv if present
 if command -v uv >/dev/null 2>&1; then
   echo "Running E2E migration tests via uv+pytest"
-  uv run --with pytest pytest -m e2e -k migrations_stepwise
+  uv run --extra test --with pytest pytest -m e2e -k migrations_stepwise
 else
   echo "uv not found; falling back to system Python"
-  python -m pip install -U pip pytest >/dev/null
+  python -m pip install -U pip >/dev/null
+  python -m pip install -e '.[test]' >/dev/null
   pytest -m e2e -k migrations_stepwise
 fi
 
 echo "E2E migration tests completed"
-

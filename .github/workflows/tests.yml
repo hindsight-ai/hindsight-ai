@@ -83,7 +83,7 @@ jobs:
           verbose: true
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: dashboard-coverage
           path: apps/hindsight-dashboard/coverage

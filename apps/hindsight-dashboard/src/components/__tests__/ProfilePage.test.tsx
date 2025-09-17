@@ -44,14 +44,10 @@ describe('ProfilePage', () => {
 
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument();
 
-    const superadminRow = screen.getByText('Superadmin access').closest('div');
-    expect(superadminRow).toHaveTextContent('Enabled');
-
-    const betaAdminRow = screen.getByText('Beta access admin').closest('div');
-    expect(betaAdminRow).toHaveTextContent('Enabled');
-
-    const betaStatusRow = screen.getByText('Beta access status').closest('div');
-    expect(betaStatusRow).toHaveTextContent('accepted');
+    expect(screen.getByText('Superadmin access')).toBeInTheDocument();
+    expect(screen.getByText('Beta access admin')).toBeInTheDocument();
+    expect(screen.getByText('Beta access status')).toBeInTheDocument();
+    expect(screen.getByText('accepted')).toBeInTheDocument();
   });
 
   it('shows disabled privilege indicators when flags are absent', () => {
@@ -64,13 +60,10 @@ describe('ProfilePage', () => {
       beta_access_status: 'not_requested',
     });
 
-    const superadminRow = screen.getByText('Superadmin access').closest('div');
-    expect(superadminRow).toHaveTextContent('Not granted');
-
-    const betaAdminRow = screen.getByText('Beta access admin').closest('div');
-    expect(betaAdminRow).toHaveTextContent('Not granted');
-
-    const betaStatusRow = screen.getByText('Beta access status').closest('div');
-    expect(betaStatusRow).toHaveTextContent('not requested');
+    expect(screen.queryByText('Superadmin access')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beta access admin')).not.toBeInTheDocument();
+    expect(screen.getByText('No elevated privileges')).toBeInTheDocument();
+    expect(screen.getByText('Beta access status')).toBeInTheDocument();
+    expect(screen.getByText('not requested')).toBeInTheDocument();
   });
 });

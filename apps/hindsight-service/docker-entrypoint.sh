@@ -18,6 +18,24 @@ until pg_isready -d "${DATABASE_URL}" >/dev/null 2>&1; do
   sleep 1
 done
 
+if [ "${DEV_MODE}" = "true" ]; then
+  host="${APP_BASE_URL:-}"
+  if [ -n "$host" ]; then
+    case "$host" in
+      *localhost*|*127.0.0.1*|*::1*)
+        :
+        ;;
+      *)
+        echo "DEV_MODE cannot be true when APP_BASE_URL=$host"
+        exit 1
+        ;;
+    esac
+  elif [ "${ALLOW_DEV_MODE}" != "true" ]; then
+    echo "DEV_MODE requires APP_BASE_URL pointing at localhost or ALLOW_DEV_MODE=true"
+    exit 1
+  fi
+fi
+
 echo "PostgreSQL is up - executing migrations"
 if ! alembic upgrade head; then
   if [ "${DEV_MODE}" = "true" ]; then
