@@ -64,14 +64,13 @@ services:
       OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID}
       OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET}
       OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET}
-      OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE: /etc/oauth2-proxy/authorized_emails.txt
       OAUTH2_PROXY_LOGOUT_REDIRECT_URL: https://accounts.google.com/Logout
+      # To re-enable an email allowlist set OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE and mount authorized_emails.txt.
     command:
       - "--custom-templates-dir=/templates"
     networks:
       - hindsight-ai
     volumes:
-      - ./authorized_emails.txt:/etc/oauth2-proxy/authorized_emails.txt:ro
       - ./templates:/templates:ro
     labels:
       - "traefik.enable=true"
