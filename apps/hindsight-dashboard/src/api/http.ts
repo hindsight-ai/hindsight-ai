@@ -152,6 +152,15 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
     }
   }
 
+  // In dev mode, attach oauth2-proxy header shim so backend treats requests as authenticated.
+  if (typeof window !== 'undefined') {
+    const { devModeHeaders } = await import('../utils/devMode');
+    const implicitHeaders = devModeHeaders();
+    for (const key of Object.keys(implicitHeaders)) {
+      if (!headersObj[key]) headersObj[key] = implicitHeaders[key];
+    }
+  }
+
   const methodNeedsCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
   if (methodNeedsCsrf) {
     // Forward oauth2-proxy CSRF token for write operations when present
