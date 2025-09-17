@@ -57,8 +57,8 @@ def get_or_create_user(db: Session, email: str, display_name: Optional[str] = No
         was_new = True
 
     # Elevate to superadmin based on ADMIN_EMAILS only at creation time to avoid test-order flakiness
+    admins = _admin_emails()
     if was_new:
-        admins = _admin_emails()
         if email in admins:
             user.is_superadmin = True
 
@@ -67,6 +67,16 @@ def get_or_create_user(db: Session, email: str, display_name: Optional[str] = No
         db.commit()
         db.refresh(user)
         return user
+    # Existing users might predate a new ADMIN_EMAILS value; promote them when necessary.
+    if email in admins and not getattr(user, "is_superadmin", False):
+        user.is_superadmin = True
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+        else:
+            db.refresh(user)
+
     if not getattr(user, "beta_access_status", None):
         user.beta_access_status = 'not_requested'
         try:
