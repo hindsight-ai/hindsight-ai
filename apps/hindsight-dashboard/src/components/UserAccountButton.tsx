@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import OrganizationManagement from './OrganizationManagement';
 
 const UserAccountButton: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, exitGuestMode } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showOrgManagement, setShowOrgManagement] = useState(false);
 
@@ -30,6 +30,7 @@ const UserAccountButton: React.FC = () => {
     return (
       <button
         onClick={() => {
+          try { exitGuestMode(); } catch {}
           const rd = encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
           window.location.href = `/oauth2/sign_in?rd=${rd}`;
         }}

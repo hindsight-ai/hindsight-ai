@@ -9,12 +9,11 @@ const LoginPage: React.FC = () => {
   const location = useLocation();
 
   const handleSignIn = async () => {
+    try { exitGuestMode(); } catch {}
     const host = window.location.hostname;
     const isLocal = host === 'localhost' || host === '127.0.0.1';
 
     if (isLocal) {
-      // Ensure we are not in guest mode for auth checks
-      try { exitGuestMode(); } catch {}
       // Dev experience: try backend dev user; if unavailable, guide the user
       try {
         const response = await apiFetch('/user-info');
