@@ -15,8 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 import math
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+LOG_LEVEL_NAME = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_LEVEL = getattr(logging, LOG_LEVEL_NAME, logging.INFO)
+logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger(__name__)
+logger.setLevel(LOG_LEVEL)
+logger.info("app_startup: log_level=%s", LOG_LEVEL_NAME)
 
 
 
