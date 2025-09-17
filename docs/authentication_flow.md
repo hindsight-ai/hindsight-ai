@@ -71,3 +71,60 @@ sequenceDiagram
 7.  **Dashboard Access:** Once `oauth2-proxy` authorizes the request, Traefik routes the request to the `hindsight-dashboard-service`. The dashboard serves its content, which is then passed back through Traefik and Cloudflare to the user's browser.
 
 This entire process ensures that only pre-approved Google accounts can access your Hindsight AI Dashboard and API.
+
+## Beta Access Gate: Post-Login Decisions
+
+OAuth2 establishes *who* the end-user is. A second layer – the beta access gate – determines *what* happens after authentication. Every user record (and any pending invitation) carries a `beta_access_status` with one of four canonical values:
+
+| Status          | Meaning                                                                 | Automatic Redirect |
+|-----------------|-------------------------------------------------------------------------|--------------------|
+| `not_requested` | Authenticated, but never asked to join the beta.                         | `/beta-access/request` |
+| `pending`       | Submitted a request and is awaiting review.                             | `/beta-access/pending` |
+| `denied`        | Request was reviewed but declined (may include an optional reason).     | `/beta-access/denied` |
+| `accepted`      | Granted access to the dashboard and API.                                | `/dashboard` (or previously requested route) |
+
+### End-User Workflow
+
+1. **Authenticate via Google** – described in the previous section.
+2. **Fetch session context** – the dashboard loads `/api/user-info`, which now includes the `beta_access_status`.
+3. **Client-side router guard** – `App.tsx` checks the status and performs one of the automatic redirects shown above. All protected dashboard routes perform the same gatekeeping to prevent deep-link bypasses.
+4. **Request flow** – when a user on the request page submits the form, the backend will:
+   - Create or reuse a `beta_access_requests` record.
+   - Set their status to `pending`.
+   - Send two emails via `NotificationService`:
+     * **Request confirmation** to the requester.
+     * **Admin review notice** to the configured admins with tokenised accept/deny links.
+5. **Email actions** – if the user attempts to access without being accepted yet, they remain on the pending or denied page until an admin decision promotes them to `accepted`.
+
+### Admin Review Workflow
+
+Administrators can act on beta requests from two entry points:
+
+1. **Pending requests screen** – the internal admin UI surfaces outstanding requests and drives the `/beta-access/review/{request_id}` API.
+2. **Email token links** – each notification email contains pre-signed links of the form:
+   - `https://<APP_HOST>/login?beta_review=<id>&beta_decision=accepted&beta_token=<token>`
+   - `https://<APP_HOST>/login?beta_review=<id>&beta_decision=denied&beta_token=<token>`
+
+When an admin visits either link, the login guard processes the parameters after the OAuth cookie is validated:
+
+1. The dashboard calls `POST /beta-access/review/{id}/token`.
+2. The backend verifies the token, records the decision, updates the requester’s status, and triggers the appropriate notification (acceptance or denial).
+3. The frontend cleans the sensitive query parameters out of the address bar to avoid accidental sharing.
+4. A confirmation notification is shown immediately.
+5. If the decision was **accepted**, the admin is redirected to `/beta-access/review/granted`, a dedicated confirmation screen that summarises who was approved and offers quick links back to the pending queue or dashboard.
+
+### Idempotent Decisions & Repeat Links
+
+To avoid confusion (or duplicate emails) when an administrator reopens the same token link after acting from the UI:
+
+* The service layer now returns a structured payload including `already_processed` and `request_email`.
+* The frontend interprets that signal and routes the admin to the same confirmation page with contextual messaging (“Access already granted”).
+* Email notifications are **not** re-sent on repeat approvals, and the audit log records only the first successful decision.
+
+### Summary of Key Decisions
+
+* **Separation of concerns** – Google OAuth2 + Cloudflare/Traefik ensure identity; beta access enforces feature availability.
+* **Single source of truth** – `beta_access_requests` records drive both UI state and email content, ensuring users, admins, and auditors see the same status.
+* **Resilient email links** – token links are valid exactly once, but replays yield a friendly confirmation instead of a hard error when the request is already processed.
+* **Strict HTTPS links** – links in email templates now use `get_app_base_url()` to respect environment overrides (`APP_BASE_URL`/`APP_HOST`) and avoid mixed-content/CORS regressions.
+* **Consistent UX across surfaces** – the dashboard enforces the same redirect rules whether the user lands on `/login`, `/dashboard`, or any deep link, preventing circumvention of the beta gate.

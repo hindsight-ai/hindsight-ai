@@ -59,6 +59,13 @@ jest.mock('../api/organizationService', () => ({
   declineInvitation: jest.fn(),
 }));
 
+jest.mock('../api/betaAccessService', () => ({
+  __esModule: true,
+  default: {
+    reviewWithToken: jest.fn(),
+  },
+}));
+
 jest.mock('../services/notificationService', () => ({
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
@@ -86,12 +93,20 @@ jest.mock('../components/AboutModal', () => ({
 
 describe('App Beta Access Routing', () => {
   const mockUseAuth = require('../context/AuthContext').useAuth;
+  const betaAccessServiceMock = require('../api/betaAccessService').default;
+  const notifications = require('../services/notificationService');
 
   beforeEach(() => {
     jest.clearAllMocks();
     // Mock window methods
     delete (window as any).location;
     window.location = { replace: jest.fn(), href: '' } as any;
+    (window as any).scrollTo = jest.fn();
+    betaAccessServiceMock.reviewWithToken.mockReset();
+    notifications.showSuccess.mockReset();
+    notifications.showInfo.mockReset();
+    notifications.showWarning.mockReset();
+    notifications.showError.mockReset();
   });
 
   test('renders login page when on /login route', () => {
@@ -333,5 +348,81 @@ describe('App Beta Access Routing', () => {
 
     expect(screen.getByTestId('layout')).toBeInTheDocument();
     expect(screen.getByTestId('dashboard')).toBeInTheDocument();
+  });
+
+  test('processes beta review token acceptance and redirects to confirmation with email', async () => {
+    const mockReplace = jest.fn();
+    Object.defineProperty(window, 'location', {
+      value: {
+        pathname: '/login',
+        search: '?beta_review=req-123&beta_decision=accepted&beta_token=tok-abc',
+        replace: mockReplace,
+        href: '',
+        hash: '',
+        origin: 'http://localhost',
+      },
+      writable: true,
+    });
+
+    betaAccessServiceMock.reviewWithToken.mockResolvedValue({
+      success: true,
+      message: 'Beta access approved for tester@example.com',
+      request_email: 'tester@example.com',
+      decision: 'accepted',
+      already_processed: false,
+    });
+
+    mockUseAuth.mockReturnValue({
+      user: { authenticated: true, beta_access_status: 'accepted' },
+      loading: false,
+      guest: false,
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(betaAccessServiceMock.reviewWithToken).toHaveBeenCalledWith('req-123', 'accepted', 'tok-abc');
+    });
+
+    expect(notifications.showSuccess).toHaveBeenCalledWith(expect.stringContaining('approved'));
+    expect(mockReplace).toHaveBeenCalledWith('/beta-access/review/granted?email=tester%40example.com');
+  });
+
+  test('processes already handled review token and flags status as already', async () => {
+    const mockReplace = jest.fn();
+    Object.defineProperty(window, 'location', {
+      value: {
+        pathname: '/login',
+        search: '?beta_review=req-456&beta_decision=ACCEPTED&beta_token=tok-def',
+        replace: mockReplace,
+        href: '',
+        hash: '',
+        origin: 'http://localhost',
+      },
+      writable: true,
+    });
+
+    betaAccessServiceMock.reviewWithToken.mockResolvedValue({
+      success: true,
+      message: 'Already processed',
+      request_email: 'existing@example.com',
+      decision: 'accepted',
+      already_processed: true,
+    });
+
+    mockUseAuth.mockReturnValue({
+      user: { authenticated: true, beta_access_status: 'accepted' },
+      loading: false,
+      guest: false,
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(betaAccessServiceMock.reviewWithToken).toHaveBeenCalledWith('req-456', 'accepted', 'tok-def');
+    });
+
+    expect(notifications.showSuccess).toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith('/beta-access/review/granted?email=existing%40example.com&status=already');
   });
 });

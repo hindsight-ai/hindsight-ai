@@ -26,6 +26,7 @@ import TokensPage from './components/TokensPage';
 import BetaAccessRequestPage from './components/BetaAccessRequestPage';
 import BetaAccessPendingPage from './components/BetaAccessPendingPage';
 import BetaAccessDeniedPage from './components/BetaAccessDeniedPage';
+import BetaAccessGrantConfirmationPage from './components/BetaAccessGrantConfirmationPage';
 import organizationService from './api/organizationService';
 import betaAccessService from './api/betaAccessService';
 import notificationService from './services/notificationService';
@@ -92,12 +93,36 @@ function AppContent() {
       const betaReviewId = params.get('beta_review');
       const betaDecision = (params.get('beta_decision') || params.get('decision'))?.toLowerCase();
       const betaToken = params.get('beta_token') || tokenParam;
+
+      const cleanupBetaParams = () => {
+        params.delete('beta_review');
+        params.delete('beta_decision');
+        params.delete('decision');
+        params.delete('beta_token');
+        params.delete('token');
+        const cleaned = params.toString();
+        const hash = window.location.hash || '';
+        const newUrl = `${window.location.pathname}${cleaned ? `?${cleaned}` : ''}${hash}`;
+        try { window.history.replaceState(null, '', newUrl); } catch {}
+      };
+
+      let betaRedirectTarget: string | null = null;
       if (betaReviewId && betaDecision && betaToken) {
         if (betaDecision === 'accepted' || betaDecision === 'denied') {
           try {
             const result = await betaAccessService.reviewWithToken(betaReviewId, betaDecision as 'accepted' | 'denied', betaToken);
             if (betaDecision === 'accepted') {
+              const requestEmail = result?.request_email;
               notificationService.showSuccess(result?.message || 'Beta access request approved successfully.');
+              const paramsForRedirect = new URLSearchParams();
+              if (requestEmail) {
+                paramsForRedirect.set('email', requestEmail);
+              }
+              if (result?.already_processed) {
+                paramsForRedirect.set('status', 'already');
+              }
+              const query = paramsForRedirect.toString();
+              betaRedirectTarget = `/beta-access/review/granted${query ? `?${query}` : ''}`;
             } else {
               notificationService.showInfo(result?.message || 'Beta access request denied.');
             }
@@ -111,28 +136,15 @@ function AppContent() {
             } else {
               notificationService.showError(`Failed to update beta access request: ${detail || 'Unknown error'}`);
             }
-          } finally {
-            params.delete('beta_review');
-            params.delete('beta_decision');
-            params.delete('decision');
-            params.delete('beta_token');
-            params.delete('token');
-            const cleaned = params.toString();
-            const hash = window.location.hash || '';
-            const newUrl = `${window.location.pathname}${cleaned ? `?${cleaned}` : ''}${hash}`;
-            try { window.history.replaceState(null, '', newUrl); } catch {}
           }
         } else {
           notificationService.showWarning('Invalid beta access review decision provided.');
-          params.delete('beta_review');
-          params.delete('beta_decision');
-          params.delete('decision');
-          params.delete('beta_token');
-          params.delete('token');
-          const cleaned = params.toString();
-          const hash = window.location.hash || '';
-          const newUrl = `${window.location.pathname}${cleaned ? `?${cleaned}` : ''}${hash}`;
-          try { window.history.replaceState(null, '', newUrl); } catch {}
+        }
+
+        cleanupBetaParams();
+        if (betaRedirectTarget) {
+          try { window.location.replace(betaRedirectTarget); } catch { window.location.href = betaRedirectTarget; }
+          return;
         }
       }
       // After processing invites, check beta access status before redirecting
@@ -182,6 +194,7 @@ function AppContent() {
   if (location.pathname === '/beta-access/request') return <BetaAccessRequestPage />;
   if (location.pathname === '/beta-access/pending') return <BetaAccessPendingPage />;
   if (location.pathname === '/beta-access/denied') return <BetaAccessDeniedPage />;
+  if (location.pathname === '/beta-access/review/granted') return <BetaAccessGrantConfirmationPage />;
   if (!guest && (!user || !(user as UserInfo).authenticated) && location.pathname !== '/login') {
     return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Redirecting to login…</div></div>);
   }

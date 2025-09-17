@@ -607,9 +607,17 @@ class NotificationService:
         try:
             from inspect import iscoroutinefunction, isawaitable
 
+            try:
+                from core.utils.urls import get_app_base_url
+                base_url = get_app_base_url()
+            except Exception:
+                base_url = 'https://app.hindsight.ai'
+
+            request_url = f"{base_url}/beta-access/request"
+
             html_content, text_content = self.email_service.render_template(
                 TEMPLATE_BETA_ACCESS_INVITATION,
-                {'request_url': 'https://app.hindsight.ai/beta-access/request'}
+                {'request_url': request_url}
             )
 
             send_fn = getattr(self.email_service, 'send_email')
@@ -768,9 +776,17 @@ class NotificationService:
         # Skip email notification logging for beta access acceptance
         try:
             from inspect import iscoroutinefunction, isawaitable
+            try:
+                from core.utils.urls import get_app_base_url
+                base_url = get_app_base_url()
+            except Exception:
+                base_url = 'https://app.hindsight.ai'
+
+            login_url = f"{base_url}/login"
+
             html_content, text_content = self.email_service.render_template(
                 TEMPLATE_BETA_ACCESS_ACCEPTANCE,
-                {'login_url': 'https://app.hindsight.ai/login'}
+                {'login_url': login_url}
             )
 
             send_fn = getattr(self.email_service, 'send_email')

@@ -5,6 +5,9 @@ export type BetaReviewDecision = 'accepted' | 'denied';
 export interface BetaReviewResponse {
   success: boolean;
   message?: string;
+  request_email?: string;
+  decision?: BetaReviewDecision;
+  already_processed?: boolean;
 }
 
 const betaAccessService = {

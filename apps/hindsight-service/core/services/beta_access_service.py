@@ -54,6 +54,7 @@ class BetaAccessService:
     def review_beta_access_request(self, request_id: uuid.UUID, decision: str, reviewer_email: str,
                                    reason: Optional[str] = None, actor_user_id: Optional[uuid.UUID] = None) -> Dict[str, Any]:
         """Review a beta access request: accept or deny."""
+        decision = decision.lower()
         if decision not in ['accepted', 'denied']:
             return {'success': False, 'message': 'Invalid decision.'}
 
@@ -61,12 +62,15 @@ class BetaAccessService:
         if not request:
             return {'success': False, 'message': 'Request not found.'}
         if request.status != 'pending':
+            if request.status == decision:
+                return self._build_already_processed_response(request)
             return {'success': False, 'message': f"Request already {request.status}."}
 
         return self._finalize_review(request, decision, reviewer_email, reason, actor_user_id, via_token=False)
 
     def review_beta_access_request_with_token(self, request_id: uuid.UUID, token: str, decision: str) -> Dict[str, Any]:
         """Allow admin to review a request via emailed token links."""
+        decision = decision.lower()
         if decision not in ['accepted', 'denied']:
             return {'success': False, 'message': 'Invalid decision.'}
 
@@ -74,6 +78,8 @@ class BetaAccessService:
         if not request:
             return {'success': False, 'message': 'Request not found.'}
         if request.status != 'pending':
+            if request.status == decision:
+                return self._build_already_processed_response(request)
             return {'success': False, 'message': f"Request already {request.status}."}
 
         if not request.review_token or not secrets.compare_digest(request.review_token, token):
@@ -160,7 +166,7 @@ class BetaAccessService:
                 metadata=metadata,
             )
 
-        return {'success': True, 'request_id': request.id, 'message': message}
+        return self._build_review_success_result(updated, decision, message)
 
     def _update_user_status_by_email(self, email: str, status: str) -> bool:
         user = self.db.query(models.User).filter(models.User.email == email).first()
@@ -168,3 +174,30 @@ class BetaAccessService:
             return False
         beta_repo.update_user_beta_access_status(self.db, user.id, status)
         return True
+
+    def _build_already_processed_response(self, request: models.BetaAccessRequest) -> Dict[str, Any]:
+        status = request.status
+        if status == 'accepted':
+            message = f"Beta access already granted for {request.email}."
+        elif status == 'denied':
+            message = f"Beta access request already denied for {request.email}."
+        else:
+            message = f"Request already {status}."
+        return {
+            'success': True,
+            'request_id': request.id,
+            'message': message,
+            'request_email': request.email,
+            'decision': status,
+            'already_processed': True,
+        }
+
+    def _build_review_success_result(self, request: models.BetaAccessRequest, decision: str, message: str) -> Dict[str, Any]:
+        return {
+            'success': True,
+            'request_id': request.id,
+            'message': message,
+            'request_email': request.email,
+            'decision': decision,
+            'already_processed': False,
+        }
