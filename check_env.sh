@@ -19,6 +19,8 @@ DEPLOYMENT_REQUIRED_VARS=(
   "OAUTH2_PROXY_CLIENT_ID"
   "OAUTH2_PROXY_CLIENT_SECRET"
   "OAUTH2_PROXY_COOKIE_SECRET"
+  "ADMIN_EMAILS"
+  "BETA_ACCESS_ADMINS"
 )
 
 # Variables that must have specific values in deployment

@@ -223,6 +223,8 @@ jobs:
             EMAIL_TEMPLATE_DIR=${{ secrets.EMAIL_TEMPLATE_DIR }}
             EMAIL_RATE_LIMIT_HOUR=${{ secrets.EMAIL_RATE_LIMIT_HOUR }}
             EMAIL_RATE_LIMIT_DAY=${{ secrets.EMAIL_RATE_LIMIT_DAY }}
+            ADMIN_EMAILS='${{ secrets.ADMIN_EMAILS }}'
+            BETA_ACCESS_ADMINS='${{ secrets.BETA_ACCESS_ADMINS }}'
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             POSTGRES_DB=${{ secrets.POSTGRES_DB }}
