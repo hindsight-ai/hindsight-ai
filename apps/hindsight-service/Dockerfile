@@ -17,13 +17,19 @@ ENV VERSION=${VERSION}
 WORKDIR /app
 
 # Install PostgreSQL client tools and upgrade pip
-RUN apt-get update && apt-get install -y postgresql-client \
+RUN apt-get update && apt-get install -y \
+        curl \
+        postgresql-client \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip install --upgrade pip setuptools wheel
 
 # Copy project files and install dependencies using pip
 COPY . ./
 RUN pip install --no-cache-dir .
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+ENV PATH="/root/.local/bin:${PATH}"
 
 # Expose the port the FastAPI application listens on
 EXPOSE 8000
