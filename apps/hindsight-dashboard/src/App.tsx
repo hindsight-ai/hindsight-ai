@@ -28,6 +28,7 @@ import BetaAccessPendingPage from './components/BetaAccessPendingPage';
 import BetaAccessDeniedPage from './components/BetaAccessDeniedPage';
 import BetaAccessGrantConfirmationPage from './components/BetaAccessGrantConfirmationPage';
 import BetaAccessAdminPage from './components/BetaAccessAdminPage';
+import NotFoundPage from './components/NotFoundPage';
 import organizationService from './api/organizationService';
 import betaAccessService from './api/betaAccessService';
 import notificationService from './services/notificationService';
@@ -200,7 +201,7 @@ function AppContent() {
   if (location.pathname === '/beta-access/review/granted') return <BetaAccessGrantConfirmationPage />;
   if (location.pathname === '/beta-access/admin') {
     if (!(user as any)?.beta_access_admin) {
-      return <BetaAccessDeniedPage />;
+      return <NotFoundPage />;
     }
     return <BetaAccessAdminPage />;
   }
