@@ -44,6 +44,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def _safe_group_id(group: dict, fallback: str = 'unknown') -> str:
+    try:
+        value = group.get('group_id', fallback)
+        return str(value) if value is not None else fallback
+    except Exception:
+        return fallback
 # Configuration settings
 BATCH_SIZE = int(os.getenv("CONSOLIDATION_BATCH_SIZE", 100))
 FALLBACK_SIMILARITY_THRESHOLD = float(os.getenv("FALLBACK_SIMILARITY_THRESHOLD", 0.4)) # Lowered further for testing
@@ -281,7 +288,7 @@ def store_consolidation_suggestions(db: Session, groups: List[Dict[str, Any]]) -
                     break
             
             if has_overlap:
-                group_id = group.get('group_id', 'unknown')
+                group_id = _safe_group_id(group)
                 logger.info(f"Skipping group {group_id} due to existing pending suggestion(s) with overlapping memory IDs")
                 continue
             
@@ -317,10 +324,10 @@ def store_consolidation_suggestions(db: Session, groups: List[Dict[str, Any]]) -
                     logger.error(f"Inner error during suggestion creation for group {group_id_uuid}: {str(inner_e)}")
                     logger.error(f"Full suggestion data: {suggestion_data}")
             except ValueError as ve:
-                logger.error(f"UUID conversion error for group {group.get('group_id', 'unknown')}: {str(ve)}")
+                logger.error(f"UUID conversion error for group {_safe_group_id(group)}: {str(ve)}")
                 logger.error(f"Full group structure: {group}")
         except Exception as e:
-            logger.error(f"Error storing suggestion for group {group.get('group_id', 'unknown')}: {str(e)}")
+            logger.error(f"Error storing suggestion for group {_safe_group_id(group)}: {str(e)}")
             logger.error(f"Full group structure: {group}")
     
     db.commit()

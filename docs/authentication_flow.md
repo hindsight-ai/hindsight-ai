@@ -80,7 +80,8 @@ OAuth2 establishes *who* the end-user is. A second layer – the beta access gat
 |-----------------|-------------------------------------------------------------------------|--------------------|
 | `not_requested` | Authenticated, but never asked to join the beta.                         | `/beta-access/request` |
 | `pending`       | Submitted a request and is awaiting review.                             | `/beta-access/pending` |
-| `denied`        | Request was reviewed but declined (may include an optional reason).     | `/beta-access/denied` |
+| `denied`        | Request was reviewed and declined (includes optional reason).            | `/beta-access/denied` |
+| `revoked`       | Previously accepted access was manually rescinded by an administrator.   | `/beta-access/denied` |
 | `accepted`      | Granted access to the dashboard and API.                                | `/dashboard` (or previously requested route) |
 
 ### End-User Workflow
@@ -120,6 +121,16 @@ To avoid confusion (or duplicate emails) when an administrator reopens the same 
 * The service layer now returns a structured payload including `already_processed` and `request_email`.
 * The frontend interprets that signal and routes the admin to the same confirmation page with contextual messaging (“Access already granted”).
 * Email notifications are **not** re-sent on repeat approvals, and the audit log records only the first successful decision.
+
+### Manual Overrides & Revocation
+
+Administrators listed in `BETA_ACCESS_ADMINS` can visit `/beta-access/admin` directly (there is no navigation link) to inspect user status and perform manual overrides. Updates are audited as `beta_access_review` entries and support four outcomes:
+
+* `accepted` / `denied` – mirror the standard decision flow and synchronise the most recent request record.
+* `revoked` – indicates access was granted previously but has now been intentionally rescinded. Users experience the same gating as `denied`, but audit trails retain the distinction.
+* `not_requested` – clears beta status entirely for clean re-testing.
+
+Use this interface only in staging or controlled environments; production allowlists should remain empty unless explicitly required for troubleshooting.
 
 ### Summary of Key Decisions
 

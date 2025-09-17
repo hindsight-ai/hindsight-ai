@@ -24,7 +24,12 @@ from core.db import models, schemas, crud
 from core.db.database import engine, get_db
 from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
-from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
+from core.api.auth import (
+    resolve_identity_from_headers,
+    get_or_create_user,
+    get_user_memberships,
+    is_beta_access_admin,
+)
 from core.api.deps import (
     get_current_user_context,
     get_current_user_context_or_pat,
@@ -306,6 +311,7 @@ def get_user_info(
         #     db.refresh(user)
             
         memberships = get_user_memberships(db, user.id)
+        beta_admin = is_beta_access_admin(user.email) or bool(user.is_superadmin)
         return {
             "authenticated": True,
             "user_id": str(user.id),
@@ -314,6 +320,7 @@ def get_user_info(
             "is_superadmin": bool(user.is_superadmin),
             "beta_access_status": user.beta_access_status,
             "memberships": memberships,
+            "beta_access_admin": beta_admin,
         }
 
     # If a PAT is provided, authenticate via PAT first
@@ -385,6 +392,7 @@ def get_user_info(
 
     user = get_or_create_user(db, email=email, display_name=name)
     memberships = get_user_memberships(db, user.id)
+    beta_admin = is_beta_access_admin(user.email) or bool(user.is_superadmin)
     return {
         "authenticated": True,
         "user_id": str(user.id),
@@ -393,6 +401,7 @@ def get_user_info(
         "is_superadmin": bool(user.is_superadmin),
         "beta_access_status": user.beta_access_status,
         "memberships": memberships,
+        "beta_access_admin": beta_admin,
     }
 
 # Dashboard Stats Endpoints

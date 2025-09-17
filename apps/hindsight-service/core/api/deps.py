@@ -13,13 +13,16 @@ from sqlalchemy import text as _sql_text
 from sqlalchemy.orm import Session
 
 from core.db.database import get_db
-from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
+from core.api.auth import (
+    resolve_identity_from_headers,
+    get_or_create_user,
+    get_user_memberships,
+    is_beta_access_admin,
+)
 from core.db import models
 from core.db.scope_utils import ScopeContext
 from core.db.repositories import tokens as token_repo
 from core.utils.token_crypto import parse_token, verify_secret
-from core.services.beta_access_service import BetaAccessService
-from fastapi import HTTPException
 import logging
 
 # Contract:
@@ -65,16 +68,21 @@ def get_current_user_context(
 
     # Normalize beta access status to reflect latest request state.
     from core.db.repositories import beta_access as beta_repo
-    valid_statuses = {'not_requested', 'pending', 'accepted', 'denied'}
+    valid_statuses = {'not_requested', 'pending', 'accepted', 'denied', 'revoked'}
     current_status = getattr(user, 'beta_access_status', None) or 'not_requested'
     if current_status not in valid_statuses:
         current_status = 'not_requested'
 
     desired_status = current_status
     existing_request = beta_repo.get_beta_access_request_by_email(db, user.email)
-    if existing_request and existing_request.status in {'pending', 'accepted', 'denied'}:
-        desired_status = existing_request.status
-    elif existing_request is None and current_status == 'pending':
+    if existing_request:
+        if existing_request.status == 'pending':
+            desired_status = 'pending'
+        elif existing_request.status == 'accepted':
+            desired_status = 'accepted'
+        elif existing_request.status == 'denied' and current_status != 'revoked':
+            desired_status = 'denied'
+    elif current_status == 'pending':
         desired_status = 'not_requested'
 
     if desired_status != current_status:
@@ -95,14 +103,18 @@ def get_current_user_context(
     memberships = get_user_memberships(db, user.id)
     # Normalize keys to string to align with permission helpers that cast org_id to str
     memberships_by_org = {str(m["organization_id"]): m for m in memberships}
+    is_superadmin = bool(getattr(user, "is_superadmin", False))
+    is_beta_admin = is_beta_access_admin(user.email) or is_superadmin
+
     current_user = {
         "id": user.id,
         "email": user.email,
         "display_name": user.display_name,
-        "is_superadmin": bool(getattr(user, "is_superadmin", False)),
+        "is_superadmin": is_superadmin,
         "beta_access_status": user.beta_access_status,
         "memberships": memberships,
         "memberships_by_org": memberships_by_org,
+        "is_beta_access_admin": is_beta_admin,
     }
     return user, current_user
 
@@ -172,11 +184,13 @@ def get_current_user_context_or_pat(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token user")
         memberships = get_user_memberships(db, user.id)
         memberships_by_org = {str(m["organization_id"]): m for m in memberships}
+        is_superadmin = bool(getattr(user, "is_superadmin", False))
         current_user = {
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
-            "is_superadmin": bool(getattr(user, "is_superadmin", False)),
+            "is_superadmin": is_superadmin,
+            "is_beta_access_admin": is_beta_access_admin(user.email) or is_superadmin,
             "memberships": memberships,
             "memberships_by_org": memberships_by_org,
             # PAT metadata for downstream checks
@@ -202,6 +216,15 @@ def get_current_user_context_or_pat(
         x_forwarded_user=x_forwarded_user,
         x_forwarded_email=x_forwarded_email,
     )
+
+
+def require_beta_access_admin(
+    user_context = Depends(get_current_user_context),
+):
+    user, current_user = user_context
+    if not (current_user.get('is_beta_access_admin') or current_user.get('is_superadmin')):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Beta access admin privileges required.")
+    return user, current_user
 
 
 def ensure_pat_allows_write(current_user: Dict[str, Any], target_org_id=None):

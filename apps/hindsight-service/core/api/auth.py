@@ -22,6 +22,17 @@ def _admin_emails() -> set:
     return {e.strip().lower() for e in raw.split(",") if e.strip()}
 
 
+def _beta_access_admin_emails() -> set:
+    raw = os.getenv("BETA_ACCESS_ADMINS", "")
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+
+
+def is_beta_access_admin(email: Optional[str]) -> bool:
+    if not email:
+        return False
+    return _normalize_email(email) in _beta_access_admin_emails()
+
+
 def resolve_identity_from_headers(
     x_auth_request_user: Optional[str],
     x_auth_request_email: Optional[str],

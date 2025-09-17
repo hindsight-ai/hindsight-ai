@@ -193,3 +193,7 @@ def log_bulk_operation(
     )
 
 __all__.extend(["log_agent", "log_keyword", "log_memory", "log_bulk_operation"])
+
+# Backwards compatibility: legacy modules still import `audit_log`
+audit_log = log
+__all__.append("audit_log")

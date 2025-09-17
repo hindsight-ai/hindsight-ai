@@ -1,7 +1,8 @@
 # Hindsight AI
 
-[![CI Tests](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml)
-[![codecov](https://codecov.io/gh/hindsight-ai/hindsight-ai/branch/main/graph/badge.svg)](https://codecov.io/gh/hindsight-ai/hindsight-ai)
+Status:
+- `main`: [![CI Tests](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml) [![Codecov main](https://codecov.io/gh/hindsight-ai/hindsight-ai/graph/badge.svg?token=G2GJE5IBGW)](https://codecov.io/gh/hindsight-ai/hindsight-ai)
+- `staging`: [![CI Tests](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml/badge.svg?branch=staging)](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml) [![Codecov staging](https://codecov.io/gh/hindsight-ai/hindsight-ai/branch/staging/graph/badge.svg?token=G2GJE5IBGW)](https://codecov.io/gh/hindsight-ai/hindsight-ai)
 
 Hindsight AI is a system designed to enhance AI agent memory and operational intelligence. Its primary purpose is to provide a robust and scalable solution for:
 - **Memory Management:** Storing, retrieving, and managing an AI agent's conversational and operational memories.

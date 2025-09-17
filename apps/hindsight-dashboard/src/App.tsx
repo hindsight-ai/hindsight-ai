@@ -27,6 +27,7 @@ import BetaAccessRequestPage from './components/BetaAccessRequestPage';
 import BetaAccessPendingPage from './components/BetaAccessPendingPage';
 import BetaAccessDeniedPage from './components/BetaAccessDeniedPage';
 import BetaAccessGrantConfirmationPage from './components/BetaAccessGrantConfirmationPage';
+import BetaAccessAdminPage from './components/BetaAccessAdminPage';
 import organizationService from './api/organizationService';
 import betaAccessService from './api/betaAccessService';
 import notificationService from './services/notificationService';
@@ -44,7 +45,9 @@ function AppContent() {
   useEffect(() => { document.title = 'Hindsight-AI'; }, []);
 
   const normalizeBetaStatus = (status: any): 'not_requested' | 'pending' | 'denied' | 'accepted' => {
-    if (status === 'pending' || status === 'denied' || status === 'accepted') return status;
+    if (status === 'pending') return 'pending';
+    if (status === 'accepted') return 'accepted';
+    if (status === 'denied' || status === 'revoked') return 'denied';
     return 'not_requested';
   };
   useEffect(() => { try { window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch {} }, [location.pathname, location.search, (user as UserInfo)?.authenticated, guest]);
@@ -195,6 +198,12 @@ function AppContent() {
   if (location.pathname === '/beta-access/pending') return <BetaAccessPendingPage />;
   if (location.pathname === '/beta-access/denied') return <BetaAccessDeniedPage />;
   if (location.pathname === '/beta-access/review/granted') return <BetaAccessGrantConfirmationPage />;
+  if (location.pathname === '/beta-access/admin') {
+    if (!(user as any)?.beta_access_admin) {
+      return <BetaAccessDeniedPage />;
+    }
+    return <BetaAccessAdminPage />;
+  }
   if (!guest && (!user || !(user as UserInfo).authenticated) && location.pathname !== '/login') {
     return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Redirecting to login…</div></div>);
   }

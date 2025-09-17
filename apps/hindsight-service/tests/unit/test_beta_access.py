@@ -910,7 +910,7 @@ class TestBetaAccessAPI:
         )
 
         assert response.status_code == 403
-        assert response.json()["detail"] == "Not authorized"
+        assert 'beta access admin' in response.json()["detail"].lower()
 
     def test_review_beta_access_endpoint_accept_idempotent(self, client, db_session: Session):
         """Repeated admin approvals should return already_processed and skip duplicate email."""
@@ -996,7 +996,7 @@ class TestBetaAccessAPI:
         )
 
         assert response.status_code == 403
-        assert response.json()["detail"] == "Not authorized"
+        assert 'beta access admin' in response.json()["detail"].lower()
 
     def test_review_beta_access_endpoint_token(self, client, db_session: Session):
         """Test POST /api/beta-access/review/{id}/token endpoint."""
@@ -1068,6 +1068,73 @@ class TestBetaAccessAPI:
 
         assert response.status_code == 410
         assert "expired" in response.json()["detail"].lower()
+
+    def test_admin_users_endpoint_forbidden(self, client, db_session: Session):
+        response = client.get(
+            "/beta-access/admin/users",
+            headers={"x-auth-request-email": "viewer@example.com", "x-auth-request-user": "Viewer"}
+        )
+        assert response.status_code == 403
+
+    def test_admin_users_endpoint_lists_users(self, client, db_session: Session):
+        admin = models.User(email="ibarz.jean@gmail.com", display_name="Admin")
+        db_session.add(admin)
+        db_session.commit(); db_session.refresh(admin)
+
+        user = models.User(email="tester@example.com", display_name="Tester", beta_access_status='pending')
+        db_session.add(user)
+        db_session.commit(); db_session.refresh(user)
+
+        beta_repo.create_beta_access_request(db_session, user.id, user.email)
+
+        response = client.get(
+            "/beta-access/admin/users",
+            headers={"x-auth-request-email": "ibarz.jean@gmail.com", "x-auth-request-user": "Admin"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        users = data.get('users')
+        assert any(entry['email'] == user.email for entry in users)
+
+    def test_admin_update_requires_valid_status(self, client, db_session: Session):
+        admin = models.User(email="ibarz.jean@gmail.com", display_name="Admin")
+        db_session.add(admin); db_session.commit(); db_session.refresh(admin)
+
+        target = models.User(email="manual@example.com", display_name="Manual")
+        db_session.add(target); db_session.commit(); db_session.refresh(target)
+
+        response = client.patch(
+            f"/beta-access/admin/users/{target.id}",
+            json={"status": "invalid"},
+            headers={"x-auth-request-email": "ibarz.jean@gmail.com", "x-auth-request-user": "Admin"}
+        )
+
+        assert response.status_code == 400
+
+    def test_admin_update_revoked(self, client, db_session: Session):
+        admin = models.User(email="ibarz.jean@gmail.com", display_name="Admin")
+        db_session.add(admin); db_session.commit(); db_session.refresh(admin)
+
+        target = models.User(email="manual@example.com", display_name="Manual", beta_access_status='accepted')
+        db_session.add(target); db_session.commit(); db_session.refresh(target)
+
+        request = beta_repo.create_beta_access_request(db_session, target.id, target.email)
+        beta_repo.update_beta_access_request_status(db_session, request.id, 'accepted', 'admin@example.com', None)
+
+        with patch('core.api.beta_access.audit_log') as mock_audit:
+            response = client.patch(
+                f"/beta-access/admin/users/{target.id}",
+                json={"status": "revoked"},
+                headers={"x-auth-request-email": "ibarz.jean@gmail.com", "x-auth-request-user": "Admin"}
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body['success'] is True
+        assert body['user']['beta_access_status'] == 'revoked'
+        mock_audit.assert_called_once()
+
 
 
 class TestAuthHelpers:

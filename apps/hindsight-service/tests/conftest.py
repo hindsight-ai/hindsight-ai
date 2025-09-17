@@ -57,6 +57,12 @@ def _restore_test_env():
     yield
     _restore_env()
 
+
+@pytest.fixture(autouse=True)
+def _beta_access_admin_env(monkeypatch):
+    monkeypatch.setenv('BETA_ACCESS_ADMINS', 'ibarz.jean@gmail.com,dev@localhost')
+    yield
+
 # Session-wide Postgres test container
 @pytest.fixture(scope="session")
 def _test_postgres():
