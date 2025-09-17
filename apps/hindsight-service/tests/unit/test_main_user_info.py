@@ -19,7 +19,7 @@ def test_user_info_dev_mode(monkeypatch):
     assert data["authenticated"] is True
     assert data["email"] == "dev@localhost"
     assert "beta_access_status" in data
-    assert data["beta_access_status"] in ["pending", "accepted", "denied"]
+    assert data["beta_access_status"] in ["not_requested", "pending", "accepted", "denied"]
 
 
 @pytest.mark.usefixtures("db_session")
@@ -32,5 +32,4 @@ def test_user_info_oauth_headers(monkeypatch):
     assert data["authenticated"] is True
     assert data["email"] == "tester@example.com"
     assert "beta_access_status" in data
-    assert data["beta_access_status"] in ["pending", "accepted", "denied"]
-
+    assert data["beta_access_status"] in ["not_requested", "pending", "accepted", "denied"]

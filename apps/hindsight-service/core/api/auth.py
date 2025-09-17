@@ -37,7 +37,11 @@ def get_or_create_user(db: Session, email: str, display_name: Optional[str] = No
     user = db.query(models.User).filter(models.User.email == email).first()
     was_new = False
     if not user:
-        user = models.User(email=email, display_name=display_name or email.split("@")[0])
+        user = models.User(
+            email=email,
+            display_name=display_name or email.split("@")[0],
+            beta_access_status='not_requested',
+        )
         db.add(user)
         was_new = True
 
@@ -52,6 +56,14 @@ def get_or_create_user(db: Session, email: str, display_name: Optional[str] = No
         db.commit()
         db.refresh(user)
         return user
+    if not getattr(user, "beta_access_status", None):
+        user.beta_access_status = 'not_requested'
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+        else:
+            db.refresh(user)
     # For existing users, avoid unnecessary commits that could clobber test state
     db.refresh(user)
     return user

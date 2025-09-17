@@ -183,6 +183,26 @@ describe('App Beta Access Routing', () => {
     });
   });
 
+  test('redirects to beta access request when user has not requested status', async () => {
+    const mockReplace = jest.fn();
+    Object.defineProperty(window, 'location', {
+      value: { pathname: '/', search: '', replace: mockReplace, href: '' },
+      writable: true,
+    });
+
+    mockUseAuth.mockReturnValue({
+      user: { authenticated: true, beta_access_status: 'not_requested' },
+      loading: false,
+      guest: false,
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/beta-access/request');
+    });
+  });
+
   test('redirects to beta access pending when user has pending status', async () => {
     const mockReplace = jest.fn();
     Object.defineProperty(window, 'location', {

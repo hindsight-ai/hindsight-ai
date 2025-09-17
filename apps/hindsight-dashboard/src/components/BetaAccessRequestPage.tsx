@@ -9,7 +9,7 @@ const BetaAccessRequestPage: React.FC = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [isDisclaimerAccepted, setIsDisclaimerAccepted] = useState(false);
-  const { user, loading } = useAuth();
+  const { user, loading, refresh } = useAuth() as any;
 
   const accountEmail = useMemo(() => {
     const raw = (user as any)?.email;
@@ -53,6 +53,13 @@ const BetaAccessRequestPage: React.FC = () => {
       if (response.ok) {
         setIsSubmitted(true);
         notificationService.showSuccess('Beta access request sent! Check your email for confirmation.');
+        if (typeof refresh === 'function') {
+          try {
+            await refresh();
+          } catch (refreshError) {
+            // Intentionally swallow refresh errors so the confirmation screen still renders
+          }
+        }
       } else if (response.status === 400) {
         setError('You have already requested beta access. Please wait for approval.');
         notificationService.showWarning('You have already requested beta access. We will reach out once it is reviewed.');

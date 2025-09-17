@@ -4,6 +4,7 @@ Unit tests for beta access functionality.
 Tests beta access service, repository, API endpoints, and email notifications.
 """
 import uuid
+import asyncio
 import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch, MagicMock, ANY
@@ -107,13 +108,22 @@ class TestBetaAccessService:
         """Test requesting beta access for a new user."""
         email = "newuser@example.com"
 
+        user = models.User(email=email, display_name="New User")
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+
         with patch('core.services.beta_access_service.NotificationService') as mock_notification, \
              patch('core.services.beta_access_service.audit_log') as mock_audit:
             service = BetaAccessService(db_session)
-            result = service.request_beta_access(None, email)
+            result = service.request_beta_access(user.id, email)
 
             assert result["success"] is True
             assert "request_id" in result
+
+            # User status should transition to pending
+            status = beta_repo.get_user_beta_access_status(db_session, user.id)
+            assert status == 'pending'
 
             # Verify notification was called
             mock_notification.return_value.notify_beta_access_request_confirmation.assert_called_once_with(email)
@@ -127,13 +137,18 @@ class TestBetaAccessService:
         """Test requesting beta access when user already has pending request."""
         email = "existing@example.com"
 
+        user = models.User(email=email, display_name="Existing User", beta_access_status='pending')
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+
         # Create existing request
-        beta_repo.create_beta_access_request(db_session, None, email)
+        beta_repo.create_beta_access_request(db_session, user.id, email)
 
         with patch('core.services.beta_access_service.NotificationService') as mock_notification, \
              patch('core.services.beta_access_service.audit_log') as mock_audit:
             service = BetaAccessService(db_session)
-            result = service.request_beta_access(None, email)
+            result = service.request_beta_access(user.id, email)
 
             assert result["success"] is False
             assert "already exists" in result["message"]
@@ -216,6 +231,24 @@ class TestBetaAccessService:
             status = beta_repo.get_user_beta_access_status(db_session, user.id)
             assert status == 'accepted'
 
+    def test_review_beta_access_request_with_token_logs_via_token_metadata(self, db_session: Session):
+        """Audit log metadata should include via_token for token-based reviews."""
+        user = models.User(email="tokenlog@example.com", display_name="Token Log")
+        db_session.add(user)
+        db_session.commit(); db_session.refresh(user)
+
+        request = beta_repo.create_beta_access_request(db_session, user.id, user.email)
+
+        with patch('core.services.beta_access_service.NotificationService') as mock_notification, \
+             patch('core.services.beta_access_service.audit_log') as mock_audit:
+            service = BetaAccessService(db_session)
+            result = service.review_beta_access_request_with_token(request.id, request.review_token, 'accepted')
+
+            assert result['success'] is True
+            metadata = mock_audit.call_args.kwargs.get('metadata')
+            assert metadata and metadata.get('via_token') is True
+            mock_notification.return_value.notify_beta_access_acceptance.assert_called_once_with(user.email)
+
     def test_review_beta_access_request_with_token_invalid(self, db_session: Session):
         """Test token review with invalid token."""
         user = models.User(email="invalid@example.com", display_name="Invalid User")
@@ -259,7 +292,8 @@ class TestBetaAccessService:
         service = BetaAccessService(db_session)
         status = service.get_beta_access_status(user.id)
 
-        assert status == "pending"
+        # Default for a newly-created user should be 'not_requested'
+        assert status == "not_requested"
 
     def test_get_pending_requests(self, db_session: Session):
         """Test getting pending beta access requests."""
@@ -297,12 +331,13 @@ class TestBetaAccessNotifications:
             {"request_url": "https://app.hindsight.ai/beta-access/request"}
         )
 
-    def test_notify_beta_access_request_confirmation(self, db_session: Session):
+    def test_notify_beta_access_request_confirmation(self, db_session: Session, monkeypatch):
         """Test sending beta access request confirmation email."""
         mock_service = Mock()
         mock_service.render_template.return_value = ("<html>Test</html>", "Test")
         mock_service.send_email.return_value = {"success": True, "message_id": "test-id"}
         
+        monkeypatch.setenv('APP_BASE_URL', 'https://app.hindsight-ai.com')
         notification_service = NotificationService(db_session, email_service=mock_service)
         result = notification_service.notify_beta_access_request_confirmation("test@example.com")
 
@@ -312,6 +347,17 @@ class TestBetaAccessNotifications:
             "beta_access_request_confirmation",
             {}
         )
+
+    def test_notify_beta_access_request_confirmation_render_error(self, db_session: Session):
+        """Render failures should return error payload."""
+        mock_service = Mock()
+        mock_service.render_template.side_effect = RuntimeError("boom")
+        notification_service = NotificationService(db_session, email_service=mock_service)
+
+        result = notification_service.notify_beta_access_request_confirmation("test@example.com")
+
+        assert result["success"] is False
+        assert result["error"] == "boom"
 
     def test_notify_beta_access_admin_notification(self, db_session: Session, monkeypatch):
         """Test sending beta access admin notification email."""
@@ -341,6 +387,23 @@ class TestBetaAccessNotifications:
             }
             )
 
+    def test_notify_beta_access_admin_notification_without_token(self, db_session: Session, monkeypatch):
+        """Without a review token, fallback links should be used."""
+        mock_service = Mock()
+        mock_service.render_template.return_value = ("<html>Test</html>", "Test")
+        mock_service.send_email.return_value = {"success": True, "message_id": "test-id"}
+
+        monkeypatch.setenv('APP_BASE_URL', 'https://app.hindsight-ai.com')
+        notification_service = NotificationService(db_session, email_service=mock_service)
+        request_id = uuid.uuid4()
+        notification_service.notify_beta_access_admin_notification(request_id, "user@example.com", None)
+
+        args, kwargs = mock_service.render_template.call_args
+        context = kwargs["context"] if "context" in kwargs else args[1]
+        assert context["accept_url"] == f"https://app.hindsight-ai.com/beta-access/review/{request_id}?decision=accepted"
+        assert context["deny_url"] == f"https://app.hindsight-ai.com/beta-access/review/{request_id}?decision=denied"
+        assert context["review_token"] is None
+
     def test_notify_beta_access_acceptance(self, db_session: Session):
         """Test sending beta access acceptance email."""
         mock_service = Mock()
@@ -357,6 +420,22 @@ class TestBetaAccessNotifications:
             {"login_url": "https://app.hindsight.ai/login"}
         )
 
+    def test_notify_beta_access_acceptance_async_send(self, db_session: Session):
+        """Async send_email paths should use asyncio.run and capture success."""
+
+        async def fake_send_email(**kwargs):  # pragma: no cover - but executed via fake run
+            return {"success": True, "message_id": "async-id"}
+
+        mock_service = Mock()
+        mock_service.render_template.return_value = ("<html>Test</html>", "Test")
+        mock_service.send_email = fake_send_email
+
+        notification_service = NotificationService(db_session, email_service=mock_service)
+        result = notification_service.notify_beta_access_acceptance("test@example.com")
+
+        assert result["success"] is True
+        assert result["message_id"] == "async-id"
+
     def test_notify_beta_access_denial(self, db_session: Session):
         """Test sending beta access denial email."""
         mock_service = Mock()
@@ -372,6 +451,22 @@ class TestBetaAccessNotifications:
             "beta_access_denial",
             {"decision_reason": "Not approved"}
         )
+
+    def test_notify_beta_access_denial_async_send(self, db_session: Session):
+        """Async denial paths should succeed and surface message id."""
+
+        async def fake_send_email(**kwargs):
+            return {"success": True, "message_id": "async-deny"}
+
+        mock_service = Mock()
+        mock_service.render_template.return_value = ("<html>Test</html>", "Test")
+        mock_service.send_email = fake_send_email
+
+        notification_service = NotificationService(db_session, email_service=mock_service)
+        result = notification_service.notify_beta_access_denial("test@example.com", "reason")
+
+        assert result["success"] is True
+        assert result["message_id"] == "async-deny"
 
 
 class TestBetaAccessAPI:
@@ -451,8 +546,11 @@ class TestBetaAccessAPI:
 
         assert response.status_code == 200, (response.status_code, response.json())
         data = response.json()
+
         assert "status" in data
-        assert data["status"] == "pending"  # Default status
+
+        # Default status should be 'not_requested'
+        assert data["status"] == "not_requested"
 
     def test_get_pending_requests_endpoint(self, client, db_session: Session):
         """Test GET /api/beta-access/pending endpoint."""

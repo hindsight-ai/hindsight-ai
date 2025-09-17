@@ -63,7 +63,7 @@ class TestMemberNotifications:
         owner, organization = org_owner_context
         
         # Ensure owner has beta access to avoid beta access invitation email
-        owner.beta_access_status = 'approved'
+        owner.beta_access_status = 'accepted'
         db_session.commit()
         
         # Mock the email service
@@ -217,7 +217,7 @@ class TestMemberNotifications:
         owner, organization = org_owner_context
         
         # Ensure owner has beta access to avoid beta access invitation email
-        owner.beta_access_status = 'approved'
+        owner.beta_access_status = 'accepted'
         db_session.commit()
         
         # Mock email service to raise an exception
@@ -466,7 +466,7 @@ class TestNotificationEventTypesAndTemplates:
         owner, organization = org_owner_context
         
         # Ensure owner has beta access to avoid beta access invitation email
-        owner.beta_access_status = 'approved'
+        owner.beta_access_status = 'accepted'
         db_session.commit()
 
         # Mock the email service
@@ -514,7 +514,7 @@ class TestNotificationEventTypesAndTemplates:
         owner, organization = org_owner_context
         
         # Ensure owner has beta access to avoid beta access invitation email
-        owner.beta_access_status = 'approved'
+        owner.beta_access_status = 'accepted'
         db_session.commit()
 
         # Create a member first
@@ -589,7 +589,7 @@ class TestNotificationEventTypesAndTemplates:
         owner, organization = org_owner_context
         
         # Ensure owner has beta access to avoid beta access invitation email
-        owner.beta_access_status = 'approved'
+        owner.beta_access_status = 'accepted'
         db_session.commit()
 
         # Create a member first

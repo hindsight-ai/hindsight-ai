@@ -63,20 +63,28 @@ def get_current_user_context(
         else:
             db.refresh(user)
 
-    # Check beta access status and send invitation if needed
-    if user.beta_access_status == 'pending':
-        # Check if user already has a pending request
-        from core.db.repositories import beta_access as beta_repo
-        existing_request = beta_repo.get_beta_access_request_by_email(db, user.email)
-        if not existing_request or existing_request.status != 'pending':
-            # Send invitation email for users without beta access who haven't requested it yet
-            try:
-                from core.services.notification_service import NotificationService
-                notification_service = NotificationService(db)
-                notification_service.notify_beta_access_invitation(user.email)
-            except Exception as e:
-                # Log error but don't fail authentication
-                logging.getLogger("hindsight.auth").warning(f"Failed to send beta access invitation to {user.email}: {e}")
+    # Normalize beta access status to reflect latest request state.
+    from core.db.repositories import beta_access as beta_repo
+    valid_statuses = {'not_requested', 'pending', 'accepted', 'denied'}
+    current_status = getattr(user, 'beta_access_status', None) or 'not_requested'
+    if current_status not in valid_statuses:
+        current_status = 'not_requested'
+
+    desired_status = current_status
+    existing_request = beta_repo.get_beta_access_request_by_email(db, user.email)
+    if existing_request and existing_request.status in {'pending', 'accepted', 'denied'}:
+        desired_status = existing_request.status
+    elif existing_request is None and current_status == 'pending':
+        desired_status = 'not_requested'
+
+    if desired_status != current_status:
+        user.beta_access_status = desired_status
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+        else:
+            db.refresh(user)
     
     # Comment out automatic superadmin privileges for dev user to test non-superadmin functionality
     # if is_dev_mode and email == "dev@localhost" and not user.is_superadmin:

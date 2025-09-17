@@ -44,6 +44,19 @@ describe('authService.getCurrentUser', () => {
     expect(result.beta_access_status).toBe('denied');
   });
 
+  test('returns JSON with not_requested beta_access_status', async () => {
+    const data = {
+      authenticated: true,
+      email: 'user@example.com',
+      beta_access_status: 'not_requested' as const
+    };
+    const mockResponse = { ok: true, json: jest.fn().mockResolvedValue(data) };
+    jest.spyOn(global, 'fetch').mockResolvedValue(mockResponse as any);
+    const result = await authService.getCurrentUser();
+    expect(result).toEqual(data);
+    expect(result.beta_access_status).toBe('not_requested');
+  });
+
   test('returns JSON with undefined beta_access_status', async () => {
     const data = {
       authenticated: true,

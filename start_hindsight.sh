@@ -2,6 +2,12 @@
 
 set -e
 
+if [ "$(id -u)" -eq 0 ]; then
+  echo "❌ Please run start_hindsight.sh as a regular user (not root/sudo)."
+  echo "   Add your account to the docker group instead: sudo usermod -aG docker $(logname) && newgrp docker"
+  exit 1
+fi
+
 echo "Starting Hindsight AI services for local development..."
 echo "Using Docker Compose with development profile..."
 

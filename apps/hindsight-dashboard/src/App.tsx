@@ -41,6 +41,11 @@ function AppContent() {
   const [showDebugPanel, setShowDebugPanel] = useState(false);
 
   useEffect(() => { document.title = 'Hindsight-AI'; }, []);
+
+  const normalizeBetaStatus = (status: any): 'not_requested' | 'pending' | 'denied' | 'accepted' => {
+    if (status === 'pending' || status === 'denied' || status === 'accepted') return status;
+    return 'not_requested';
+  };
   useEffect(() => { try { window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch {} }, [location.pathname, location.search, (user as UserInfo)?.authenticated, guest]);
   useEffect(() => {
     const isOAuthPath = location.pathname.startsWith('/oauth2');
@@ -131,12 +136,12 @@ function AppContent() {
         }
       }
       // After processing invites, check beta access status before redirecting
-      const betaStatus = (user as any).beta_access_status;
+      const betaStatus = normalizeBetaStatus((user as any)?.beta_access_status);
       if (betaStatus === 'pending') {
         try { window.location.replace('/beta-access/pending'); } catch { window.location.href = '/beta-access/pending'; }
       } else if (betaStatus === 'denied') {
         try { window.location.replace('/beta-access/denied'); } catch { window.location.href = '/beta-access/denied'; }
-      } else if (!betaStatus) {
+      } else if (betaStatus === 'not_requested') {
         try { window.location.replace('/beta-access/request'); } catch { window.location.href = '/beta-access/request'; }
       } else {
         try { window.location.replace('/dashboard'); } catch { window.location.href = '/dashboard'; }
@@ -152,12 +157,12 @@ function AppContent() {
     if (!loading && location.pathname === '/') {
       if (user && (user as UserInfo).authenticated) {
         // Check beta access status and redirect accordingly
-        const betaStatus = (user as any).beta_access_status;
+        const betaStatus = normalizeBetaStatus((user as any)?.beta_access_status);
         if (betaStatus === 'pending') {
           try { window.location.replace('/beta-access/pending'); } catch { window.location.href = '/beta-access/pending'; }
         } else if (betaStatus === 'denied') {
           try { window.location.replace('/beta-access/denied'); } catch { window.location.href = '/beta-access/denied'; }
-        } else if (!betaStatus) {
+        } else if (betaStatus === 'not_requested') {
           // No beta access record, redirect to request page
           try { window.location.replace('/beta-access/request'); } catch { window.location.href = '/beta-access/request'; }
         } else {
@@ -196,14 +201,14 @@ function AppContent() {
                           location.pathname === '/support';
 
   if (isDashboardRoute && user && (user as UserInfo).authenticated) {
-    const betaStatus = (user as any).beta_access_status;
+    const betaStatus = normalizeBetaStatus((user as any)?.beta_access_status);
     if (betaStatus === 'pending') {
       try { window.location.replace('/beta-access/pending'); } catch { window.location.href = '/beta-access/pending'; }
       return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Redirecting…</div></div>);
     } else if (betaStatus === 'denied') {
       try { window.location.replace('/beta-access/denied'); } catch { window.location.href = '/beta-access/denied'; }
       return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Redirecting…</div></div>);
-    } else if (!betaStatus) {
+    } else if (betaStatus === 'not_requested') {
       try { window.location.replace('/beta-access/request'); } catch { window.location.href = '/beta-access/request'; }
       return (<div className="min-h-screen bg-gray-100 flex items-start justify-center pt-8"><div className="text-gray-600">Redirecting…</div></div>);
     }

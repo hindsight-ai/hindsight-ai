@@ -37,9 +37,12 @@ const createAuthState = () => ({
   refresh: jest.fn(),
 });
 
+let authState: ReturnType<typeof createAuthState>;
+
 const setupAuth = (overrides: Partial<ReturnType<typeof createAuthState>> = {}) => {
   const state = { ...createAuthState(), ...overrides };
   mockUseAuth.mockReturnValue(state);
+  authState = state as ReturnType<typeof createAuthState>;
   return state;
 };
 
@@ -93,6 +96,7 @@ describe('BetaAccessRequestPage', () => {
       body: JSON.stringify({ email: 'test@example.com' }),
     });
     expect(mockNotification.showSuccess).toHaveBeenCalledWith('Beta access request sent! Check your email for confirmation.');
+    expect(authState.refresh).toHaveBeenCalled();
     expect(mockNotification.showWarning).not.toHaveBeenCalled();
   });
 

@@ -32,6 +32,12 @@ class BetaAccessService:
         # Create new request
         request = beta_repo.create_beta_access_request(self.db, user_id, email)
 
+        # Update the user beta access status to pending when we have a user account
+        if user_id:
+            beta_repo.update_user_beta_access_status(self.db, user_id, 'pending')
+        else:
+            self._update_user_status_by_email(email, 'pending')
+
         # Send confirmation email to user
         self._send_request_confirmation_email(email)
 

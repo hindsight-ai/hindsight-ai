@@ -47,7 +47,12 @@ def get_beta_access_requests_by_status(db: Session, status: str, skip: int = 0, 
 
 
 def get_beta_access_request_by_email(db: Session, email: str) -> Optional[models.BetaAccessRequest]:
-    return db.query(models.BetaAccessRequest).filter(models.BetaAccessRequest.email == email).first()
+    return (
+        db.query(models.BetaAccessRequest)
+        .filter(models.BetaAccessRequest.email == email)
+        .order_by(models.BetaAccessRequest.requested_at.desc())
+        .first()
+    )
 
 
 def update_beta_access_request_status(
