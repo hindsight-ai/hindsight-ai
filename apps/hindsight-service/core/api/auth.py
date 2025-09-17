@@ -17,14 +17,22 @@ def _normalize_email(email: Optional[str]) -> Optional[str]:
     return email.strip().lower()
 
 
+def _normalize_list_env(var_name: str) -> set:
+    raw = os.getenv(var_name, "")
+    values = set()
+    for entry in raw.split(","):
+        cleaned = entry.strip().strip('"').strip("'")
+        if cleaned:
+            values.add(cleaned.lower())
+    return values
+
+
 def _admin_emails() -> set:
-    raw = os.getenv("ADMIN_EMAILS", "")
-    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+    return _normalize_list_env("ADMIN_EMAILS")
 
 
 def _beta_access_admin_emails() -> set:
-    raw = os.getenv("BETA_ACCESS_ADMINS", "")
-    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+    return _normalize_list_env("BETA_ACCESS_ADMINS")
 
 
 def is_beta_access_admin(email: Optional[str]) -> bool:
