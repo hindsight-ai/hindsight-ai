@@ -24,6 +24,17 @@ export const isGuest = (): boolean => {
   }
 };
 
+const shouldUseLocalFallback = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const hostname = window.location.hostname?.toLowerCase();
+    if (!hostname) return false;
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'host.docker.internal' || hostname === '::1';
+  } catch {
+    return false;
+  }
+};
+
 // Resolve base path: '/api' or '/guest-api', or provided overrides
 export const apiBasePath = (): string => {
   try {
@@ -163,10 +174,17 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
 
   const req: RequestInit = { credentials: 'include', ...rest, headers: headersObj };
 
+  const allowLocalFallback = shouldUseLocalFallback();
+
   try {
     const res = await fetch(url, req);
     // If backend is unreachable via proxy (/api) in local dev, try direct fallbacks.
-    if (!res.ok && res.status === 502 && (apiBasePath() === '/api' || apiBasePath() === '/guest-api')) {
+    if (
+      allowLocalFallback &&
+      !res.ok &&
+      res.status === 502 &&
+      (apiBasePath() === '/api' || apiBasePath() === '/guest-api')
+    ) {
       // Try localhost and host.docker.internal fallbacks
       const candidates = ['http://localhost:8000', 'http://127.0.0.1:8000', 'http://host.docker.internal:8000'];
       for (const base of candidates) {
@@ -180,7 +198,10 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
     return res;
   } catch (e) {
     // Network error: attempt direct fallbacks in dev scenario
-    if (apiBasePath() === '/api' || apiBasePath() === '/guest-api') {
+    if (
+      allowLocalFallback &&
+      (apiBasePath() === '/api' || apiBasePath() === '/guest-api')
+    ) {
       const candidates = ['http://localhost:8000', 'http://127.0.0.1:8000', 'http://host.docker.internal:8000'];
       for (const base of candidates) {
         try {
