@@ -5,10 +5,13 @@ Parses proxy headers, normalizes emails, and upserts users while supporting
 simple superadmin elevation via environment configuration.
 """
 import os
+import logging
 from typing import Optional, Dict, Any, List, Tuple
 from sqlalchemy.orm import Session
 
 from core.db import models
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_email(email: Optional[str]) -> Optional[str]:
@@ -19,6 +22,7 @@ def _normalize_email(email: Optional[str]) -> Optional[str]:
 
 def _normalize_list_env(var_name: str) -> set:
     raw = os.getenv(var_name, "")
+    logger.debug("auth_env_parse: %s raw='%s'", var_name, raw)
     values = set()
     for entry in raw.split(","):
         cleaned = entry.strip().strip('"').strip("'")
@@ -66,9 +70,12 @@ def get_or_create_user(db: Session, email: str, display_name: Optional[str] = No
 
     # Elevate to superadmin based on ADMIN_EMAILS only at creation time to avoid test-order flakiness
     admins = _admin_emails()
+    if not admins:
+        logger.debug("admin_emails_empty: no ADMIN_EMAILS configured")
     if was_new:
         if email in admins:
             user.is_superadmin = True
+            logger.info("admin_user_created: email=%s flagged as superadmin", email)
 
     if was_new:
         db.flush()
@@ -82,8 +89,12 @@ def get_or_create_user(db: Session, email: str, display_name: Optional[str] = No
             db.commit()
         except Exception:
             db.rollback()
+            logger.exception("admin_user_promote_failed: email=%s", email)
         else:
             db.refresh(user)
+            logger.info("admin_user_promoted: email=%s flagged as superadmin", email)
+    elif email not in admins:
+        logger.debug("admin_user_not_listed: email=%s admins=%s", email, sorted(admins))
 
     if not getattr(user, "beta_access_status", None):
         user.beta_access_status = 'not_requested'
