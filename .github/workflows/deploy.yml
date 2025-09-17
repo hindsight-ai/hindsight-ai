@@ -207,6 +207,7 @@ jobs:
             OAUTH2_PROXY_CLIENT_ID=${{ secrets.OAUTH2_PROXY_CLIENT_ID }}
             OAUTH2_PROXY_CLIENT_SECRET=${{ secrets.OAUTH2_PROXY_CLIENT_SECRET }}
             OAUTH2_PROXY_COOKIE_SECRET='${{ secrets.OAUTH2_PROXY_COOKIE_SECRET }}'
+            OAUTH2_PROXY_EMAIL_DOMAINS=${{ secrets.OAUTH2_PROXY_EMAIL_DOMAINS || '*' }}
             LLM_API_KEY=${{ secrets.LLM_API_KEY }}
             LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
             CONSOLIDATION_BATCH_SIZE=${{ secrets.CONSOLIDATION_BATCH_SIZE }}
