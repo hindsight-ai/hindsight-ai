@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../api/http';
 import TokenManagement from './TokenManagement';
@@ -8,6 +8,10 @@ const ProfilePage: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  const superadminEnabled = Boolean(user?.is_superadmin);
+  const betaAdminEnabled = Boolean(user?.beta_access_admin);
+  const betaStatus = (user?.beta_access_status || 'not_requested').replace(/_/g, ' ');
 
   // ...existing code...
 
@@ -41,8 +45,41 @@ const ProfilePage: React.FC = () => {
   
 
   return (
-    <div className="p-4">
-      <h2 className="text-2xl font-semibold mb-4">Your Profile</h2>
+    <div className="p-4 space-y-6">
+      <div>
+        <h2 className="text-2xl font-semibold">Profile</h2>
+        <p className="text-sm text-gray-600 mt-1">Review your account privileges and update basic details.</p>
+      </div>
+
+      <section className="bg-white border border-gray-200 rounded-lg shadow-sm max-w-2xl">
+        <div className="px-4 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">Account Privileges</h3>
+          <p className="text-sm text-gray-500">These flags come from your administrator and determine access to internal tools.</p>
+        </div>
+        <dl className="px-4 py-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+            <dt className="text-sm text-gray-600">Superadmin access</dt>
+            <dd>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${superadminEnabled ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'}`}>
+                {superadminEnabled ? 'Enabled' : 'Not granted'}
+              </span>
+            </dd>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+            <dt className="text-sm text-gray-600">Beta access admin</dt>
+            <dd>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${betaAdminEnabled ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-600'}`}>
+                {betaAdminEnabled ? 'Enabled' : 'Not granted'}
+              </span>
+            </dd>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+            <dt className="text-sm text-gray-600">Beta access status</dt>
+            <dd className="text-sm font-medium text-gray-900 capitalize">{betaStatus}</dd>
+          </div>
+        </dl>
+      </section>
+
       <form onSubmit={onSave} className="max-w-md space-y-4">
         <div>
           <label className="block text-sm text-gray-600 mb-1">Email</label>

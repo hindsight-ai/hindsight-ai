@@ -62,6 +62,9 @@ Important env vars (see `.env.example`):
   - Production: `https://app.hindsight-ai.com`
   - Staging: `https://app-staging.hindsight-ai.com`
   - Dev: `http://localhost:3000`
+- `ADMIN_EMAILS`: Comma-separated emails to elevate as superadmins on first login. Required for accessing admin-only routes such as the beta access console.
+- `BETA_ACCESS_ADMINS`: Optional comma-separated emails allowed to review beta access requests without being full superadmins.
+- `DEV_MODE`: Set to `true` locally to bypass SSO with `dev@localhost` and auto-mark beta access as accepted for quicker manual testing.
 
 ## 🔐 Permissions & Scopes
 

@@ -70,9 +70,14 @@ const UserAccountButton: React.FC = () => {
               <p className="text-sm font-medium text-gray-900">
                 {user.email || user.display_name || 'User'}
               </p>
-              <p className="text-xs text-gray-500">
-                {user.email === 'dev@localhost' ? 'Development Mode' : 'Signed in'}
-                {user.is_superadmin && <span className="ml-1 px-1 bg-red-100 text-red-800 rounded text-xs">Admin</span>}
+              <p className="text-xs text-gray-500 flex flex-wrap items-center gap-1">
+                <span>{user.email === 'dev@localhost' ? 'Development Mode' : 'Signed in'}</span>
+                {user.is_superadmin && (
+                  <span className="ml-0 px-1 bg-red-100 text-red-800 rounded text-xs">Superadmin</span>
+                )}
+                {user.beta_access_admin && (
+                  <span className="ml-0 px-1 bg-indigo-100 text-indigo-800 rounded text-xs">Beta Admin</span>
+                )}
               </p>
             </div>
             <div className="py-1">
@@ -108,7 +113,7 @@ const UserAccountButton: React.FC = () => {
                   <path d="M4 21v-2a4 4 0 0 1 3-3.87" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>
-                Edit Profile
+                Profile
               </button>
               <button
                 onClick={() => {
