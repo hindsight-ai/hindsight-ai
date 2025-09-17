@@ -1,10 +1,13 @@
 """Runtime environment helpers for guarding development-only flags."""
 
 import os
+import logging
 from urllib.parse import urlparse
 from typing import Optional, Set
 
 _LOCAL_HOSTS: Set[str] = {"localhost", "127.0.0.1", "::1"}
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_hostname(url_value: str) -> Optional[str]:
@@ -41,10 +44,17 @@ def dev_mode_active() -> bool:
     staging/production deployments from silently impersonating the dev user.
     """
     if not dev_mode_requested():
+        logger.debug("dev_mode_active: requested=false")
         return False
 
     hostname = _extract_hostname(os.getenv("APP_BASE_URL", ""))
     allowed_hosts = _allowed_dev_hosts()
+    logger.debug(
+        "dev_mode_active: hostname=%s allowed_hosts=%s allow_dev=%s",
+        hostname,
+        sorted(allowed_hosts),
+        os.getenv("ALLOW_DEV_MODE"),
+    )
 
     if hostname:
         if hostname.lower() not in allowed_hosts:
@@ -60,4 +70,5 @@ def dev_mode_active() -> bool:
                 "or ALLOW_DEV_MODE=true for non-local execution."
             )
 
+    logger.debug("dev_mode_active: returning True")
     return True

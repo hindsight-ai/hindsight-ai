@@ -156,6 +156,9 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
   if (typeof window !== 'undefined') {
     const { devModeHeaders } = await import('../utils/devMode');
     const implicitHeaders = devModeHeaders();
+    if (Object.keys(implicitHeaders).length > 0 && typeof console !== 'undefined' && console.debug) {
+      console.debug('[apiFetch] attaching dev auth headers', implicitHeaders);
+    }
     for (const key of Object.keys(implicitHeaders)) {
       if (!headersObj[key]) headersObj[key] = implicitHeaders[key];
     }
