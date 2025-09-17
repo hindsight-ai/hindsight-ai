@@ -9,6 +9,8 @@ These tests verify:
 """
 
 import pytest
+pytest.importorskip("jinja2")
+
 from unittest.mock import patch, MagicMock, AsyncMock
 from pathlib import Path
 

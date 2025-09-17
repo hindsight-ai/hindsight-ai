@@ -1,3 +1,7 @@
+import pytest
+pytest.importorskip("aiosmtplib")
+pytest.importorskip("jinja2")
+
 import os
 from unittest.mock import MagicMock, patch
 
@@ -31,4 +35,3 @@ def test_send_email_sync(monkeypatch):
     with patch("aiosmtplib.SMTP", _SMTP):
         out = send_email_sync("u@example.com", "S", "<b>H</b>", text_content="H")
         assert out["success"] is True
-

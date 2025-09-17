@@ -9,6 +9,7 @@ import KeywordSuggestionModal from './KeywordSuggestionModal';
 import ProcessingDialog from './ProcessingDialog';
 import Portal from './Portal';
 import CompactionSettingsModal from './CompactionSettingsModal';
+import { useAuth } from '../context/AuthContext';
 
 interface Suggestion {
   id: string;
@@ -59,6 +60,8 @@ interface KeywordSuggestion {
 }
 
 const MemoryOptimizationCenter: FC = () => {
+  const { features } = useAuth();
+  const llmDisabled = !features.llmEnabled;
   const navigate = useNavigate();
   const [loading, setLoading] = useState<boolean>(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -288,6 +291,10 @@ const MemoryOptimizationCenter: FC = () => {
           notificationService.showWarning('No memory blocks found to process');
           return;
         }
+        if (llmDisabled) {
+          notificationService.showInfo('LLM features are currently disabled.');
+          return;
+        }
         
         setCompactionSuggestion(suggestion);
         setShowCompactionModal(true);
@@ -319,6 +326,11 @@ const MemoryOptimizationCenter: FC = () => {
 
   const handleBulkExecute = async () => {
     const selectedSuggestionsList = suggestions.filter(s => selectedSuggestions.has(s.id));
+
+    if (llmDisabled && selectedSuggestionsList.some(s => s.type === 'compaction')) {
+      notificationService.showInfo('LLM features are currently disabled. Remove compaction suggestions to continue.');
+      return;
+    }
     
     for (const suggestion of selectedSuggestionsList) {
       await handleExecuteSuggestion(suggestion);
@@ -354,6 +366,10 @@ const MemoryOptimizationCenter: FC = () => {
   };
 
   const handleCompactionConfirmed = async (settings: { count: number; userInstructions: string; maxConcurrent: number; }) => {
+    if (llmDisabled) {
+      notificationService.showInfo('LLM features are currently disabled.');
+      return;
+    }
     if (!compactionSuggestion) return;
     
     // Disable actions while processing
@@ -684,11 +700,16 @@ const MemoryOptimizationCenter: FC = () => {
               {suggestion.status !== 'completed' && (
                 <button
                   onClick={() => {
+                    if (llmDisabled && suggestion.type === 'compaction') {
+                      notificationService.showInfo('LLM features are currently disabled.');
+                      return;
+                    }
                     handleExecuteSuggestion(suggestion);
                     onClose();
                   }}
-                  disabled={executingActions.has(suggestion.id)}
+                  disabled={executingActions.has(suggestion.id) || (llmDisabled && suggestion.type === 'compaction')}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  title={llmDisabled && suggestion.type === 'compaction' ? 'LLM features are currently disabled' : undefined}
                 >
                   {executingActions.has(suggestion.id) ? 'Executing...' : 'Execute Optimization'}
                 </button>
@@ -712,6 +733,9 @@ const MemoryOptimizationCenter: FC = () => {
               <p className="mt-2 text-gray-600">
                 AI-powered suggestions to improve your memory store
               </p>
+              {llmDisabled && (
+                <p className="mt-1 text-sm text-gray-500">LLM features are currently disabled. Compaction actions are unavailable.</p>
+              )}
             </div>
             <div className="flex items-center gap-4">
               <button
@@ -1033,10 +1057,15 @@ const MemoryOptimizationCenter: FC = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (llmDisabled && suggestion.type === 'compaction') {
+                              notificationService.showInfo('LLM features are currently disabled.');
+                              return;
+                            }
                             handleExecuteSuggestion(suggestion);
                           }}
-                          disabled={executingActions.has(suggestion.id)}
+                          disabled={executingActions.has(suggestion.id) || (llmDisabled && suggestion.type === 'compaction')}
                           className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                          title={llmDisabled && suggestion.type === 'compaction' ? 'LLM features are currently disabled' : undefined}
                         >
                           {executingActions.has(suggestion.id) ? (
                             <>
@@ -1231,6 +1260,7 @@ const MemoryOptimizationCenter: FC = () => {
         onConfirm={handleCompactionConfirmed}
         suggestion={compactionSuggestion}
         maxBlocks={compactionSuggestion?.all_affected_blocks?.length || compactionSuggestion?.affected_blocks?.length || 0}
+        llmEnabled={features.llmEnabled}
       />
     </div>
   );

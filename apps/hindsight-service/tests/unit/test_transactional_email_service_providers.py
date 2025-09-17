@@ -2,6 +2,7 @@ import os
 import sys
 from types import SimpleNamespace, ModuleType
 import pytest
+pytest.importorskip("jinja2")
 
 from core.services.transactional_email_service import TransactionalEmailService, TransactionalEmailConfig
 

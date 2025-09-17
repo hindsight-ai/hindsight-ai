@@ -7,6 +7,7 @@ import MemoryBlockCard from './MemoryBlockCard';
 import MemoryBlockDetailModal from './MemoryBlockDetailModal';
 import MemoryCompactionModal from './MemoryCompactionModal';
 import { UIMemoryBlock } from '../types/domain';
+import { useAuth } from '../context/AuthContext';
 
 // Result structure returned from compaction/compression endpoints (partial / evolving)
 interface MemoryCompactionResult {
@@ -28,6 +29,8 @@ interface PaginationState { page: number; per_page: number; total_items: number;
 type MemoryBlockRow = UIMemoryBlock & MemoryBlock & { [k: string]: any };
 
 const MemoryBlocksPage: React.FC = () => {
+  const { features } = useAuth();
+  const llmDisabled = !features.llmEnabled;
   const [memoryBlocks, setMemoryBlocks] = useState<MemoryBlockRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -250,6 +253,10 @@ const MemoryBlocksPage: React.FC = () => {
   };
 
   const handleCompactMemory = async (id: string) => {
+    if (llmDisabled) {
+      notificationService.showInfo('LLM features are currently disabled.');
+      return;
+    }
     // Find the memory block and open the compaction modal instead of using primitive confirmation
     const memoryBlock = memoryBlocks.find(block => block.id === id);
     if (memoryBlock) {
@@ -477,6 +484,7 @@ const MemoryBlocksPage: React.FC = () => {
                 onSuggestKeywords={handleSuggestKeywords}
                 onCompactMemory={handleCompactMemory}
                 availableAgents={availableAgents}
+                llmEnabled={features.llmEnabled}
               />
             ))}
           </div>
@@ -527,6 +535,7 @@ const MemoryBlocksPage: React.FC = () => {
         }}
         memoryBlock={selectedMemoryBlock}
         onCompactionApplied={handleCompactionApplied}
+        llmEnabled={features.llmEnabled}
       />
     </div>
   );

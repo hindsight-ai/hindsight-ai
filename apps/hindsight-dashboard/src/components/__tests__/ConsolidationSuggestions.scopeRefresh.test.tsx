@@ -3,6 +3,23 @@ import { render, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ConsolidationSuggestions from '../ConsolidationSuggestions';
 
+jest.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: null,
+    loading: false,
+    guest: false,
+    enterGuestMode: jest.fn(),
+    exitGuestMode: jest.fn(),
+    refresh: jest.fn(),
+    features: {
+      llmEnabled: true,
+      consolidationEnabled: true,
+      pruningEnabled: true,
+      archivedEnabled: true,
+    },
+  }),
+}));
+
 jest.mock('../../api/memoryService', () => ({
   __esModule: true,
   default: {
@@ -29,4 +46,3 @@ describe('ConsolidationSuggestions reacts to org scope changes', () => {
     expect(getConsolidationSuggestions).toHaveBeenCalledTimes(1);
   });
 });
-

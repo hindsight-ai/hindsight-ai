@@ -6,6 +6,8 @@ with the notification system integration, preventing future regressions.
 """
 
 import pytest
+pytest.importorskip("jinja2")
+
 import uuid
 import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock

@@ -2,6 +2,8 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+pytest.importorskip("aiosmtplib")
+pytest.importorskip("jinja2")
 
 from core.services.email_service import EmailService
 
@@ -34,4 +36,3 @@ async def test_send_email_with_attachments_and_reply_to(monkeypatch):
             attachments=[{"filename": "a.txt", "content": b"data"}],
         )
         assert out["success"] is True
-

@@ -1,5 +1,7 @@
 import uuid
 import pytest
+pytest.importorskip("pytest_asyncio")
+
 from core.db import models, crud, schemas
 from sqlalchemy.orm import Session
 from core.async_bulk_operations import BulkOperationTask

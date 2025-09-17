@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Portal from './Portal';
 import memoryService, { MemoryBlock } from '../api/memoryService';
 import { UIMemoryBlock } from '../types/domain';
+import notificationService from '../services/notificationService';
 
 export interface MemoryCompactionResult {
   compression_ratio: number;
@@ -19,13 +20,15 @@ interface MemoryCompactionModalProps {
   onClose: () => void;
   memoryBlock: (MemoryBlock & UIMemoryBlock) | null;
   onCompactionApplied?: (id: string, result: MemoryCompactionResult) => void;
+  llmEnabled?: boolean;
 }
 
 const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
   isOpen,
   onClose,
   memoryBlock,
-  onCompactionApplied
+  onCompactionApplied,
+  llmEnabled = true,
 }) => {
   const [compactionResult, setCompactionResult] = useState<MemoryCompactionResult | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -33,7 +36,13 @@ const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
   const [userInstructions, setUserInstructions] = useState<string>('');
   const [applying, setApplying] = useState<boolean>(false);
 
+  const llmDisabled = !llmEnabled;
+
   const handleCompact = async () => {
+    if (llmDisabled) {
+      notificationService.showInfo('LLM features are currently disabled.');
+      return;
+    }
     if (!memoryBlock) return;
 
     setLoading(true);
@@ -46,13 +55,17 @@ const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
       );
       setCompactionResult(result);
     } catch (err) {
-  setError((err as any)?.message || 'Failed to compact memory block');
+      setError((err as any)?.message || 'Failed to compact memory block');
     } finally {
       setLoading(false);
     }
   };
 
   const handleApplyCompaction = async () => {
+    if (llmDisabled) {
+      notificationService.showInfo('LLM features are currently disabled.');
+      return;
+    }
     if (!compactionResult) return;
 
     setApplying(true);
@@ -66,7 +79,7 @@ const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
       );
 
       // Notify parent component
-  onCompactionApplied?.(memoryBlock!.id, compactionResult);
+      onCompactionApplied?.(memoryBlock!.id, compactionResult);
 
       onClose();
     } catch (err) {
@@ -189,8 +202,9 @@ const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
               <div className="flex justify-center">
                 <button
                   onClick={handleCompact}
-                  disabled={loading}
+                  disabled={loading || llmDisabled}
                   className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                  title={llmDisabled ? 'LLM features are currently disabled' : undefined}
                 >
                   {loading ? (
                     <>
@@ -210,6 +224,9 @@ const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
                   )}
                 </button>
               </div>
+              {llmDisabled && (
+                <p className="text-sm text-gray-500 text-center mt-4">LLM features are currently disabled. Compaction is unavailable.</p>
+              )}
             </div>
           ) : (
             /* Compaction Result - Show comparison */
@@ -359,8 +376,9 @@ const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
               </button>
               <button
                 onClick={handleApplyCompaction}
-                disabled={applying}
+                disabled={applying || llmDisabled}
                 className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                title={llmDisabled ? 'LLM features are currently disabled' : undefined}
               >
                 {applying ? (
                   <>

@@ -4,6 +4,9 @@ Tests the new async bulk operations system that replaces the threading approach.
 """
 import uuid
 import pytest
+pytest.importorskip("pytest_asyncio")
+pytest.importorskip("anyio")
+
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone

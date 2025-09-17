@@ -7,6 +7,7 @@ import MemoryBlockTable from './MemoryBlockTable';
 import PaginationControls from './PaginationControls';
 import { UIMemoryBlock, UIMemoryKeyword } from '../types/domain';
 import { Agent } from '../api/agentService';
+import { useAuth } from '../context/AuthContext';
 
 // Interfaces for component state
 interface FiltersState {
@@ -39,6 +40,8 @@ interface SortState {
 }
 
 const ArchivedMemoryBlockList = () => {
+  const { features } = useAuth();
+  const featureDisabled = !features.archivedEnabled;
   const [memoryBlocks, setMemoryBlocks] = useState<UIMemoryBlock[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +82,12 @@ const ArchivedMemoryBlockList = () => {
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchArchivedMemoryBlocks = useCallback(async () => {
+    if (featureDisabled) {
+      setMemoryBlocks([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -108,7 +117,7 @@ const ArchivedMemoryBlockList = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters, pagination.page, pagination.per_page, sort]);
+  }, [filters, pagination.page, pagination.per_page, sort, featureDisabled]);
 
   const fetchKeywords = useCallback(async () => {
     try {
@@ -410,6 +419,17 @@ const ArchivedMemoryBlockList = () => {
 
   if (loading) return <p className="loading-message">Loading archived memory blocks...</p>;
   if (error) return <p className="error-message">Error: {error}</p>;
+
+  if (featureDisabled) {
+    return (
+      <div className="p-6">
+        <div className="max-w-3xl mx-auto text-center bg-gray-100 border border-dashed border-gray-300 rounded-xl p-10 text-gray-500">
+          <h2 className="text-xl font-semibold text-gray-600 mb-2">Archived Memories</h2>
+          <p className="text-sm text-gray-500">Feature coming soon.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="memory-block-list-container">

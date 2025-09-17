@@ -23,6 +23,8 @@ These tests verify the core notification service functionality including:
 """
 
 import pytest
+pytest.importorskip("jinja2")
+
 import uuid
 from unittest.mock import patch, AsyncMock, MagicMock
 from datetime import datetime, UTC

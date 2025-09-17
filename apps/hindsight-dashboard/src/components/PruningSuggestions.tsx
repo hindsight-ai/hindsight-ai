@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import memoryService from '../api/memoryService';
+import notificationService from '../services/notificationService';
+import { useAuth } from '../context/AuthContext';
 
 interface PruningSuggestion {
   memory_block_id: string;
@@ -17,6 +19,9 @@ interface PruningParams {
 }
 
 const PruningSuggestions: React.FC = () => {
+  const { features } = useAuth();
+  const llmDisabled = !features.llmEnabled;
+  const featureDisabled = !features.pruningEnabled;
   const [suggestions, setSuggestions] = useState<PruningSuggestion[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [confirming, setConfirming] = useState<boolean>(false);
@@ -31,6 +36,17 @@ const PruningSuggestions: React.FC = () => {
   const navigate = useNavigate();
 
   const fetchPruningSuggestions = useCallback(async () => {
+    if (featureDisabled) {
+      setSuggestions([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    if (llmDisabled) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -44,7 +60,14 @@ const PruningSuggestions: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [pruningParams]);
+  }, [pruningParams, featureDisabled, llmDisabled]);
+
+  useEffect(() => {
+    if (featureDisabled) {
+      setSuggestions([]);
+      setSelectedBlocks([]);
+    }
+  }, [featureDisabled]);
 
   const handleParamChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -55,6 +78,14 @@ const PruningSuggestions: React.FC = () => {
   };
 
   const handleRefresh = () => {
+    if (featureDisabled) {
+      notificationService.showInfo('Feature coming soon.');
+      return;
+    }
+    if (llmDisabled) {
+      notificationService.showInfo('LLM features are currently disabled.');
+      return;
+    }
     fetchPruningSuggestions();
   };
 
@@ -111,6 +142,17 @@ const PruningSuggestions: React.FC = () => {
     return text.length > length ? text.substring(0, length) + '...' : text;
   };
 
+  if (featureDisabled) {
+    return (
+      <div className="p-6">
+        <div className="max-w-3xl mx-auto text-center bg-gray-100 border border-dashed border-gray-300 rounded-xl p-10 text-gray-500">
+          <h2 className="text-xl font-semibold text-gray-600 mb-2">Pruning</h2>
+          <p className="text-sm text-gray-500">Feature coming soon.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="memory-block-list-container">
       {/* Pruning Parameters */}
@@ -153,10 +195,18 @@ const PruningSuggestions: React.FC = () => {
             />
             <small className="param-hint">Maximum number of evaluation iterations to run (default: 10)</small>
           </div>
-          <button onClick={handleRefresh} disabled={loading}>
+          <button
+            onClick={handleRefresh}
+            disabled={loading || llmDisabled}
+            style={llmDisabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+            title={llmDisabled ? 'LLM features are currently disabled' : undefined}
+          >
             {loading ? 'Loading...' : 'Generate Suggestions'}
           </button>
         </div>
+        {llmDisabled && (
+          <p className="text-sm text-gray-500 mt-3">LLM features are currently disabled. Generation is unavailable.</p>
+        )}
       </div>
 
       {/* Error Message */}

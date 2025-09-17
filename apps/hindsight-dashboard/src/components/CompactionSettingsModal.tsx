@@ -2,18 +2,27 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 interface CompactionSuggestion { title: string; description?: string; affected_blocks?: any[]; all_affected_blocks?: any[]; }
-interface CompactionSettingsModalProps { isOpen: boolean; onClose: () => void; onConfirm: (params: { count: number; userInstructions: string; maxConcurrent: number }) => void; suggestion: CompactionSuggestion | null; maxBlocks?: number; }
+interface CompactionSettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (params: { count: number; userInstructions: string; maxConcurrent: number }) => void;
+  suggestion: CompactionSuggestion | null;
+  maxBlocks?: number;
+  llmEnabled?: boolean;
+}
 
 const CompactionSettingsModal: React.FC<CompactionSettingsModalProps> = ({ 
   isOpen, 
   onClose, 
   onConfirm, 
   suggestion,
-  maxBlocks = 0
+  maxBlocks = 0,
+  llmEnabled = true
 }) => {
   const [selectedCount, setSelectedCount] = useState<number>(Math.min(50, maxBlocks)); // Default to 50 or max available
   const [userInstructions, setUserInstructions] = useState<string>('');
   const [maxConcurrent, setMaxConcurrent] = useState<number>(4); // Default to 4 concurrent processes
+  const llmDisabled = !llmEnabled;
 
   // Debug logging
   console.log('CompactionSettingsModal props:', { 
@@ -238,11 +247,16 @@ const CompactionSettingsModal: React.FC<CompactionSettingsModalProps> = ({
             </button>
             <button
               onClick={handleConfirm}
-              className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+              className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={llmDisabled}
+              title={llmDisabled ? 'LLM features are currently disabled' : undefined}
             >
               Start Compaction ({selectedCount} block{selectedCount === 1 ? '' : 's'})
             </button>
           </div>
+          {llmDisabled && (
+            <p className="text-sm text-gray-500 mt-3 text-right">LLM features are currently disabled. Compaction is unavailable.</p>
+          )}
         </div>
       </div>
     </div>,

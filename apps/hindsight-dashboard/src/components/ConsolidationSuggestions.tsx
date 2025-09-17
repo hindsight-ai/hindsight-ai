@@ -4,6 +4,7 @@ import { getConsolidationSuggestions, validateConsolidationSuggestion, rejectCon
 import notificationService from '../services/notificationService';
 import StatCard from './StatCard';
 import ConsolidationSuggestionModal from './ConsolidationSuggestionModal';
+import { useAuth } from '../context/AuthContext';
 
 interface PaginationState {
   page: number;
@@ -22,6 +23,9 @@ interface FiltersToSend {
 }
 
 const ConsolidationSuggestions: React.FC = () => {
+  const { features } = useAuth();
+  const llmDisabled = !features.llmEnabled;
+  const featureDisabled = !features.consolidationEnabled;
   const [suggestions, setSuggestions] = useState<ConsolidationSuggestion[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +44,14 @@ const ConsolidationSuggestions: React.FC = () => {
   });
 
   const fetchSuggestions = useCallback(async (signal: AbortSignal, isMounted = true): Promise<void> => {
+    if (featureDisabled) {
+      if (isMounted) {
+        setSuggestions([]);
+        setLoading(false);
+        setError(null);
+      }
+      return;
+    }
     if (isMounted) setLoading(true);
     if (isMounted) setError(null);
     try {
@@ -82,7 +94,7 @@ const ConsolidationSuggestions: React.FC = () => {
         setLoading(false);
       }
     }
-  }, [pagination.page, pagination.per_page, filterStatus, searchTerm]);
+  }, [pagination.page, pagination.per_page, filterStatus, searchTerm, featureDisabled]);
 
   useEffect(() => {
     let isMounted = true;
@@ -106,6 +118,15 @@ const ConsolidationSuggestions: React.FC = () => {
     window.addEventListener('orgScopeChanged', handler);
     return () => window.removeEventListener('orgScopeChanged', handler);
   }, [fetchSuggestions]);
+
+  useEffect(() => {
+    if (featureDisabled) {
+      setSuggestions([]);
+      setSelectedSuggestionIds([]);
+      setLastUpdated(null);
+      setLoading(false);
+    }
+  }, [featureDisabled]);
 
   const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>): void => {
     if (event.target.checked) {
@@ -154,6 +175,10 @@ const ConsolidationSuggestions: React.FC = () => {
   };
 
   const refreshData = (): void => {
+    if (featureDisabled) {
+      notificationService.showInfo('Feature coming soon');
+      return;
+    }
     const abortController = new AbortController();
     fetchSuggestions(abortController.signal);
   };
@@ -191,6 +216,10 @@ const ConsolidationSuggestions: React.FC = () => {
   const navigate = useNavigate();
 
   const handleTriggerConsolidation = async (): Promise<void> => {
+    if (llmDisabled) {
+      notificationService.showInfo('LLM features are currently disabled.');
+      return;
+    }
     try {
       await triggerConsolidation();
       alert('Consolidation process triggered successfully.');
@@ -243,6 +272,17 @@ const ConsolidationSuggestions: React.FC = () => {
     setSelectedSuggestionId(null);
   };
 
+  if (featureDisabled) {
+    return (
+      <div className="p-6">
+        <div className="max-w-3xl mx-auto text-center bg-gray-100 border border-dashed border-gray-300 rounded-xl p-10 text-gray-500">
+          <h2 className="text-xl font-semibold text-gray-600 mb-2">Consolidation</h2>
+          <p className="text-sm text-gray-500">Feature coming soon.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) return <p className="loading-message">Loading consolidation suggestions...</p>;
   if (error) return <p className="error-message">Error: {error}</p>;
 
@@ -257,7 +297,12 @@ const ConsolidationSuggestions: React.FC = () => {
         >
           Delete Selected ({selectedSuggestionIds.length})
         </button>
-        <button onClick={handleTriggerConsolidation} className="add-button">
+        <button
+          onClick={handleTriggerConsolidation}
+          className={`add-button ${llmDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          disabled={llmDisabled}
+          title={llmDisabled ? 'LLM features are currently disabled' : undefined}
+        >
           Trigger Consolidation
         </button>
         <div className="filter-controls">
@@ -284,7 +329,12 @@ const ConsolidationSuggestions: React.FC = () => {
             It looks like there are no consolidation suggestions in your system at the moment.
             Try triggering the consolidation process manually if needed.
           </p>
-          <button onClick={handleTriggerConsolidation} className="add-button">
+          <button
+            onClick={handleTriggerConsolidation}
+            className={`add-button ${llmDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={llmDisabled}
+            title={llmDisabled ? 'LLM features are currently disabled' : undefined}
+          >
             Trigger Consolidation
           </button>
         </div>
@@ -370,7 +420,9 @@ const ConsolidationSuggestions: React.FC = () => {
           ) : (
             <button
               onClick={handleTriggerConsolidation}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              className={`bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors ${llmDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}`}
+              disabled={llmDisabled}
+              title={llmDisabled ? 'LLM features are currently disabled' : undefined}
             >
               Trigger Consolidation
             </button>

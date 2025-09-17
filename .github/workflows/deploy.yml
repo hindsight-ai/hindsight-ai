@@ -225,6 +225,10 @@ jobs:
             EMAIL_RATE_LIMIT_DAY=${{ secrets.EMAIL_RATE_LIMIT_DAY }}
             ADMIN_EMAILS='${{ secrets.ADMIN_EMAILS }}'
             BETA_ACCESS_ADMINS='${{ secrets.BETA_ACCESS_ADMINS }}'
+            LLM_FEATURES_ENABLED=${{ secrets.LLM_FEATURES_ENABLED || 'true' }}
+            FEATURE_CONSOLIDATION_ENABLED=${{ secrets.FEATURE_CONSOLIDATION_ENABLED || 'true' }}
+            FEATURE_PRUNING_ENABLED=${{ secrets.FEATURE_PRUNING_ENABLED || 'true' }}
+            FEATURE_ARCHIVED_ENABLED=${{ secrets.FEATURE_ARCHIVED_ENABLED || 'true' }}
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             POSTGRES_DB=${{ secrets.POSTGRES_DB }}

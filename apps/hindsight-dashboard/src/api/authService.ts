@@ -18,6 +18,7 @@ export interface CurrentUserInfo {
   beta_access_status?: 'not_requested' | 'pending' | 'accepted' | 'denied' | 'revoked';
   beta_access_admin?: boolean;
   memberships?: OrganizationMembership[];
+  llm_features_enabled?: boolean;
 }
 
 const authService = {

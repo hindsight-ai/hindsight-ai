@@ -61,6 +61,7 @@ from core.utils.scopes import (
 )
 from core.services.search_service import SearchService
 from core.utils.runtime import dev_mode_active
+from core.utils.feature_flags import get_feature_flags, llm_features_enabled
 
 # Database schema is managed by Alembic migrations.
 
@@ -301,6 +302,8 @@ def get_user_info(
         logger.error("DEV_MODE misconfiguration detected: %s", exc)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DEV_MODE misconfigured")
 
+    flags = get_feature_flags()
+
     if is_dev_mode:
         email = "dev@localhost"
         user = get_or_create_user(db, email=email, display_name="Development User")
@@ -330,6 +333,7 @@ def get_user_info(
             "beta_access_status": user.beta_access_status,
             "memberships": memberships,
             "beta_access_admin": beta_admin,
+            "llm_features_enabled": flags["llm_features_enabled"],
         }
 
     # If a PAT is provided, authenticate via PAT first
@@ -355,6 +359,7 @@ def get_user_info(
                 "beta_access_status": user.beta_access_status,
                 "memberships": memberships,
                 "pat": current_user.get("pat") or None,
+                "llm_features_enabled": flags["llm_features_enabled"],
             }
         except HTTPException as e:
             return JSONResponse({"authenticated": False, "detail": e.detail}, status_code=e.status_code)
@@ -384,6 +389,7 @@ def get_user_info(
             "is_superadmin": bool(user.is_superadmin),
             "beta_access_status": user.beta_access_status,
             "memberships": memberships,
+            "llm_features_enabled": flags["llm_features_enabled"],
         }
 
     # Otherwise, fallback to oauth2-proxy headers
@@ -411,6 +417,7 @@ def get_user_info(
         "beta_access_status": user.beta_access_status,
         "memberships": memberships,
         "beta_access_admin": beta_admin,
+        "llm_features_enabled": flags["llm_features_enabled"],
     }
 
 # Dashboard Stats Endpoints
@@ -444,6 +451,9 @@ def generate_pruning_suggestions_endpoint(
     """
     if request is None:
         request = {}
+
+    if not llm_features_enabled():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
     
     batch_size = request.get("batch_size", 50)
     target_count = request.get("target_count")
@@ -535,6 +545,9 @@ def compress_memory_block_endpoint(
     """
     if request is None:
         request = {}
+
+    if not llm_features_enabled():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
 
     user_instructions = request.get("user_instructions", "")
 
@@ -841,6 +854,9 @@ async def bulk_compact_memory_blocks_endpoint(
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
     
+    if not llm_features_enabled():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
+
     logger.info(f"Bulk compaction request received with {len(request.get('memory_block_ids', []))} blocks")
     
     memory_block_ids = request.get("memory_block_ids", [])

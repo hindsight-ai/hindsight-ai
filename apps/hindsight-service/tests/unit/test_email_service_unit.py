@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import os
 
 import pytest
+pytest.importorskip("aiosmtplib")
+pytest.importorskip("jinja2")
 
 from core.services.email_service import EmailService, EmailServiceConfig
 

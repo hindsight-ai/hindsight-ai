@@ -18,6 +18,7 @@ from core.api.permissions import can_read, can_write
 from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_read, ensure_pat_allows_write
 from core.audit import log as audit_log, AuditAction, AuditStatus
 from core.db.database import get_db
+from core.utils.feature_flags import llm_features_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,9 @@ def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
     from core.workers.consolidation_worker import run_consolidation_analysis
 
     logger.info("Manual trigger of consolidation process received")
+
+    if not llm_features_enabled():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
 
     llm_api_key = os.getenv("LLM_API_KEY")
     if not llm_api_key:

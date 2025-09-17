@@ -1,5 +1,6 @@
 import uuid
 import pytest
+pytest.importorskip("pytest_asyncio")
 
 from core.services.notification_service import NotificationService
 from core.db import models
@@ -45,4 +46,3 @@ async def test_send_email_notification_exception_on_render(db_session):
     log = svc.create_email_notification_log(None, user.id, "u@example.com", "evt", "Subject")
     out = await svc.send_email_notification(log, "welcome", {"x": 1})
     assert out["success"] is False
-

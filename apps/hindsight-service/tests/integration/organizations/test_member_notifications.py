@@ -1,4 +1,6 @@
 import pytest
+pytest.importorskip("jinja2")
+
 import uuid
 from unittest.mock import patch, MagicMock, AsyncMock, ANY
 from fastapi.testclient import TestClient

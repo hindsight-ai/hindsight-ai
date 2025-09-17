@@ -3,6 +3,7 @@ import MemoryCompactionModal from './MemoryCompactionModal';
 import { Agent } from '../api/agentService';
 import { UIMemoryBlock } from '../types/domain';
 import type { MemoryBlock as ApiMemoryBlock } from '../api/memoryService';
+import notificationService from '../services/notificationService';
 
 // Unified type combining API-required fields with optional UI extensions
 interface ExtendedMemoryBlock extends UIMemoryBlock { agent_id?: string; agent_name?: string; priority?: string; category?: string; updated_at?: string; }
@@ -15,11 +16,19 @@ interface MemoryBlockCardProps {
   onSuggestKeywords?: (id: string) => void;
   onCompactMemory?: (id: string, result: any) => void;
   availableAgents?: Agent[];
+  llmEnabled?: boolean;
 }
 
-const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick, onArchive, onDelete, onSuggestKeywords, onCompactMemory, availableAgents = [] }) => {
+const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick, onArchive, onDelete, onSuggestKeywords, onCompactMemory, availableAgents = [], llmEnabled = true }) => {
   const [showCompactionModal, setShowCompactionModal] = useState(false);
-  const handleCompactClick = (e: React.MouseEvent) => { e.stopPropagation(); setShowCompactionModal(true); };
+  const handleCompactClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!llmEnabled) {
+      notificationService.showInfo('LLM features are currently disabled.');
+      return;
+    }
+    setShowCompactionModal(true);
+  };
   const handleCompactionApplied = (memoryId: string, compactionResult: any) => { onCompactMemory?.(memoryId, compactionResult); setShowCompactionModal(false); };
   const formatDate = (dateString?: string) => { if (!dateString) return 'Unknown'; const date = new Date(dateString); if (isNaN(date.getTime())) return 'Invalid Date'; return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); };
   const getAgentName = () => { if (availableAgents?.length && memoryBlock.agent_id) { const agent = availableAgents.find(a => a.agent_id === memoryBlock.agent_id); if (agent?.agent_name) return agent.agent_name; } if ((memoryBlock as any).agent_name) return (memoryBlock as any).agent_name; if (memoryBlock.agent_id) return `Agent ${memoryBlock.agent_id.slice(-8)}`; return 'Unknown Agent'; };
@@ -62,8 +71,9 @@ const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick,
           )}
           <button
             onClick={(e) => handleCompactClick(e)}
-            className="p-2 hover:bg-green-100 rounded-md transition-colors text-gray-400 hover:text-green-500"
+            className="p-2 hover:bg-green-100 rounded-md transition-colors text-gray-400 hover:text-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Compact Memory - Intelligently condense content"
+            disabled={!llmEnabled}
           >
             <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -146,7 +156,13 @@ const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick,
       </div>
 
       {/* Memory Compaction Modal */}
-      <MemoryCompactionModal isOpen={showCompactionModal} onClose={() => setShowCompactionModal(false)} memoryBlock={memoryBlock as any as (ApiMemoryBlock & UIMemoryBlock)} onCompactionApplied={handleCompactionApplied} />
+      <MemoryCompactionModal
+        isOpen={showCompactionModal}
+        onClose={() => setShowCompactionModal(false)}
+        memoryBlock={memoryBlock as any as (ApiMemoryBlock & UIMemoryBlock)}
+        onCompactionApplied={handleCompactionApplied}
+        llmEnabled={llmEnabled}
+      />
     </div>
   );
 };

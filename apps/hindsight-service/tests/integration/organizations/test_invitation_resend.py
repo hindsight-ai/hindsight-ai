@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
 import pytest
+pytest.importorskip("jinja2")
+
 from fastapi.testclient import TestClient
 
 from core.api.main import app

@@ -3,6 +3,23 @@ import { render, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MemoryBlocksPage from '../MemoryBlocksPage';
 
+jest.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: null,
+    loading: false,
+    guest: false,
+    enterGuestMode: jest.fn(),
+    exitGuestMode: jest.fn(),
+    refresh: jest.fn(),
+    features: {
+      llmEnabled: true,
+      consolidationEnabled: true,
+      pruningEnabled: true,
+      archivedEnabled: true,
+    },
+  }),
+}));
+
 jest.mock('../../api/agentService', () => ({
   __esModule: true,
   default: {
@@ -40,4 +57,3 @@ describe('MemoryBlocksPage reacts to org scope changes', () => {
     expect(memoryService.getMemoryBlocks).toHaveBeenCalledTimes(1);
   });
 });
-
