@@ -1,109 +1,160 @@
 #!/bin/bash
 
-# Database connection details
-DB_NAME="hindsight_db"
-DB_USER="user"
-DB_PASSWORD="password"
-# Get the directory where the script is located
+set -euo pipefail
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+ROOT_DIR="$( cd "$SCRIPT_DIR/../.." && pwd )"
+COMPOSE_FILE="$ROOT_DIR/docker-compose.app.yml"
+ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 
-# Define paths relative to the script's location
-# Use the main docker-compose files to ensure the correct context for the 'db' service
-DOCKER_COMPOSE_FILES="-f $SCRIPT_DIR/../../docker-compose.yml -f $SCRIPT_DIR/../../docker-compose.dev.yml -f $SCRIPT_DIR/../postgres/docker-compose.yml"
-DB_SERVICE_NAME="db"
-HINDSIGHT_SERVICE_DIR="$SCRIPT_DIR/../../apps/hindsight-service"
+usage() {
+  cat <<'USAGE'
+Usage: restore_db.sh [--file path/to/backup.sql] [--dry-run]
 
-# Backup directory
-BACKUP_DIR="$SCRIPT_DIR/../../hindsight_db_backups/data"
+Drops and recreates the database, restores the selected backup, and reapplies migrations.
 
-echo "Available backups:"
-select BACKUP_FILE_PATH in "$BACKUP_DIR"/hindsight_db_backup_*.sql; do
-  if [ -n "$BACKUP_FILE_PATH" ]; then
-    echo "Selected backup: $BACKUP_FILE_PATH"
-    break
+Options:
+  --file PATH  Use the specified SQL dump instead of prompting.
+  --dry-run    Print the commands that would run without executing them.
+  -h, --help   Show this help message.
+USAGE
+}
+
+DRY_RUN=0
+BACKUP_FILE_PATH=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --file)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "--file requires a path argument" >&2
+        usage >&2
+        exit 1
+      fi
+      BACKUP_FILE_PATH="$1"
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ ! -f "$COMPOSE_FILE" ]]; then
+  echo "docker-compose.app.yml not found at $COMPOSE_FILE" >&2
+  exit 1
+fi
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
+DB_NAME="${POSTGRES_DB:-${DB_NAME:-hindsight_db}}"
+DB_USER="${POSTGRES_USER:-${DB_USER:-user}}"
+DB_PASSWORD="${POSTGRES_PASSWORD:-${DB_PASSWORD:-password}}"
+DB_SERVICE_NAME="${DB_SERVICE_NAME:-db}"
+BACKUP_DIR_DEFAULT="$ROOT_DIR/hindsight_db_backups/data"
+
+if [[ -z "$BACKUP_FILE_PATH" ]]; then
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    BACKUP_FILE_PATH="$BACKUP_DIR_DEFAULT/<selected_backup.sql>"
   else
-    echo "Invalid selection. Please try again."
+    mapfile -t backups < <(ls -1 "$BACKUP_DIR_DEFAULT"/hindsight_db_backup_*.sql 2>/dev/null || true)
+    if [[ ${#backups[@]} -eq 0 ]]; then
+      echo "No backup files found in $BACKUP_DIR_DEFAULT" >&2
+      exit 1
+    fi
+    echo "Available backups:" >&2
+    select choice in "${backups[@]}"; do
+      if [[ -n "$choice" ]]; then
+        BACKUP_FILE_PATH="$choice"
+        break
+      else
+        echo "Invalid selection. Please try again." >&2
+      fi
+    done
   fi
-done
-
-echo "Stopping PostgreSQL container..."
-docker compose $DOCKER_COMPOSE_FILES stop "$DB_SERVICE_NAME"
-
-if [ $? -ne 0 ]; then
-  echo "Failed to stop PostgreSQL container. Exiting."
-  exit 1
-fi
-
-echo "Starting PostgreSQL container to ensure it's running for psql commands..."
-docker compose $DOCKER_COMPOSE_FILES start "$DB_SERVICE_NAME"
-
-if [ $? -ne 0 ]; then
-  echo "Failed to start PostgreSQL container. Exiting."
-  exit 1
-fi
-
-# Wait for PostgreSQL to be ready
-echo "Waiting for PostgreSQL database to be ready..."
-until docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME"; do
-  echo "PostgreSQL is unavailable - sleeping"
-  sleep 1
-done
-echo "PostgreSQL is up and running."
-
-echo "Restoring database from $BACKUP_FILE_PATH..."
-
-# Drop and recreate the database to ensure a clean restore
-# This requires connecting as a superuser or a user with CREATE DATABASE privileges
-# For simplicity, we'll use the same user, assuming it has sufficient privileges
-# In a production environment, you might connect as 'postgres' user for this step
-docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" \
-  psql -U "$DB_USER" -d postgres -c "DROP DATABASE IF EXISTS $DB_NAME WITH (FORCE);"
-
-docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" \
-  psql -U "$DB_USER" -d postgres -c "CREATE DATABASE $DB_NAME OWNER \"$DB_USER\";"
-
-if [ $? -ne 0 ]; then
-  echo "Failed to drop/create database. Exiting."
-  exit 1
-fi
-
-# Restore the database
-docker compose $DOCKER_COMPOSE_FILES exec -T "$DB_SERVICE_NAME" \
-  psql -U "$DB_USER" -d "$DB_NAME" < "$BACKUP_FILE_PATH"
-
-if [ $? -eq 0 ]; then
-  echo "Database restoration successful."
 else
-  echo "Database restoration failed!"
-  echo "Please check the logs for errors."
-  exit 1
+  if [[ ! -f "$BACKUP_FILE_PATH" ]]; then
+    echo "Backup file not found: $BACKUP_FILE_PATH" >&2
+    exit 1
+  fi
 fi
 
-echo "Running Alembic migrations to ensure schema is up-to-date..."
+PG_ENV=()
+if [[ -n "$DB_PASSWORD" ]]; then
+  PG_ENV=(-e "PGPASSWORD=$DB_PASSWORD")
+fi
 
-# Extract Alembic revision from the backup filename
-# Filename format: hindsight_db_backup_YYYYMMDD_HHMMSS_ALEMBICREV.sql
-ALEMBIC_REVISION=$(echo "$BACKUP_FILE_PATH" | grep -oE '[0-9a-f]{12}\.sql$' | sed 's/\.sql$//')
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  cat <<EOF
+[dry-run] Compose file: $COMPOSE_FILE
+[dry-run] Would stop database container: docker compose -f $COMPOSE_FILE stop $DB_SERVICE_NAME
+[dry-run] Would start database container: docker compose -f $COMPOSE_FILE up -d $DB_SERVICE_NAME
+[dry-run] Would wait for pg_isready on database '$DB_NAME' as user '$DB_USER'.
+[dry-run] Would drop and recreate database '$DB_NAME' using psql commands.
+[dry-run] Would restore from: $BACKUP_FILE_PATH
+[dry-run] Would run migrations via: docker compose -f $COMPOSE_FILE run --rm --entrypoint "" hindsight-service "sh -lc 'cd /app && uv run alembic upgrade <revision>'"
+EOF
+  exit 0
+fi
 
-if [ -z "$ALEMBIC_REVISION" ] || [ "$ALEMBIC_REVISION" == "unknown" ]; then
-  echo "Warning: Could not determine specific Alembic revision from backup filename. Attempting to upgrade to 'head'."
+BACKUP_REVISION=$(echo "$BACKUP_FILE_PATH" | grep -oE '[0-9a-f]{12}\.sql$' | sed 's/\.sql$//')
+if [[ -z "$BACKUP_REVISION" || "$BACKUP_REVISION" == "unknown" ]]; then
   TARGET_REVISION="head"
 else
-  echo "Migrating database to Alembic revision: $ALEMBIC_REVISION"
-  TARGET_REVISION="$ALEMBIC_REVISION"
+  TARGET_REVISION="$BACKUP_REVISION"
 fi
 
-# Run Alembic migrations inside the service container to avoid requiring local 'uv'
-# This uses the compose configuration so the container has the correct env (DATABASE_URL)
-# Run Alembic directly, bypassing the service entrypoint to avoid dev-mode resets
-docker compose $DOCKER_COMPOSE_FILES run --rm --entrypoint "" hindsight-service \
+echo "Stopping PostgreSQL container..."
+docker compose -f "$COMPOSE_FILE" stop "$DB_SERVICE_NAME" >/dev/null || true
+
+echo "Starting PostgreSQL container..."
+docker compose -f "$COMPOSE_FILE" up -d "$DB_SERVICE_NAME" >/dev/null
+
+echo "Waiting for PostgreSQL database '$DB_NAME'..."
+until docker compose -f "$COMPOSE_FILE" exec -T "${PG_ENV[@]}" "$DB_SERVICE_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; do
+  sleep 1
+done
+
+echo "Dropping database '$DB_NAME'..."
+if [[ ${#PG_ENV[@]} -gt 0 ]]; then
+  docker compose -f "$COMPOSE_FILE" exec -T "${PG_ENV[@]}" "$DB_SERVICE_NAME" psql -U "$DB_USER" -d postgres -c "DROP DATABASE IF EXISTS \"$DB_NAME\" WITH (FORCE);"
+else
+  docker compose -f "$COMPOSE_FILE" exec -T "$DB_SERVICE_NAME" psql -U "$DB_USER" -d postgres -c "DROP DATABASE IF EXISTS \"$DB_NAME\" WITH (FORCE);"
+fi
+
+echo "Recreating database '$DB_NAME'..."
+if [[ ${#PG_ENV[@]} -gt 0 ]]; then
+  docker compose -f "$COMPOSE_FILE" exec -T "${PG_ENV[@]}" "$DB_SERVICE_NAME" psql -U "$DB_USER" -d postgres -c "CREATE DATABASE \"$DB_NAME\" OWNER \"$DB_USER\";"
+else
+  docker compose -f "$COMPOSE_FILE" exec -T "$DB_SERVICE_NAME" psql -U "$DB_USER" -d postgres -c "CREATE DATABASE \"$DB_NAME\" OWNER \"$DB_USER\";"
+fi
+
+echo "Restoring backup: $BACKUP_FILE_PATH"
+if [[ ${#PG_ENV[@]} -gt 0 ]]; then
+  docker compose -f "$COMPOSE_FILE" exec -T "${PG_ENV[@]}" "$DB_SERVICE_NAME" psql -U "$DB_USER" -d "$DB_NAME" < "$BACKUP_FILE_PATH"
+else
+  docker compose -f "$COMPOSE_FILE" exec -T "$DB_SERVICE_NAME" psql -U "$DB_USER" -d "$DB_NAME" < "$BACKUP_FILE_PATH"
+fi
+
+echo "Applying migrations (target revision: $TARGET_REVISION)..."
+docker compose -f "$COMPOSE_FILE" run --rm --entrypoint "" hindsight-service \
   sh -lc "cd /app && uv run alembic upgrade \"$TARGET_REVISION\""
 
-if [ $? -eq 0 ]; then
-  echo "Alembic migrations applied successfully."
-else
-  echo "Alembic migrations failed! Please check the logs."
-  exit 1
-fi
+echo "Restore complete."
 
-echo "Database restore and migration process finished."
+exit 0

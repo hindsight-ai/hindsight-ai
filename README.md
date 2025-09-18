@@ -171,7 +171,7 @@ Postgres stores its data in the Docker volume `db_data`, mounted at `/var/lib/po
 - `./infra/scripts/backup_db.sh` — creates a timestamped SQL dump with the current Alembic revision in the filename. Run this on the source environment (e.g., staging) before copying data.
 - `./infra/scripts/restore_db.sh` — interactive restore that drops/recreates `hindsight_db`, imports the selected dump, and reapplies Alembic migrations. Run this on the destination environment (e.g., production) after copying the dump file over.
 
-This workflow lets you shuttle database state between environments by backing up on the source host, transferring the `.sql` artifact, and restoring it on the target.
+This workflow lets you shuttle database state between environments by backing up on the source host, transferring the `.sql` artifact, and restoring it on the target. Add `--dry-run` to either script if you just want to preview the commands.
 
 ## Deployment
 
