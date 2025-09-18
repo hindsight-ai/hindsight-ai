@@ -1,10 +1,15 @@
 #!/bin/bash
 set -e
 
-# Ensure DATABASE_URL is provided
+# Ensure DATABASE_URL is provided; if not, build it from POSTGRES_* envs commonly set by compose
 if [ -z "${DATABASE_URL}" ]; then
-  echo "ERROR: DATABASE_URL environment variable is not set."
-  exit 1
+  : "${POSTGRES_USER:=postgres}"
+  : "${POSTGRES_PASSWORD:=postgres}"
+  : "${POSTGRES_HOST:=db}"
+  : "${POSTGRES_PORT:=5432}"
+  : "${POSTGRES_DB:=hindsight_db}"
+  export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
+  echo "INFO: DATABASE_URL not set, constructed from POSTGRES_* envs: ${DATABASE_URL}"
 fi
 
 echo "Waiting for PostgreSQL using DATABASE_URL..."
@@ -12,6 +17,24 @@ until pg_isready -d "${DATABASE_URL}" >/dev/null 2>&1; do
   echo "PostgreSQL is unavailable - sleeping"
   sleep 1
 done
+
+if [ "${DEV_MODE}" = "true" ]; then
+  host="${APP_BASE_URL:-}"
+  if [ -n "$host" ]; then
+    case "$host" in
+      *localhost*|*127.0.0.1*|*::1*)
+        :
+        ;;
+      *)
+        echo "DEV_MODE cannot be true when APP_BASE_URL=$host"
+        exit 1
+        ;;
+    esac
+  elif [ "${ALLOW_DEV_MODE}" != "true" ]; then
+    echo "DEV_MODE requires APP_BASE_URL pointing at localhost or ALLOW_DEV_MODE=true"
+    exit 1
+  fi
+fi
 
 echo "PostgreSQL is up - executing migrations"
 if ! alembic upgrade head; then

@@ -1,0 +1,27 @@
+WELCOME TO {{ organization_name|upper }}
+
+Great news! You have been successfully added to {{ organization_name }} on Hindsight AI.
+
+Organization: {{ organization_name }}
+Your Role: {{ role if role else 'Member' }}
+Added by: {{ added_by_name }}
+Date Added: {{ date_added if date_added else 'Today' }}
+
+As a member of {{ organization_name }}, you now have access to:
+
+• Shared memory blocks and AI knowledge base
+• Collaborative memory management tools
+• Organization analytics and insights
+• Team collaboration features
+
+Access your dashboard: {{ dashboard_url if dashboard_url else 'https://hindsight-ai.com/dashboard' }}
+View organization: {{ organization_url if organization_url else 'https://hindsight-ai.com/organizations' }}
+
+If you have any questions about your new role or need help getting started, please reach out to {{ added_by_name }} or our support team.
+
+---
+This email was sent by Hindsight AI
+Unsubscribe: {{ unsubscribe_url if unsubscribe_url else 'Contact support' }}
+Support: {{ support_url if support_url else 'support@hindsight-ai.com' }}
+
+© {{ current_year if current_year else '2025' }} Hindsight AI. All rights reserved.

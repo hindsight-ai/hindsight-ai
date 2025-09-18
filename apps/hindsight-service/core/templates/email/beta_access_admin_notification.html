@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}New Beta Access Request - Hindsight AI{% endblock %}
+
+{% block header_title %}Beta Access Request{% endblock %}
+{% block header_subtitle %}A new user wants to join the beta program{% endblock %}
+
+{% block content %}
+<h2>New Beta Access Request</h2>
+
+<p>Hello Admin,</p>
+
+<p>A new user has requested access to the Hindsight AI beta program.</p>
+
+<div class="highlight">
+    <p><strong>Request Details:</strong></p>
+    <p><strong>User Email:</strong> {{ user_email }}</p>
+    <p><strong>Requested At:</strong> {{ requested_at }}</p>
+    <p><strong>Request ID:</strong> {{ request_id }}</p>
+</div>
+
+<p>Please review this request and decide whether to grant or deny beta access.</p>
+
+<div class="button-container">
+    <a href="{{ accept_url }}" class="button">Accept Request</a>
+    <a href="{{ deny_url }}" class="button button-secondary">Deny Request</a>
+</div>
+
+<p style="margin-top: 32px; color: #64748b; font-size: 14px;">
+    You can also review all pending requests in the admin dashboard.
+</p>
+{% endblock %}

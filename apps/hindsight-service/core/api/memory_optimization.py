@@ -1,18 +1,25 @@
+"""
+Memory optimization endpoints.
+
+Analyzes memory blocks to surface compaction, keyword, archival, and
+duplicate‑merge suggestions; simple mock execution support.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 import json
 
 from core.db import crud, models
 from core.db.database import get_db
 from core.db import schemas
+from core.db import scope_utils
+from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_read
 
 router = APIRouter()
 
-@router.get("/suggestions")
-async def get_memory_optimization_suggestions(db: Session = Depends(get_db)):
+def _compute_suggestions(db: Session, *, current_user, scope_ctx):
     """
     Analyze memory blocks and return AI-powered optimization suggestions
     """
@@ -20,9 +27,11 @@ async def get_memory_optimization_suggestions(db: Session = Depends(get_db)):
         suggestions = []
         
         # 1. Analyze for compaction opportunities (long memory blocks)
-        long_blocks = db.query(models.MemoryBlock).filter(
-            models.MemoryBlock.archived == False
-        ).all()
+        q = db.query(models.MemoryBlock).filter(models.MemoryBlock.archived == False)
+        q = scope_utils.apply_scope_filter(q, current_user, models.MemoryBlock)
+        if scope_ctx is not None:
+            q = scope_utils.apply_optional_scope_narrowing(q, scope_ctx.scope, scope_ctx.organization_id, models.MemoryBlock)
+        long_blocks = q.all()
         
         # Find blocks that are longer than 1500 characters
         compaction_candidates = [
@@ -63,26 +72,30 @@ async def get_memory_optimization_suggestions(db: Session = Depends(get_db)):
             })
         
         # 3. Analyze for archival opportunities (old, low-feedback blocks)
-        old_blocks = db.query(models.MemoryBlock).filter(
+        old_query = db.query(models.MemoryBlock).filter(
             models.MemoryBlock.archived == False,
             models.MemoryBlock.feedback_score <= 0,
             models.MemoryBlock.retrieval_count <= 1
-        ).all()
-        
+        )
+        old_query = scope_utils.apply_scope_filter(old_query, current_user, models.MemoryBlock)
+        if scope_ctx is not None:
+            old_query = scope_utils.apply_optional_scope_narrowing(old_query, scope_ctx.scope, scope_ctx.organization_id, models.MemoryBlock)
+        old_blocks = old_query.all()
+
         # Filter to blocks older than 90 days with low engagement
         archival_candidates = []
-        current_time = datetime.utcnow()
+        current_time = datetime.now(UTC)
         for block in old_blocks:
             # Handle timezone-aware vs naive datetime comparison
             created_at = block.created_at
-            if created_at.tzinfo is not None:
-                # If created_at is timezone-aware, make current_time timezone-aware too
-                from datetime import timezone
-                current_time_tz = current_time.replace(tzinfo=timezone.utc)
-                days_old = (current_time_tz - created_at).days
-            else:
-                # If created_at is naive, use naive current_time
-                days_old = (current_time - created_at).days
+            if created_at is None:
+                continue
+
+            # Ensure created_at is timezone-aware for comparison
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+
+            days_old = (current_time - created_at).days
             
             if days_old > 90:
                 archival_candidates.append(block)
@@ -109,14 +122,14 @@ async def get_memory_optimization_suggestions(db: Session = Depends(get_db)):
                 if content_key not in content_groups:
                     content_groups[content_key] = []
                 content_groups[content_key].append(block)
-        
+
         duplicate_groups = {k: v for k, v in content_groups.items() if len(v) > 1}
         if duplicate_groups:
             total_duplicates = sum(len(group) for group in duplicate_groups.values())
             all_duplicate_blocks = []
             for group in duplicate_groups.values():
                 all_duplicate_blocks.extend(group)
-            
+
             suggestions.append({
                 "id": str(uuid.uuid4()),
                 "type": "merge",
@@ -127,20 +140,31 @@ async def get_memory_optimization_suggestions(db: Session = Depends(get_db)):
                 "estimated_impact": f"Reduce redundancy by merging {total_duplicates} similar blocks",
                 "status": "pending"
             })
-        
+
         return {
             "suggestions": suggestions,
-            "analysis_timestamp": datetime.utcnow().isoformat(),
+            "analysis_timestamp": datetime.now(UTC).isoformat(),
             "total_memory_blocks_analyzed": len(long_blocks)
         }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to analyze memory blocks: {str(e)}")
 
+
+@router.get("/suggestions")
+async def get_memory_optimization_suggestions(
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, scope_ctx.organization_id)
+    return _compute_suggestions(db, current_user=current_user, scope_ctx=scope_ctx)
+
 @router.post("/suggestions/{suggestion_id}/execute")
 async def execute_optimization_suggestion(
-    suggestion_id: str, 
-    db: Session = Depends(get_db)
+    suggestion_id: str,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """
     Execute a specific optimization suggestion
@@ -151,7 +175,8 @@ async def execute_optimization_suggestion(
     
     try:
         # First, re-analyze to get current suggestions and find the suggestion by ID
-        response = await get_memory_optimization_suggestions(db)
+        user, current_user, scope_ctx = scoped
+        response = _compute_suggestions(db, current_user=current_user, scope_ctx=scope_ctx)
         suggestions = response.get("suggestions", [])
         
         # Find the suggestion by ID
@@ -227,7 +252,7 @@ async def execute_optimization_suggestion(
                 return {
                     "suggestion_id": suggestion_id,
                     "status": "completed",
-                    "execution_timestamp": datetime.utcnow().isoformat(),
+                    "execution_timestamp": datetime.now(UTC).isoformat(),
                     "message": "Keyword suggestions generated successfully",
                     "results": {
                         "type": "keyword_suggestions",
@@ -255,7 +280,7 @@ async def execute_optimization_suggestion(
             return {
                 "suggestion_id": suggestion_id,
                 "status": "completed",
-                "execution_timestamp": datetime.utcnow().isoformat(),
+                "execution_timestamp": datetime.now(UTC).isoformat(),
                 "message": f"Optimization suggestion ({suggestion['type']}) has been queued for execution",
                 "results": {
                     "summary": "Action completed successfully",

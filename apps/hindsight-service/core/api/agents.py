@@ -1,0 +1,381 @@
+"""
+Agents API endpoints.
+
+CRUD and scope-change operations for agent resources with permission checks.
+"""
+from typing import List, Optional
+import uuid
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy.orm import Session
+
+from core.db import schemas, crud
+from core.db.database import get_db
+from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
+from core.api.permissions import can_read, can_write
+from core.utils.scopes import (
+    ALL_SCOPES,
+    SCOPE_PUBLIC,
+    SCOPE_ORGANIZATION,
+    SCOPE_PERSONAL,
+)
+from core.api.deps import (
+    get_current_user_context,
+    get_current_user_context_or_pat,
+    ensure_pat_allows_write,
+    ensure_pat_allows_read,
+    get_scoped_user_and_context,
+)
+
+router = APIRouter(prefix="/agents", tags=["agents"])  # normalized prefix
+
+@router.post("/", response_model=schemas.Agent, status_code=status.HTTP_201_CREATED)
+def create_agent_endpoint(
+    agent: schemas.AgentCreate,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
+    scope_ctx = Depends(get_scoped_user_and_context),
+):
+    u, current_user = user_context
+    _user2, _current2, sc = scope_ctx
+    # Derive effective scope from context (headers/query), ignore conflicting body hints
+    scope = sc.scope or SCOPE_PERSONAL
+    owner_user_id = u.id if scope == SCOPE_PERSONAL else None
+    org_id = sc.organization_id if scope == SCOPE_ORGANIZATION else None
+    if scope == SCOPE_ORGANIZATION:
+        by_org = current_user.get('memberships_by_org', {})
+        key = str(org_id) if org_id else None
+        m = by_org.get(key) if key else None
+        role = (m or {}).get('role') if m else None
+        can_write = bool((m or {}).get('can_write'))
+        if not m or not (can_write or role in ('owner', 'admin', 'editor')):
+            raise HTTPException(status_code=403, detail="No write permission in target organization")
+    if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
+        raise HTTPException(status_code=403, detail="Only superadmin can create public agents")
+
+    existing = crud.get_agent_by_name(
+        db,
+        agent_name=agent.agent_name,
+        visibility_scope=scope,
+        owner_user_id=owner_user_id,
+        organization_id=org_id,
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Agent with this name already exists in the selected scope")
+
+    agent_for_create = agent.model_copy(update={
+        'visibility_scope': scope,
+        'owner_user_id': owner_user_id,
+        'organization_id': org_id if scope == SCOPE_ORGANIZATION else None,
+    })
+    # PAT write restrictions
+    ensure_pat_allows_write(current_user, org_id if scope == SCOPE_ORGANIZATION else None)
+    created = crud.create_agent(db=db, agent=agent_for_create)
+    try:
+        from core.audit import log_agent, AuditAction, AuditStatus
+        log_agent(
+            db,
+            actor_user_id=u.id,
+            organization_id=created.organization_id,
+            agent_id=created.agent_id,
+            action=AuditAction.AGENT_CREATE,
+            name=created.agent_name,
+            extra_metadata={
+                "scope": created.visibility_scope,
+                "organization_id": str(created.organization_id) if created.organization_id else None,
+            },
+            status=AuditStatus.SUCCESS,
+        )
+    except Exception:
+        pass
+    return created
+
+@router.get("/", response_model=List[schemas.Agent])
+def get_all_agents_endpoint(
+    skip: int = 0,
+    limit: int = 100,
+    scope: Optional[str] = None,  # kept for backward-compatible API, ignored when scope_ctx present
+    organization_id: Optional[uuid.UUID] = None,  # kept for backward-compatible API, mismatch handled in deps
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
+    user, current_user, scope_ctx = scoped
+    # Enforce PAT read scope/org (no-op if no PAT)
+    ensure_pat_allows_read(current_user, scope_ctx.organization_id)
+
+    agents = crud.get_agents(
+        db,
+        skip=skip,
+        limit=limit,
+        current_user=current_user,
+        scope_ctx=scope_ctx,
+    )
+    return agents
+
+@router.get("/{agent_id}", response_model=schemas.Agent)
+def get_agent_endpoint(
+    agent_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    db_agent = crud.get_agent(db, agent_id=agent_id)
+    if not db_agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    current_user = None
+    if authorization or x_api_key:
+        try:
+            _u, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+        except HTTPException:
+            raise
+        # Enforce PAT read scope and optional org restriction
+        ensure_pat_allows_read(current_user, getattr(db_agent, 'organization_id', None))
+    else:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
+    if not can_read(db_agent, current_user):
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return db_agent
+
+@router.get("/search/", response_model=List[schemas.Agent])
+def search_agents_endpoint(
+    query: str,
+    skip: int = 0,
+    limit: int = 100,
+    scope: Optional[str] = None,
+    organization_id: Optional[uuid.UUID] = None,
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    current_user = None
+    if authorization or x_api_key:
+        try:
+            _u, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+        except HTTPException:
+            raise
+    else:
+        name, email = resolve_identity_from_headers(
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        if email:
+            u = get_or_create_user(db, email=email, display_name=name)
+            memberships = get_user_memberships(db, u.id)
+            current_user = {
+                "id": u.id,
+                "is_superadmin": bool(u.is_superadmin),
+                "memberships": memberships,
+                "memberships_by_org": {m["organization_id"]: m for m in memberships},
+            }
+
+    effective_org_id = organization_id
+    if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+        pat_org = current_user["pat"]["organization_id"]
+        if organization_id and str(organization_id) != str(pat_org):
+            raise HTTPException(status_code=403, detail="Token organization restriction mismatch")
+        effective_org_id = pat_org
+        ensure_pat_allows_read(current_user, effective_org_id)
+
+    agents = crud.search_agents(
+        db,
+        query=query,
+        skip=skip,
+        limit=limit,
+        current_user=current_user,
+        scope=scope,
+        organization_id=effective_org_id,
+    )
+    return agents
+
+@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_agent_endpoint(
+    agent_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
+):
+    agent = crud.get_agent(db, agent_id=agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(agent, 'organization_id', None))
+    if not can_write(agent, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    crud.delete_agent(db, agent_id=agent_id)
+    try:
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.AGENT_DELETE,
+            status=AuditStatus.SUCCESS,
+            target_type="agent",
+            target_id=str(agent_id),
+            actor_user_id=current_user.get("id") if current_user else None,
+            organization_id=agent.organization_id,
+            metadata={
+                "agent_name": agent.agent_name,
+                "visibility_scope": agent.visibility_scope,
+                "scope": agent.visibility_scope,
+                "organization_id": str(agent.organization_id) if agent.organization_id else None,
+            },
+        )
+    except Exception:
+        pass
+    return {"message": "Agent deleted successfully"}
+
+@router.put("/{agent_id}", response_model=schemas.Agent)
+def update_agent_endpoint(
+    agent_id: uuid.UUID,
+    agent_update: schemas.AgentUpdate,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
+):
+    agent = crud.get_agent(db, agent_id=agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(agent, 'organization_id', None))
+    if not can_write(agent, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if agent_update.agent_name and agent_update.agent_name != agent.agent_name:
+        existing = crud.get_agent_by_name(
+            db,
+            agent_name=agent_update.agent_name,
+            visibility_scope=agent.visibility_scope,
+            owner_user_id=agent.owner_user_id,
+            organization_id=agent.organization_id,
+        )
+        if existing and existing.agent_id != agent_id:
+            raise HTTPException(status_code=409, detail="Agent with this name already exists in the selected scope")
+    updated_agent = crud.update_agent(db, agent_id=agent_id, agent=agent_update)
+    return updated_agent
+
+@router.post("/{agent_id}/change-scope", response_model=schemas.Agent)
+def change_agent_scope(
+    agent_id: uuid.UUID,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
+):
+    agent = crud.get_agent(db, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    u, current_user = user_context
+    target_scope = (payload.get("visibility_scope") or '').lower()
+    if target_scope not in ALL_SCOPES:
+        raise HTTPException(status_code=422, detail="Invalid target visibility_scope")
+    target_org_id = payload.get("organization_id")
+    new_owner_user_id = payload.get("new_owner_user_id")
+    from core.api.permissions import can_move_scope
+    if target_scope == SCOPE_ORGANIZATION:
+        if not target_org_id:
+            raise HTTPException(status_code=422, detail="organization_id required for organization scope")
+        try:
+            target_org_uuid = uuid.UUID(str(target_org_id))
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid organization_id")
+        if agent.visibility_scope == SCOPE_PERSONAL and not (current_user.get('is_superadmin') or agent.owner_user_id == current_user.get('id')):
+            raise HTTPException(status_code=409, detail="Owner consent required to move personal agent to organization")
+        if not can_move_scope(agent, SCOPE_ORGANIZATION, target_org_uuid, current_user):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == SCOPE_PERSONAL:
+        if not can_move_scope(agent, SCOPE_PERSONAL, None, current_user):
+            if not current_user.get("is_superadmin"):
+                raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == SCOPE_PUBLIC:
+        if not current_user.get("is_superadmin"):
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+    owner_id = None
+    org_uuid = None
+    if target_scope == SCOPE_ORGANIZATION:
+        org_uuid = target_org_uuid  # type: ignore
+    elif target_scope == SCOPE_PERSONAL:
+        owner_id = u.id
+        if new_owner_user_id:
+            try:
+                owner_uuid = uuid.UUID(str(new_owner_user_id))
+            except Exception:
+                raise HTTPException(status_code=422, detail="Invalid new_owner_user_id")
+            if not current_user.get("is_superadmin"):
+                raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
+            owner_id = owner_uuid
+    # PAT scope enforcement (if PAT present and target is org, require match)
+    ensure_pat_allows_write(current_user, target_org_uuid if target_scope == SCOPE_ORGANIZATION else None)
+
+    existing = crud.get_agent_by_name(
+        db,
+        agent_name=agent.agent_name,
+        visibility_scope=target_scope,
+        owner_user_id=owner_id,
+        organization_id=org_uuid,
+    )
+    if existing and existing.agent_id != agent.agent_id:
+        raise HTTPException(status_code=409, detail="Agent with this name already exists in the target scope")
+    previous_scope = agent.visibility_scope
+    previous_org_id = agent.organization_id
+    previous_owner_id = agent.owner_user_id
+    agent.visibility_scope = target_scope
+    agent.owner_user_id = owner_id
+    agent.organization_id = org_uuid
+    db.commit()
+    db.refresh(agent)
+    try:
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.AGENT_SCOPE_CHANGE,
+            status=AuditStatus.SUCCESS,
+            target_type="agent",
+            target_id=str(agent.agent_id),
+            actor_user_id=current_user.get("id"),
+            organization_id=agent.organization_id or previous_org_id,
+            metadata={
+                "old_scope": previous_scope,
+                "new_scope": agent.visibility_scope,
+                "old_org_id": str(previous_org_id) if previous_org_id else None,
+                "new_org_id": str(agent.organization_id) if agent.organization_id else None,
+                "old_owner_user_id": str(previous_owner_id) if previous_owner_id else None,
+                "new_owner_user_id": str(agent.owner_user_id) if agent.owner_user_id else None,
+            },
+        )
+    except Exception:
+        pass
+    return agent

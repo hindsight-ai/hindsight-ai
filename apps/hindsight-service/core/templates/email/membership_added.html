@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome to {{ organization_name }} - Hindsight AI{% endblock %}
+
+{% block header_title %}Welcome to {{ organization_name }}!{% endblock %}
+{% block header_subtitle %}You've been added to the organization{% endblock %}
+
+{% block content %}
+<h2>You're now a member of {{ organization_name }}</h2>
+
+<p>Great news! You have been successfully added to <strong>{{ organization_name }}</strong> on Hindsight AI.</p>
+
+<div class="highlight">
+    <p><strong>Organization:</strong> {{ organization_name }}</p>
+    <p><strong>Your Role:</strong> {{ role if role else 'Member' }}</p>
+    <p><strong>Added by:</strong> {{ added_by_name }}</p>
+    <p><strong>Date Added:</strong> {{ date_added if date_added else 'Today' }}</p>
+</div>
+
+<p>As a member of {{ organization_name }}, you now have access to:</p>
+
+<ul style="margin: 16px 0; padding-left: 24px; color: #475569;">
+    <li>Shared memory blocks and AI knowledge base</li>
+    <li>Collaborative memory management tools</li>
+    <li>Organization analytics and insights</li>
+    <li>Team collaboration features</li>
+</ul>
+
+<div class="button-container">
+    <a href="{{ dashboard_url if dashboard_url else '#' }}" class="button">Go to Dashboard</a>
+    <a href="{{ organization_url if organization_url else '#' }}" class="button button-secondary">View Organization</a>
+</div>
+
+<p style="margin-top: 32px; color: #64748b; font-size: 14px;">
+    If you have any questions about your new role or need help getting started, please reach out to {{ added_by_name }} or our support team.
+</p>
+{% endblock %}

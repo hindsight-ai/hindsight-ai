@@ -35,11 +35,17 @@ FROM nginx:alpine
 # Copy the Nginx configuration for SPA fallback routing
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Copy runtime env template
+COPY --from=build /app/dist/env.template.js /usr/share/nginx/html/env.template.js
+
 # Copy the built app to Nginx's web root (Vite outputs to dist)
 COPY --from=build /app/dist /usr/share/nginx/html
+
+# Entrypoint to generate /env.js from template using container env
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 # Expose port 80 for the web server
 EXPOSE 80
 
-# Command to run Nginx
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/docker-entrypoint.sh"]

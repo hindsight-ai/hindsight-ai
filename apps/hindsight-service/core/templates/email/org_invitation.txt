@@ -1,0 +1,36 @@
+INVITATION TO {{ organization_name|upper }}
+
+Hello!
+
+{{ (inviter_display if inviter_display else inviter_name) }} has invited you to join {{ organization_name }} on Hindsight AI.
+
+Organization: {{ organization_name }}
+Invited by: {{ (inviter_display if inviter_display else inviter_name) }}
+Role: {{ role if role else 'Member' }}
+
+Hindsight AI helps teams manage their AI memory and knowledge effectively. By joining {{ organization_name }}, you'll be able to:
+
+• Access shared memory blocks and knowledge
+• Collaborate on AI memory management  
+• Contribute to the organization's AI knowledge base
+• Track and optimize memory usage
+
+To accept this invitation, visit:
+{{ accept_url }}
+
+To decline this invitation, visit:
+{{ decline_url }}
+
+This invitation will expire in 7 days. If you have any questions, please contact {{ (inviter_display if inviter_display else inviter_name) }} or our support team.
+
+{% if invitation_message %}
+Personal message from {{ (inviter_display if inviter_display else inviter_name) }}:
+{{ invitation_message }}
+{% endif %}
+
+---
+This email was sent by Hindsight AI
+Unsubscribe: {{ unsubscribe_url if unsubscribe_url else 'Contact support' }}
+Support: {{ support_url if support_url else 'support@hindsight-ai.com' }}
+
+© {{ current_year if current_year else '2025' }} Hindsight AI. All rights reserved.

@@ -1,5 +1,9 @@
 # Hindsight AI
 
+Status:
+- `main`: [![CI Tests](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml) [![Codecov main](https://codecov.io/gh/hindsight-ai/hindsight-ai/graph/badge.svg?token=G2GJE5IBGW)](https://codecov.io/gh/hindsight-ai/hindsight-ai)
+- `staging`: [![CI Tests](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml/badge.svg?branch=staging)](https://github.com/hindsight-ai/hindsight-ai/actions/workflows/tests.yml) [![Codecov staging](https://codecov.io/gh/hindsight-ai/hindsight-ai/branch/staging/graph/badge.svg?token=G2GJE5IBGW)](https://codecov.io/gh/hindsight-ai/hindsight-ai)
+
 Hindsight AI is a system designed to enhance AI agent memory and operational intelligence. Its primary purpose is to provide a robust and scalable solution for:
 - **Memory Management:** Storing, retrieving, and managing an AI agent's conversational and operational memories.
 - **Knowledge Distillation:** Extracting actionable insights and lessons learned from raw interactions.
@@ -25,7 +29,7 @@ These components are designed to integrate seamlessly. The `hindsight-service` (
 
 ### Knowledge Distillation Process
 
-Knowledge distillation within Hindsight AI is primarily performed by a background worker (`consolidation_worker.py`) that consolidates similar or duplicate memory blocks into single, refined suggestions. The process involves:
+Knowledge distillation within Hindsight AI is primarily performed by a background worker (`core.workers.consolidation_worker`) that consolidates similar or duplicate memory blocks into single, refined suggestions. The process involves:
 1.  **Fetching Memory Blocks:** Retrieving memory blocks from the database in batches.
 2.  **Analyzing Duplicates:** This is done primarily using an LLM-based analysis (Google Gemini API). The LLM is prompted to act as an AI assistant, identify semantically similar or duplicate memory blocks, group them, and then generate a consolidated version of the `content`, `lessons_learned`, and `keywords` for each group. The goal is to increase quality and information density while reducing overall size. A fallback similarity analysis (TF-IDF vectorization and cosine similarity) is used if the LLM is unavailable, but it *only* identifies groups and does not generate consolidated suggestions.
 3.  **Storing Suggestions:** Only LLM-generated consolidation suggestions are stored in the `consolidation_suggestions` table with a "pending" status, awaiting user review.
@@ -160,6 +164,15 @@ npm install
 npm start
 ```
 
+## Database Backups & Restores
+
+Postgres stores its data in the Docker volume `db_data`, mounted at `/var/lib/postgresql/data`. Run `docker volume inspect db_data` on the host if you need the absolute path. The helper scripts under `infra/scripts/` wrap `pg_dump`/`psql` and save backups to `hindsight_db_backups/data/`:
+
+- `./infra/scripts/backup_db.sh` — creates a timestamped SQL dump with the current Alembic revision in the filename. Run this on the source environment (e.g., staging) before copying data.
+- `./infra/scripts/restore_db.sh` — interactive restore that drops/recreates `hindsight_db`, imports the selected dump, and reapplies Alembic migrations. Run this on the destination environment (e.g., production) after copying the dump file over.
+
+This workflow lets you shuttle database state between environments by backing up on the source host, transferring the `.sql` artifact, and restoring it on the target. Add `--dry-run` to either script if you just want to preview the commands.
+
 ## Deployment
 
 This section provides instructions for deploying the Hindsight AI application using Docker Compose, both locally and to a remote server.
@@ -244,11 +257,40 @@ Remote deployment is automated via a GitHub Actions workflow. The workflow build
         *   `POSTGRES_PASSWORD`: The password for the PostgreSQL database.
         *   `POSTGRES_USER`: The username for the PostgreSQL database.
         *   `POSTGRES_PASSWORD`: The password for the PostgreSQL database.
-        *   `AUTHORIZED_EMAILS_CONTENT`: A comma-separated list of email addresses that are authorized to access the application.
+        *   `AUTHORIZED_EMAILS_CONTENT`: A newline-delimited list of email addresses (one per line) that are authorized to access the application.
+            Example:
+            
+            user1@example.com
+            partner.team@company.com
+            ibarz.jean@gmail.com
 
 3.  **Deployment:**
     *   Pushing to the `main` or `feat/docker-compose-deployment` branch will trigger the GitHub Actions workflow.
     *   The workflow will automatically build and push the Docker images, and then deploy the application to your remote server.
+
+## Continuous Integration & Coverage
+
+- CI Workflows:
+  - Tests: `.github/workflows/tests.yml` runs on PRs and pushes; executes backend `pytest` and dashboard `jest` suites.
+  - Deploy: `.github/workflows/deploy.yml` runs on pushes to `main`/`staging` and first runs both test jobs, then builds and deploys via Docker Compose.
+
+- Coverage:
+  - Dashboard unit tests generate HTML coverage at `apps/hindsight-dashboard/coverage/lcov-report/index.html`.
+  - Jest thresholds enforce: 100% lines & functions, ≥90% statements, ≥85% branches.
+  - Public Codecov dashboard: https://codecov.io/gh/hindsight-ai/hindsight-ai
+
+- Branch protection (recommended):
+  1. Go to GitHub → Repo Settings → Branches → “Add rule”.
+  2. Pattern: `main` (and `staging` if applicable).
+  3. Enable “Require a pull request before merging” with desired reviewers.
+  4. Enable “Require status checks to pass before merging”, then select:
+     - “Hindsight Service (pytest)”
+     - “Dashboard (Jest)”
+     - “codecov/project” (overall coverage)
+     - “codecov/patch” (diff/patch coverage)
+     Also enable “Require branches to be up to date before merging”.
+  5. Optionally restrict who can push to `main` and require linear history.
+  6. Under Settings → Environments, add `production` with required reviewers to approve deploys from `deploy.yml`.
 
 ### Google OAuth2 Provider Configuration
 

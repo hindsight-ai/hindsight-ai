@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Removed from {{ organization_name }} - Hindsight AI{% endblock %}
+
+{% block header_title %}You've Been Removed{% endblock %}
+{% block header_subtitle %}Your membership in {{ organization_name }} has ended{% endblock %}
+
+{% block content %}
+<h2>Removed from {{ organization_name }}</h2>
+
+<p>Hello!</p>
+
+<p>You have been removed from <strong>{{ organization_name }}</strong> on Hindsight AI.</p>
+
+<div class="highlight">
+    <p><strong>Organization:</strong> {{ organization_name }}</p>
+    <p><strong>Removed by:</strong> {{ removed_by_name }}</p>
+    <p><strong>Date:</strong> {{ date_removed }}</p>
+</div>
+
+<p>Your access to {{ organization_name }}'s resources and data has been revoked. If you need to regain access, please contact {{ removed_by_name }} or another organization administrator.</p>
+
+<p>If you have any personal data or content that you would like to export before your access is completely removed, please do so as soon as possible.</p>
+
+<div class="button-container">
+    <a href="{{ dashboard_url }}" class="button">View Your Dashboard</a>
+    <a href="{{ support_url if support_url else 'mailto:support@hindsight-ai.com' }}" class="button button-secondary">Contact Support</a>
+</div>
+
+<p style="margin-top: 32px; color: #64748b; font-size: 14px;">
+    If you believe this removal was made in error, please contact {{ removed_by_name }} or our support team immediately.
+</p>
+{% endblock %}

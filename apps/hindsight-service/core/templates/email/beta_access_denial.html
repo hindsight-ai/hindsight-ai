@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Beta Access Update - Hindsight AI{% endblock %}
+
+{% block header_title %}Beta Access Update{% endblock %}
+{% block header_subtitle %}Information about your beta access request{% endblock %}
+
+{% block content %}
+<h2>Update on Your Beta Access Request</h2>
+
+<p>Hello,</p>
+
+<p>Thank you for your interest in the Hindsight AI beta program. After careful consideration, we regret to inform you that we are unable to grant you access to the beta at this time.</p>
+
+{% if decision_reason %}
+<div class="highlight">
+    <p><strong>Reason for decision:</strong></p>
+    <p>{{ decision_reason }}</p>
+</div>
+{% endif %}
+
+<p>We appreciate your interest and encourage you to stay tuned for future updates. We'll be expanding our beta program over time and may have opportunities for more participants in the future.</p>
+
+<p>Thank you for your understanding and continued interest in Hindsight AI.</p>
+
+<p style="margin-top: 32px; color: #64748b; font-size: 14px;">
+    If you have any questions or feedback, please don't hesitate to reply to this email.
+</p>
+{% endblock %}

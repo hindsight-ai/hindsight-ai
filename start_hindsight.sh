@@ -2,6 +2,12 @@
 
 set -e
 
+if [ "$(id -u)" -eq 0 ]; then
+  echo "❌ Please run start_hindsight.sh as a regular user (not root/sudo)."
+  echo "   Add your account to the docker group instead: sudo usermod -aG docker $(logname) && newgrp docker"
+  exit 1
+fi
+
 echo "Starting Hindsight AI services for local development..."
 echo "Using Docker Compose with development profile..."
 
@@ -26,6 +32,20 @@ if [ ! -f .env ]; then
         echo "ERROR: .env.example is missing. Cannot create .env."
         exit 1
     fi
+fi
+
+# Ensure DEV_MODE is defined; default to false so it must be explicitly enabled
+if ! grep -q '^DEV_MODE=' .env; then
+    echo 'DEV_MODE=false' >> .env
+    echo "Added DEV_MODE=false to .env (enable manually for local impersonation)."
+fi
+export DEV_MODE=$(grep '^DEV_MODE=' .env | cut -d= -f2-)
+
+# Validate environment variables before starting services
+echo "Validating environment variables..."
+if ! bash check_env.sh; then
+    echo "❌ Environment validation failed! Please check your .env file."
+    exit 1
 fi
 
 # Check if services are already running

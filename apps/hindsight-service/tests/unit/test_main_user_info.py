@@ -1,0 +1,48 @@
+import os
+import pytest
+from fastapi.testclient import TestClient
+
+from core.api.main import app
+
+
+def _h(email):
+    return {"x-auth-request-user": email.split("@")[0], "x-auth-request-email": email}
+
+
+@pytest.mark.usefixtures("db_session")
+def test_user_info_dev_mode(monkeypatch):
+    client = TestClient(app)
+    monkeypatch.setenv("DEV_MODE", "true")
+    monkeypatch.setenv("APP_BASE_URL", "http://localhost:3000")
+    r = client.get("/user-info")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["authenticated"] is True
+    assert data["email"] == "dev@localhost"
+    assert "beta_access_status" in data
+    assert data["beta_access_status"] in ["not_requested", "pending", "accepted", "denied"]
+
+
+@pytest.mark.usefixtures("db_session")
+def test_user_info_oauth_headers(monkeypatch):
+    client = TestClient(app)
+    monkeypatch.setenv("DEV_MODE", "false")
+    monkeypatch.setenv("APP_BASE_URL", "http://localhost:3000")
+    r = client.get("/user-info", headers=_h("tester@example.com"))
+    assert r.status_code == 200
+    data = r.json()
+    assert data["authenticated"] is True
+    assert data["email"] == "tester@example.com"
+    assert "beta_access_status" in data
+    assert data["beta_access_status"] in ["not_requested", "pending", "accepted", "denied"]
+
+
+@pytest.mark.usefixtures("db_session")
+def test_user_info_dev_mode_misconfiguration(monkeypatch):
+    client = TestClient(app)
+    monkeypatch.setenv("DEV_MODE", "true")
+    monkeypatch.setenv("APP_BASE_URL", "https://app-staging.hindsight-ai.com")
+
+    response = client.get("/user-info")
+    assert response.status_code == 500
+    assert response.json()["detail"] == "DEV_MODE misconfigured"

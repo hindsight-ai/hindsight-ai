@@ -15,8 +15,76 @@ dependencies = [
     "requests>=2.32.4",
     "scikit-learn>=1.7.0",
     "google-genai>=1.19.0",
+    "jinja2>=3.1.4",
+    "resend>=0.8.0",
+    "sendgrid>=6.11.0",
+    "argon2-cffi>=23.1.0",
+    "aiosmtplib>=3.0.1",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["core"]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3.2",
+    "pytest-cov>=6.3.0",
+    "pytest-asyncio>=1.1.0",
+    "testcontainers[postgres]>=4.13.0",
+    "alembic>=1.13.1",
+]
+
+[tool.pytest.ini_options]
+# Enable quiet test output plus coverage (branch) with HTML & XML reports.
+addopts = "-q --cov=core --cov-branch --cov-report=term-missing:skip-covered --cov-report=xml:coverage.xml --cov-report=html:coverage_html"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+        "unit: fast unit tests with mocks, no database",
+        "integration: tests with database interactions",
+        "e2e: end-to-end tests requiring external services",
+        "slow: tests that take longer than 1 second"
+]
+
+[tool.coverage.run]
+source = ["core"]
+branch = true
+omit = [
+    "core/db/migrations/*",
+    "core/**/__init__.py",
+    # Glue/structure modules not valuable for coverage metrics
+    "core/db/sqlite_compiler_shims.py",
+    # Exclude background/long-running worker & external service integration modules from unit test coverage
+    # These require threads, external models, or heavy I/O not suitable for deterministic unit test runs.
+    "core/core/consolidation_worker.py",
+    "core/pruning/*",
+    # Email orchestration layers integrate with third-party providers and are covered by integration tests
+    "core/services/email_service.py",
+    "core/services/notification_service.py",
+    "core/services/transactional_email_service.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == '__main__':",
+    "pragma: no cover",
+]
+skip_covered = true
+show_missing = true
+fail_under = 80
+
+[tool.coverage.html]
+directory = "coverage_html"
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[dependency-groups]
+dev = []
+test = [
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.3.0",
+    "pytest>=8.4.2",
+    "testcontainers[postgres]>=4.13.0",
+]

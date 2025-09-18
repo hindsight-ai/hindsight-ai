@@ -1,0 +1,200 @@
+services:
+  db:
+    image: postgres:13
+    restart: always
+    environment:
+      POSTGRES_DB: hindsight_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d hindsight_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hindsight-ai
+
+  traefik:
+    image: traefik:v3.4.4
+    container_name: traefik
+    environment:
+      - CLOUDFLARE_DNS_EMAIL=${CLOUDFLARE_DNS_EMAIL}
+      - CLOUDFLARE_DNS_API_TOKEN=${CLOUDFLARE_DNS_API_TOKEN}
+    command:
+      - "--configFile=/config/traefik.yml"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config:/config:ro
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - hindsight-ai
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DASHBOARD_HOST}`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+    depends_on:
+      - oauth2-proxy
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    container_name: oauth2-proxy
+    environment:
+      OAUTH2_PROXY_PROVIDER: google
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_REDIRECT_URL: https://${APP_HOST}/oauth2/callback
+      OAUTH2_PROXY_UPSTREAMS: http://hindsight-dashboard:80
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: true
+      OAUTH2_PROXY_COOKIE_SAMESITE: lax
+      OAUTH2_PROXY_COOKIE_SECURE: true
+      OAUTH2_PROXY_COOKIE_DOMAINS: .hindsight-ai.com
+      OAUTH2_PROXY_CSRF_COOKIE_DOMAINS: .hindsight-ai.com
+      OAUTH2_PROXY_WHITELIST_DOMAINS: .hindsight-ai.com
+      OAUTH2_PROXY_REVERSE_PROXY: true
+      OAUTH2_PROXY_SET_XAUTHREQUEST: true
+      OAUTH2_PROXY_PASS_ACCESS_TOKEN: true
+      OAUTH2_PROXY_SET_AUTHORIZATION_HEADER: true
+      OAUTH2_PROXY_EMAIL_DOMAINS: ${OAUTH2_PROXY_EMAIL_DOMAINS:-*}
+      OAUTH2_PROXY_SKIP_AUTH_ROUTES: /manifest.json$,/favicon.ico$,^/guest-api/.*
+      OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET}
+      OAUTH2_PROXY_LOGOUT_REDIRECT_URL: https://accounts.google.com/Logout
+      # To re-enable an email allowlist set OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE and mount authorized_emails.txt.
+    command:
+      - "--custom-templates-dir=/templates"
+    networks:
+      - hindsight-ai
+    volumes:
+      - ./templates:/templates:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.oauth2-proxy.entrypoints=websecure"
+      - "traefik.http.routers.oauth2-proxy.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.oauth2-proxy.service=oauth2-svc@docker"
+      - "traefik.http.services.oauth2-svc.loadbalancer.server.port=4180"
+      - "traefik.http.routers.oauth2-path.rule=Host(`${APP_HOST}`) && PathPrefix(`/oauth2`)"
+      - "traefik.http.routers.oauth2-path.entrypoints=websecure"
+      - "traefik.http.routers.oauth2-path.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.oauth2-path.service=oauth2-svc@docker"
+      - "traefik.http.routers.api-oauth.rule=Host(`${APP_HOST}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.api-oauth.entrypoints=websecure"
+      - "traefik.http.routers.api-oauth.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-oauth.service=oauth2-svc@docker"
+
+  hindsight-service:
+    image: ${HINDSIGHT_SERVICE_IMAGE}
+    container_name: hindsight-service
+    networks:
+      - hindsight-ai
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DEV_MODE: ${DEV_MODE}
+      APP_BASE_URL: ${APP_BASE_URL}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/hindsight_db
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME}
+      CONSOLIDATION_BATCH_SIZE: ${CONSOLIDATION_BATCH_SIZE}
+      FALLBACK_SIMILARITY_THRESHOLD: ${FALLBACK_SIMILARITY_THRESHOLD}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL}
+      SUPPORT_CONTACT_MIN_INTERVAL_SECONDS: ${SUPPORT_CONTACT_MIN_INTERVAL_SECONDS}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER}
+      FROM_EMAIL: ${FROM_EMAIL}
+      FROM_NAME: ${FROM_NAME}
+      REPLY_TO_EMAIL: ${REPLY_TO_EMAIL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_TEMPLATE_DIR: ${EMAIL_TEMPLATE_DIR}
+      EMAIL_RATE_LIMIT_HOUR: ${EMAIL_RATE_LIMIT_HOUR}
+      EMAIL_RATE_LIMIT_DAY: ${EMAIL_RATE_LIMIT_DAY}
+      PRUNING_BATCH_SIZE: ${PRUNING_BATCH_SIZE}
+      PRUNING_MAX_ITERATIONS: ${PRUNING_MAX_ITERATIONS}
+      LLM_FEATURES_ENABLED: ${LLM_FEATURES_ENABLED}
+      FEATURE_CONSOLIDATION_ENABLED: ${FEATURE_CONSOLIDATION_ENABLED}
+      FEATURE_PRUNING_ENABLED: ${FEATURE_PRUNING_ENABLED}
+      FEATURE_ARCHIVED_ENABLED: ${FEATURE_ARCHIVED_ENABLED}
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      # Production public API
+      - "traefik.http.routers.api-prod.rule=Host(`api.hindsight-ai.com`)"
+      - "traefik.http.routers.api-prod.entrypoints=websecure"
+      - "traefik.http.routers.api-prod.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-prod.middlewares=cors-headers@file,secure-headers@file,rate-limit-anon@file"
+      - "traefik.http.routers.api-prod.service=hindsight-api-svc@docker"
+      # Bearer PAT router (higher priority) on prod
+      - "traefik.http.routers.api-prod-pat-bearer.rule=Host(`api.hindsight-ai.com`) && HeadersRegexp(`Authorization`,`^Bearer\\s+.+`)"
+      - "traefik.http.routers.api-prod-pat-bearer.priority=15"
+      - "traefik.http.routers.api-prod-pat-bearer.entrypoints=websecure"
+      - "traefik.http.routers.api-prod-pat-bearer.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-prod-pat-bearer.middlewares=cors-headers@file,secure-headers@file,rate-limit-bearer@file"
+      - "traefik.http.routers.api-prod-pat-bearer.service=hindsight-api-svc@docker"
+      # API key router (higher priority) on prod
+      - "traefik.http.routers.api-prod-pat-key.rule=Host(`api.hindsight-ai.com`) && HeadersRegexp(`X-API-Key`,`. +`)"
+      - "traefik.http.routers.api-prod-pat-key.priority=15"
+      - "traefik.http.routers.api-prod-pat-key.entrypoints=websecure"
+      - "traefik.http.routers.api-prod-pat-key.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-prod-pat-key.middlewares=cors-headers@file,secure-headers@file,rate-limit-apikey@file"
+      - "traefik.http.routers.api-prod-pat-key.service=hindsight-api-svc@docker"
+      # Staging public API
+      - "traefik.http.routers.api-staging.rule=Host(`api-staging.hindsight-ai.com`)"
+      - "traefik.http.routers.api-staging.entrypoints=websecure"
+      - "traefik.http.routers.api-staging.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-staging.middlewares=cors-headers@file,secure-headers@file,rate-limit-anon@file"
+      - "traefik.http.routers.api-staging.service=hindsight-api-svc@docker"
+      # Bearer PAT router (higher priority) on staging
+      - "traefik.http.routers.api-staging-pat-bearer.rule=Host(`api-staging.hindsight-ai.com`) && HeadersRegexp(`Authorization`,`^Bearer\\s+.+`)"
+      - "traefik.http.routers.api-staging-pat-bearer.priority=15"
+      - "traefik.http.routers.api-staging-pat-bearer.entrypoints=websecure"
+      - "traefik.http.routers.api-staging-pat-bearer.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-staging-pat-bearer.middlewares=cors-headers@file,secure-headers@file,rate-limit-bearer@file"
+      - "traefik.http.routers.api-staging-pat-bearer.service=hindsight-api-svc@docker"
+      # API key router (higher priority) on staging
+      - "traefik.http.routers.api-staging-pat-key.rule=Host(`api-staging.hindsight-ai.com`) && HeadersRegexp(`X-API-Key`,`. +`)"
+      - "traefik.http.routers.api-staging-pat-key.priority=15"
+      - "traefik.http.routers.api-staging-pat-key.entrypoints=websecure"
+      - "traefik.http.routers.api-staging-pat-key.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.api-staging-pat-key.middlewares=cors-headers@file,secure-headers@file,rate-limit-apikey@file"
+      - "traefik.http.routers.api-staging-pat-key.service=hindsight-api-svc@docker"
+      # Backend service port
+      - "traefik.http.services.hindsight-api-svc.loadbalancer.server.port=8000"
+
+  hindsight-dashboard:
+    image: ${HINDSIGHT_DASHBOARD_IMAGE}
+    container_name: hindsight-dashboard
+    environment:
+      HINDSIGHT_SERVICE_API_URL: ${HINDSIGHT_SERVICE_API_URL}
+      LLM_FEATURES_ENABLED: ${LLM_FEATURES_ENABLED}
+      FEATURE_CONSOLIDATION_ENABLED: ${FEATURE_CONSOLIDATION_ENABLED}
+      FEATURE_PRUNING_ENABLED: ${FEATURE_PRUNING_ENABLED}
+      FEATURE_ARCHIVED_ENABLED: ${FEATURE_ARCHIVED_ENABLED}
+      VITE_LLM_FEATURES_ENABLED: ${LLM_FEATURES_ENABLED}
+      VITE_FEATURE_CONSOLIDATION_ENABLED: ${FEATURE_CONSOLIDATION_ENABLED}
+      VITE_FEATURE_PRUNING_ENABLED: ${FEATURE_PRUNING_ENABLED}
+      VITE_FEATURE_ARCHIVED_ENABLED: ${FEATURE_ARCHIVED_ENABLED}
+    depends_on:
+      - hindsight-service
+    networks:
+      - hindsight-ai
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hindsight-dashboard.rule=Host(`${APP_HOST}`)"
+      - "traefik.http.routers.hindsight-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.hindsight-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hindsight-dashboard.service=hindsight-dashboard-svc@docker"
+      - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
+
+networks:
+  hindsight-ai:
+    driver: bridge
+
+volumes:
+  db_data:

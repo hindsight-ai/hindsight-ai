@@ -26,4 +26,24 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    files: ['**/*.{ts,tsx}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      globals: globals.browser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      // Forbid raw fetch usage in components/contexts/services (use apiFetch)
+      'no-restricted-globals': ['error', { name: 'fetch', message: 'Use apiFetch from src/api/http.ts' }],
+    },
+    ignores: [
+      'src/api/http.ts',
+      'src/api/**',
+    ],
+  },
 ])

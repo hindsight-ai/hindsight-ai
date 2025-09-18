@@ -27,9 +27,10 @@ http:
         # Use Traefik's built-in CORS fields instead of wildcard headers.
         accessControlAllowOriginList:
           - "https://app.hindsight-ai.com"
+          - "https://app-staging.hindsight-ai.com"
+          - "https://api.hindsight-ai.com"
+          - "https://api-staging.hindsight-ai.com"
           - "http://localhost:3000"
-          - "http://localhost:3001"
-          - "http://localhost"
         accessControlAllowMethods:
           - "GET"
           - "POST"
@@ -41,3 +42,27 @@ http:
           - "Authorization"
         accessControlAllowCredentials: true
         addVaryHeader: true
+
+    # Rate limiting
+    rate-limit-anon:
+      rateLimit:
+        average: 10       # 10 req/sec per IP
+        burst: 20
+        period: 1s
+        # default source is client IP
+
+    rate-limit-bearer:
+      rateLimit:
+        average: 50       # 50 req/sec per PAT token
+        burst: 100
+        period: 1s
+        sourceCriterion:
+          requestHeaderName: Authorization
+
+    rate-limit-apikey:
+      rateLimit:
+        average: 50       # 50 req/sec per API key
+        burst: 100
+        period: 1s
+        sourceCriterion:
+          requestHeaderName: X-API-Key

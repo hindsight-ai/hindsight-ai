@@ -1,29 +1,69 @@
-import logging # Moved to top
+"""
+FastAPI app assembly: middleware and router wiring.
+Includes selected endpoints that span multiple resource modules.
+"""
+import logging
 import os
-from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter
+from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter, Body
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi.middleware.cors import CORSMiddleware
-import math # Import math for ceil
+import math
 
-# Configure logging (Moved to top)
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+LOG_LEVEL_NAME = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_LEVEL = getattr(logging, LOG_LEVEL_NAME, logging.INFO)
+logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger(__name__)
+logger.setLevel(LOG_LEVEL)
+logger.info("app_startup: log_level=%s", LOG_LEVEL_NAME)
 
-# Environment variables are expected to be set by the deployment environment (e.g., Kubernetes)
-# For local development, ensure these are set in your shell or via a tool like docker-compose.
+
 
 from core.db import models, schemas, crud
 from core.db.database import engine, get_db
 from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
-from core.search.search_service import SearchService
+from core.api.auth import (
+    resolve_identity_from_headers,
+    get_or_create_user,
+    get_user_memberships,
+    is_beta_access_admin,
+)
+from core.api.deps import (
+    get_current_user_context,
+    get_current_user_context_or_pat,
+    ensure_pat_allows_write,
+    ensure_pat_allows_read,
+    get_scoped_user_and_context,
+)
+from core.api.orgs import router as orgs_router
+from core.api.agents import router as agents_router
+from core.api.keywords import router as keywords_router
+from core.api.memory_blocks import router as memory_blocks_router
+from core.api.audits import router as audits_router
+from core.api.bulk_operations import router as bulk_operations_router
+from core.api.notifications import router as notifications_router
+from core.api.consolidation import router as consolidation_router
+from core.api.support import router as support_router
+from core.api.users import router as users_router
+from core.api.beta_access import router as beta_access_router
+from core.api.permissions import can_read, can_write, can_manage_org
+from core.utils.scopes import (
+    ALL_SCOPES,
+    SCOPE_PUBLIC,
+    SCOPE_ORGANIZATION,
+    SCOPE_PERSONAL,
+)
+from core.services.search_service import SearchService
+from core.utils.runtime import dev_mode_active
+from core.utils.feature_flags import get_feature_flags, llm_features_enabled
 
-# models.Base.metadata.create_all(bind=engine) # Removed: Database schema is now managed by Alembic migrations.
+# Database schema is managed by Alembic migrations.
 
 app = FastAPI(
     title="Intelligent AI Agent Memory Service",
@@ -31,12 +71,18 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Avoid implicit trailing-slash redirects for predictable URLs
+try:
+    app.router.redirect_slashes = False
+except Exception:
+    pass
+
 origins = [
     "http://localhost",
-    "http://localhost:3000", # React frontend
-    "http://localhost:3001", # Allow your frontend to access the API
-    "http://localhost:8000", # FastAPI backend
+    "http://localhost:3000",
+    "http://localhost:8000",
     "https://app.hindsight-ai.com",
+    "https://app-staging.hindsight-ai.com",
 ]
 
 app.add_middleware(
@@ -47,814 +93,347 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global middleware: enforce read-only access for unauthenticated requests
+# Middleware: enforce read-only for unauthenticated requests
 @app.middleware("http")
 async def enforce_readonly_for_guests(request: Request, call_next):
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-        h = request.headers
-        user_present = (
-            h.get("x-auth-request-user")
-            or h.get("x-auth-request-email")
-            or h.get("x-forwarded-user")
-            or h.get("x-forwarded-email")
-        )
-        if not user_present:
-            return JSONResponse(
-                {"detail": "Guest mode is read-only. Sign in to perform changes."},
-                status_code=status.HTTP_401_UNAUTHORIZED,
+        # In dev mode, allow; authentication is handled by route dependencies
+        import os
+        is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+
+        if not is_dev_mode:
+            try:
+                path = request.url.path or ""
+            except Exception:
+                path = ""
+            if path.startswith("/beta-access/review/") and path.endswith("/token"):
+                return await call_next(request)
+            h = request.headers
+            user_present = (
+                h.get("x-auth-request-user")
+                or h.get("x-auth-request-email")
+                or h.get("x-forwarded-user")
+                or h.get("x-forwarded-email")
             )
+            # Allow Personal Access Tokens to pass; route dependencies validate
+            pat_present = h.get("authorization") or h.get("x-api-key")
+            if not user_present and not pat_present:
+                return JSONResponse(
+                    {"detail": "Guest mode is read-only. Sign in to perform changes."},
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
+    return await call_next(request)
+
+# Middleware: require explicit scope metadata on write operations for scoped resources
+@app.middleware("http")
+async def enforce_write_scope_metadata(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        try:
+            path = request.url.path or ""
+        except Exception:
+            path = ""
+        # Only enforce for scope-managed resources
+        if (
+            path.startswith("/agents")
+            or path.startswith("/keywords")
+            or path.startswith("/memory-blocks")
+            or path.startswith("/consolidation")
+            or path.startswith("/consolidation-suggestions/")
+        ):
+            h = request.headers
+            qp = request.query_params
+            scope_val = (h.get("X-Active-Scope") or qp.get("scope") or "").strip().lower()
+            if not scope_val:
+                return JSONResponse({"detail": "scope_required"}, status_code=status.HTTP_400_BAD_REQUEST)
+            if scope_val == "organization":
+                org_id = (h.get("X-Organization-Id") or qp.get("organization_id") or "").strip()
+                if not org_id:
+                    return JSONResponse({"detail": "organization_id_required"}, status_code=status.HTTP_400_BAD_REQUEST)
     return await call_next(request)
 
 router = APIRouter()
 
-@router.post("/agents/", response_model=schemas.Agent, status_code=status.HTTP_201_CREATED)
-def create_agent_endpoint(agent: schemas.AgentCreate, db: Session = Depends(get_db)):
-    db_agent = crud.get_agent_by_name(db, agent_name=agent.agent_name)
-    if db_agent:
-        raise HTTPException(status_code=400, detail="Agent with this name already exists")
-    return crud.create_agent(db=db, agent=agent)
 
-@router.get("/agents/", response_model=List[schemas.Agent])
-def get_all_agents_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    agents = crud.get_agents(db, skip=skip, limit=limit)
-    return agents
 
-@router.get("/agents/{agent_id}", response_model=schemas.Agent)
-def get_agent_endpoint(agent_id: uuid.UUID, db: Session = Depends(get_db)):
-    db_agent = crud.get_agent(db, agent_id=agent_id)
-    if not db_agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    return db_agent
-
-@router.get("/agents/search/", response_model=List[schemas.Agent])
-def search_agents_endpoint(query: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    agents = crud.search_agents(db, query=query, skip=skip, limit=limit)
-    return agents
-
-@router.delete("/agents/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_agent_endpoint(agent_id: uuid.UUID, db: Session = Depends(get_db)):
-    success = crud.delete_agent(db, agent_id=agent_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    return {"message": "Agent deleted successfully"}
-
-@router.get("/memory-blocks/", response_model=schemas.PaginatedMemoryBlocks)
-def get_all_memory_blocks_endpoint(
-    agent_id: Optional[str] = None,
-    conversation_id: Optional[str] = None,
-    search_query: Optional[str] = None,
-    search_type: Optional[str] = "basic",  # basic, fulltext, semantic, hybrid, enhanced
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    min_feedback_score: Optional[str] = None,
-    max_feedback_score: Optional[str] = None,
-    min_retrieval_count: Optional[str] = None,
-    max_retrieval_count: Optional[str] = None,
-    keywords: Optional[str] = None,
-    sort_by: Optional[str] = None,
-    sort_order: Optional[str] = "asc",
-    skip: int = 0,
-    limit: int = 50,
-    include_archived: Optional[bool] = False,
-    # Advanced search parameters
-    min_score: Optional[float] = None,  # Minimum relevance score threshold
-    similarity_threshold: Optional[float] = None,  # For semantic search
-    fulltext_weight: Optional[float] = None,  # For hybrid search
-    semantic_weight: Optional[float] = None,  # For hybrid search
-    min_combined_score: Optional[float] = None,  # For hybrid search
-    db: Session = Depends(get_db)
+@router.post("/memory-blocks/{memory_id}/change-scope", response_model=schemas.MemoryBlock)
+def change_memory_block_scope(
+    memory_id: uuid.UUID,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
 ):
-    """
-    Retrieve all memory blocks with advanced filtering, searching, and sorting capabilities.
-    Supports multiple search types: basic, fulltext (BM25), semantic, hybrid, and enhanced.
-    """
-    logger.info(f"Received query parameters:")
-    logger.info(f"  agent_id: {agent_id} (type: {type(agent_id)})")
-    logger.info(f"  conversation_id: {conversation_id} (type: {type(conversation_id)})")
-    logger.info(f"  search_query: {search_query} (type: {type(search_query)})")
-    logger.info(f"  search_type: {search_type} (type: {type(search_type)})")
-    logger.info(f"  skip: {skip} (type: {type(skip)})")
-    logger.info(f"  limit: {limit} (type: {type(limit)})")
+    mb = crud.get_memory_block(db, memory_id)
+    if not mb:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    u, current_user = user_context
 
-    # Process UUID parameters
-    processed_agent_id: Optional[uuid.UUID] = None
-    if agent_id:
+    target_scope = (payload.get("visibility_scope") or '').lower()
+    if target_scope not in ALL_SCOPES:
+        raise HTTPException(status_code=422, detail="Invalid target visibility_scope")
+
+    target_org_id = payload.get("organization_id")
+    new_owner_user_id = payload.get("new_owner_user_id")
+
+    # Permission to move
+    from core.api.permissions import can_move_scope
+    if target_scope == SCOPE_ORGANIZATION:
+        if not target_org_id:
+            raise HTTPException(status_code=422, detail="organization_id required for organization scope")
         try:
-            processed_agent_id = uuid.UUID(agent_id)
-        except ValueError:
-            if agent_id != "":
-                logger.error(f"Invalid UUID format for agent_id: '{agent_id}'")
-                raise HTTPException(status_code=422, detail="Invalid UUID format for agent_id.")
-            processed_agent_id = None
+            target_org_uuid = uuid.UUID(str(target_org_id))
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid organization_id")
+        # PAT org restriction (if applicable)
+        ensure_pat_allows_write(current_user, target_org_uuid)
+        # Consent check: moving personal -> organization requires owner consent unless superadmin
+        if mb.visibility_scope == SCOPE_PERSONAL and not (current_user.get('is_superadmin') or mb.owner_user_id == current_user.get('id')):
+            raise HTTPException(status_code=409, detail="Owner consent required to move personal data to organization")
+        if not can_move_scope(mb, SCOPE_ORGANIZATION, target_org_uuid, current_user):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == SCOPE_PERSONAL:
+        if not can_move_scope(mb, SCOPE_PERSONAL, None, current_user):
+            # Superadmin override allowed
+            if not current_user.get("is_superadmin"):
+                raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == SCOPE_PUBLIC:
+        if not current_user.get("is_superadmin"):
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
 
-    processed_conversation_id: Optional[uuid.UUID] = None
-    if conversation_id:
-        try:
-            processed_conversation_id = uuid.UUID(conversation_id)
-        except ValueError:
-            if conversation_id != "":
-                logger.error(f"Invalid UUID format for conversation_id: '{conversation_id}'")
-                raise HTTPException(status_code=422, detail="Invalid UUID format for conversation_id.")
-            processed_conversation_id = None
+    # Determine new ownership fields (capture previous state first)
+    previous_scope = mb.visibility_scope
+    previous_org_id = mb.organization_id
+    previous_owner_id = mb.owner_user_id
+    if target_scope == SCOPE_ORGANIZATION:
+        mb.visibility_scope = SCOPE_ORGANIZATION
+        mb.organization_id = target_org_uuid
+        mb.owner_user_id = None
+    elif target_scope == SCOPE_PERSONAL:
+        owner_id = u.id
+        if new_owner_user_id:
+            try:
+                owner_uuid = uuid.UUID(str(new_owner_user_id))
+            except Exception:
+                raise HTTPException(status_code=422, detail="Invalid new_owner_user_id")
+            if not current_user.get("is_superadmin"):
+                raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
+            owner_id = owner_uuid
+        mb.visibility_scope = SCOPE_PERSONAL
+        mb.owner_user_id = owner_id
+        mb.organization_id = None
+    else:  # public
+        if not current_user.get("is_superadmin"):
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+        mb.visibility_scope = SCOPE_PUBLIC
+        mb.organization_id = None
+        mb.owner_user_id = None
 
-    # Process datetime parameters
-    processed_start_date: Optional[datetime] = None
-    if start_date and start_date != "":
-        try:
-            processed_start_date = datetime.fromisoformat(start_date)
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid datetime format for start_date. Expected ISO 8601.")
-
-    processed_end_date: Optional[datetime] = None
-    if end_date and end_date != "":
-        try:
-            processed_end_date = datetime.fromisoformat(end_date)
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid datetime format for end_date. Expected ISO 8601.")
-
-    # Process integer parameters
-    processed_min_feedback_score: Optional[int] = None
-    if min_feedback_score:
-        try:
-            processed_min_feedback_score = int(min_feedback_score)
-        except ValueError:
-            if min_feedback_score != "":
-                raise HTTPException(status_code=422, detail="Invalid integer format for min_feedback_score.")
-
-    processed_max_feedback_score: Optional[int] = None
-    if max_feedback_score:
-        try:
-            processed_max_feedback_score = int(max_feedback_score)
-        except ValueError:
-            if max_feedback_score != "":
-                raise HTTPException(status_code=422, detail="Invalid integer format for max_feedback_score.")
-
-    processed_min_retrieval_count: Optional[int] = None
-    if min_retrieval_count:
-        try:
-            processed_min_retrieval_count = int(min_retrieval_count)
-        except ValueError:
-            if min_retrieval_count != "":
-                raise HTTPException(status_code=422, detail="Invalid integer format for min_retrieval_count.")
-
-    processed_max_retrieval_count: Optional[int] = None
-    if max_retrieval_count:
-        try:
-            processed_max_retrieval_count = int(max_retrieval_count)
-        except ValueError:
-            if max_retrieval_count != "":
-                raise HTTPException(status_code=422, detail="Invalid integer format for max_retrieval_count.")
-
-    # Process keywords string into a list of UUIDs
-    processed_keyword_ids: Optional[List[uuid.UUID]] = None
-    if keywords and keywords != "":
-        try:
-            processed_keyword_ids = [uuid.UUID(kw.strip()) for kw in keywords.split(',') if kw.strip()]
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid UUID format in keywords parameter.")
-
-    # Clean up parameters
-    search_query = search_query if search_query else None
-    sort_by = sort_by if sort_by else None
-    sort_order = sort_order if sort_order else "asc"
-
-    # Handle different search types
-    if search_query and search_type in ["fulltext", "semantic", "hybrid"]:
-        # Use advanced search service
-        search_service = SearchService()
-        
-        try:
-            if search_type == "fulltext":
-                # Set defaults for fulltext search
-                min_score_val = min_score if min_score is not None else 0.1
-                
-                results, metadata = search_service.search_memory_blocks_fulltext(
-                    db=db,
-                    query=search_query,
-                    agent_id=processed_agent_id,
-                    conversation_id=processed_conversation_id,
-                    limit=skip + limit,  # Get extra to handle pagination
-                    min_score=min_score_val,
-                    include_archived=include_archived or False
-                )
-                
-                # Apply pagination manually since search doesn't support skip
-                paginated_results = results[skip:skip + limit]
-                total_items = len(results)
-                
-            elif search_type == "semantic":
-                # Set defaults for semantic search
-                similarity_threshold_val = similarity_threshold if similarity_threshold is not None else 0.7
-                
-                results, metadata = search_service.search_memory_blocks_semantic(
-                    db=db,
-                    query=search_query,
-                    agent_id=processed_agent_id,
-                    conversation_id=processed_conversation_id,
-                    limit=skip + limit,
-                    similarity_threshold=similarity_threshold_val,
-                    include_archived=include_archived or False
-                )
-                
-                paginated_results = results[skip:skip + limit]
-                total_items = len(results)
-                
-            elif search_type == "hybrid":
-                # Set defaults for hybrid search
-                fulltext_weight_val = fulltext_weight if fulltext_weight is not None else 0.7
-                semantic_weight_val = semantic_weight if semantic_weight is not None else 0.3
-                min_combined_score_val = min_combined_score if min_combined_score is not None else 0.1
-                
-                results, metadata = search_service.search_memory_blocks_hybrid(
-                    db=db,
-                    query=search_query,
-                    agent_id=processed_agent_id,
-                    conversation_id=processed_conversation_id,
-                    limit=skip + limit,
-                    fulltext_weight=fulltext_weight_val,
-                    semantic_weight=semantic_weight_val,
-                    min_combined_score=min_combined_score_val,
-                    include_archived=include_archived or False
-                )
-                
-                paginated_results = results[skip:skip + limit]
-                total_items = len(results)
-            
-            # For advanced search, return results directly without conversion
-            # The search results are already MemoryBlockWithScore but we'll extract the base fields
-            memories = paginated_results
-            
-            logger.info(f"Advanced search ({search_type}) for '{search_query}' returned {len(memories)} results")
-            
-        except Exception as e:
-            logger.error(f"Error in {search_type} search: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
-            
-    else:
-        # Use basic CRUD search with filtering
-        memories, total_items = crud.get_all_memory_blocks(
-            db=db,
-            agent_id=processed_agent_id,
-            conversation_id=processed_conversation_id,
-            search_query=search_query,
-            start_date=processed_start_date,
-            end_date=processed_end_date,
-            min_feedback_score=processed_min_feedback_score,
-            max_feedback_score=processed_max_feedback_score,
-            min_retrieval_count=processed_min_retrieval_count,
-            max_retrieval_count=processed_max_retrieval_count,
-            keyword_ids=processed_keyword_ids,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            skip=skip,
-            limit=limit,
-            get_total=True,
-            include_archived=include_archived or False
+    db.commit()
+    db.refresh(mb)
+    # Audit log
+    try:
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.MEMORY_SCOPE_CHANGE,
+            status=AuditStatus.SUCCESS,
+            target_type="memory_block",
+            target_id=mb.id,
+            actor_user_id=current_user.get("id"),
+            organization_id=mb.organization_id or previous_org_id,
+            metadata={
+                "old_scope": previous_scope,
+                "new_scope": mb.visibility_scope,
+                "old_org_id": str(previous_org_id) if previous_org_id else None,
+                "new_org_id": str(mb.organization_id) if mb.organization_id else None,
+                "old_owner_user_id": str(previous_owner_id) if previous_owner_id else None,
+                "new_owner_user_id": str(mb.owner_user_id) if mb.owner_user_id else None,
+            },
         )
+    except Exception:
+        pass
+    return mb
+    # Re-query keywords since relationship may not be loaded
+    current_keywords = mb.keywords
+    new_keyword_ids = []
+    for kw in current_keywords:
+        target_kw = crud._get_or_create_keyword(
+            db,
+            kw.keyword_text,
+            visibility_scope=mb.visibility_scope,
+            owner_user_id=mb.owner_user_id,
+            organization_id=mb.organization_id,
+        )
+        new_keyword_ids.append(target_kw.keyword_id)
 
-    total_pages = math.ceil(total_items / limit) if limit > 0 else 0
+    # Update associations to point to target-scope keywords
+    # Delete existing associations and recreate to the new keyword ids
+    db.query(models.MemoryBlockKeyword).filter(models.MemoryBlockKeyword.memory_id == mb.id).delete(synchronize_session=False)
+    for kid in new_keyword_ids:
+        db.add(models.MemoryBlockKeyword(memory_id=mb.id, keyword_id=kid))
 
-    return {
-        "items": memories,
-        "total_items": total_items,
-        "total_pages": total_pages
-    }
-
-@router.get("/memory-blocks/archived/", response_model=schemas.PaginatedMemoryBlocks)
-def get_archived_memory_blocks_endpoint(
-    agent_id: Optional[str] = None,
-    conversation_id: Optional[str] = None,
-    search_query: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    min_feedback_score: Optional[str] = None,
-    max_feedback_score: Optional[str] = None,
-    min_retrieval_count: Optional[str] = None,
-    max_retrieval_count: Optional[str] = None,
-    keywords: Optional[str] = None,
-    sort_by: Optional[str] = None,
-    sort_order: Optional[str] = "asc",
-    skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db)
-):
-    """
-    Retrieve all archived memory blocks with advanced filtering, searching, and sorting capabilities.
-    """
-    processed_agent_id: Optional[uuid.UUID] = None
-    if agent_id:
-        try:
-            processed_agent_id = uuid.UUID(agent_id)
-        except ValueError:
-            if agent_id != "":
-                raise HTTPException(status_code=422, detail="Invalid UUID format for agent_id.")
-            processed_agent_id = None
-
-    processed_conversation_id: Optional[uuid.UUID] = None
-    if conversation_id:
-        try:
-            processed_conversation_id = uuid.UUID(conversation_id)
-        except ValueError:
-            if conversation_id != "":
-                raise HTTPException(status_code=422, detail="Invalid UUID format for conversation_id.")
-            processed_conversation_id = None
-
-    processed_start_date: Optional[datetime] = None
-    if start_date and start_date != "":
-        try:
-            processed_start_date = datetime.fromisoformat(start_date)
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid datetime format for start_date. Expected ISO 8601.")
-
-    processed_end_date: Optional[datetime] = None
-    if end_date and end_date != "":
-        try:
-            processed_end_date = datetime.fromisoformat(end_date)
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid datetime format for end_date. Expected ISO 8601.")
-
-    processed_min_feedback_score: Optional[int] = None
-    if min_feedback_score:
-        try:
-            processed_min_feedback_score = int(min_feedback_score)
-        except ValueError:
-            if min_feedback_score != "":
-                raise HTTPException(status_code=422, detail="Invalid integer format for min_feedback_score.")
-
-    processed_max_feedback_score: Optional[int] = None
-    if max_feedback_score:
-        try:
-            processed_max_feedback_score = int(max_feedback_score)
-        except ValueError:
-            if max_feedback_score != "":
-                raise HTTPException(status_code=422, detail="Invalid integer format for max_feedback_score.")
-
-    processed_min_retrieval_count: Optional[int] = None
-    if min_retrieval_count:
-        try:
-            processed_min_retrieval_count = int(min_retrieval_count)
-        except ValueError:
-            if min_retrieval_count != "":
-                raise HTTPException(status_code=422, detail="Invalid integer format for min_retrieval_count.")
-
-    processed_max_retrieval_count: Optional[int] = None
-    if max_retrieval_count:
-        try:
-            processed_max_retrieval_count = int(max_retrieval_count)
-        except ValueError:
-            if max_retrieval_count != "":
-                raise HTTPException(status_code=422, detail="Invalid integer format for max_retrieval_count.")
-
-    processed_keyword_ids: Optional[List[uuid.UUID]] = None
-    if keywords and keywords != "":
-        try:
-            processed_keyword_ids = [uuid.UUID(kw.strip()) for kw in keywords.split(',') if kw.strip()]
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid UUID format in keywords parameter.")
-
-    search_query = search_query if search_query else None
-    sort_by = sort_by if sort_by else None
-    sort_order = sort_order if sort_order else "asc"
-
-    processed_skip = skip
-    processed_limit = limit
-
-    memories, total_items = crud.get_all_memory_blocks(
-        db=db,
-        agent_id=processed_agent_id,
-        conversation_id=processed_conversation_id,
-        search_query=search_query,
-        start_date=processed_start_date,
-        end_date=processed_end_date,
-        max_feedback_score=processed_max_feedback_score,
-        min_retrieval_count=processed_min_retrieval_count,
-        max_retrieval_count=processed_max_retrieval_count,
-        keyword_ids=processed_keyword_ids,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        skip=processed_skip,
-        limit=processed_limit,
-        get_total=True,
-        include_archived=True, # Explicitly include archived blocks
-        is_archived=True # Filter for only archived blocks
-    )
-
-    total_pages = math.ceil(total_items / processed_limit) if processed_limit > 0 else 0
-
-    return {
-        "items": memories,
-        "total_items": total_items,
-        "total_pages": total_pages
-    }
-
-@router.post("/memory-blocks/", response_model=schemas.MemoryBlock, status_code=status.HTTP_201_CREATED)
-def create_memory_block_endpoint(memory_block: schemas.MemoryBlockCreate, db: Session = Depends(get_db)):
-    # Ensure agent exists
-    agent = crud.get_agent(db, agent_id=memory_block.agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    db_memory_block = crud.create_memory_block(db=db, memory_block=memory_block)
-    print(f"Created memory block ID: {db_memory_block.id}") # Use .id as per schema change
-    return db_memory_block
-
-@router.get("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
-def get_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
-    db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
-    if not db_memory_block:
-        raise HTTPException(status_code=404, detail="Memory block not found")
-    return db_memory_block
-
-@router.put("/memory-blocks/{memory_id}", response_model=schemas.MemoryBlock)
-def update_memory_block_endpoint(
-    memory_id: uuid.UUID,
-    memory_block: schemas.MemoryBlockUpdate,
-    db: Session = Depends(get_db)
-):
-    db_memory_block = crud.update_memory_block(db, memory_id=memory_id, memory_block=memory_block)
-    if not db_memory_block:
-        raise HTTPException(status_code=404, detail="Memory block not found")
-    return db_memory_block
-
-@router.post("/memory-blocks/{memory_id}/archive", response_model=schemas.MemoryBlock)
-def archive_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Archives a memory block by setting its 'archived' flag to True.
-    """
-    db_memory_block = crud.archive_memory_block(db, memory_id=memory_id)
-    if db_memory_block is None: # Check for None explicitly
-        raise HTTPException(status_code=404, detail="Memory block not found")
-    return db_memory_block
-
-@router.delete("/memory-blocks/{memory_id}/hard-delete", status_code=status.HTTP_204_NO_CONTENT)
-def hard_delete_memory_block_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Performs a hard delete of a memory block from the database.
-    """
-    success = crud.delete_memory_block(db, memory_id=memory_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Memory block not found")
-    return {"message": "Memory block hard deleted successfully"}
-
-@router.post("/memory-blocks/{memory_id}/feedback/", response_model=schemas.MemoryBlock)
-def report_memory_feedback_endpoint(
-    memory_id: uuid.UUID,
-    feedback: schemas.FeedbackLogCreate,
-    db: Session = Depends(get_db)
-):
-    db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
-    if not db_memory_block:
-        raise HTTPException(status_code=404, detail="Memory block not found")
-    
-    # Ensure the feedback's memory_id matches the path parameter
-    if feedback.memory_id != memory_id:
-        raise HTTPException(status_code=400, detail="Memory ID in path and request body do not match.")
-
-    updated_memory = crud.report_memory_feedback(
-        db=db,
-        memory_id=memory_id,
-        feedback_type=feedback.feedback_type,
-        feedback_details=feedback.feedback_details
-    )
-    return updated_memory
-
-# Keyword Endpoints
-@router.post("/keywords/", response_model=schemas.Keyword, status_code=status.HTTP_201_CREATED)
-def create_keyword_endpoint(keyword: schemas.KeywordCreate, db: Session = Depends(get_db)):
-    db_keyword = crud.get_keyword_by_text(db, keyword_text=keyword.keyword_text)
-    if db_keyword:
-        raise HTTPException(status_code=400, detail="Keyword with this text already exists")
-    return crud.create_keyword(db=db, keyword=keyword)
-
-@router.get("/keywords/", response_model=List[schemas.Keyword])
-def get_all_keywords_endpoint(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    keywords = crud.get_keywords(db, skip=skip, limit=limit)
-    return keywords
-
-@router.get("/keywords/{keyword_id}", response_model=schemas.Keyword)
-def get_keyword_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
-    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
-    if not db_keyword:
-        raise HTTPException(status_code=404, detail="Keyword not found")
-    return db_keyword
-
-@router.put("/keywords/{keyword_id}", response_model=schemas.Keyword)
-def update_keyword_endpoint(
-    keyword_id: uuid.UUID,
-    keyword: schemas.KeywordUpdate,
-    db: Session = Depends(get_db)
-):
-    db_keyword = crud.update_keyword(db, keyword_id=keyword_id, keyword=keyword)
-    if not db_keyword:
-        raise HTTPException(status_code=404, detail="Keyword not found")
-    return db_keyword
-
-@router.delete("/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_keyword_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
-    success = crud.delete_keyword(db, keyword_id=keyword_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Keyword not found")
-    return {"message": "Keyword deleted successfully"}
-
-# MemoryBlockKeyword Association Endpoints
-@router.post("/memory-blocks/{memory_id}/keywords/{keyword_id}", response_model=schemas.MemoryBlockKeywordAssociation, status_code=status.HTTP_201_CREATED)
-def associate_keyword_with_memory_block_endpoint(
-    memory_id: uuid.UUID,
-    keyword_id: uuid.UUID,
-    db: Session = Depends(get_db)
-):
-    db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
-    if not db_memory_block:
-        raise HTTPException(status_code=404, detail="Memory block not found")
-    
-    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
-    if not db_keyword:
-        raise HTTPException(status_code=404, detail="Keyword not found")
-
-    # Check if association already exists
-    existing_association = db.query(models.MemoryBlockKeyword).filter(
-        models.MemoryBlockKeyword.memory_id == memory_id,
-        models.MemoryBlockKeyword.keyword_id == keyword_id
-    ).first()
-    if existing_association:
-        raise HTTPException(status_code=409, detail="Association already exists")
-
-    association = crud.create_memory_block_keyword(db, memory_id=memory_id, keyword_id=keyword_id)
-    return association
-
-@router.delete("/memory-blocks/{memory_id}/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
-def disassociate_keyword_from_memory_block_endpoint(
-    memory_id: uuid.UUID,
-    keyword_id: uuid.UUID,
-    db: Session = Depends(get_db)
-):
-    db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
-    if not db_memory_block:
-        raise HTTPException(status_code=404, detail="Memory block not found")
-    
-    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
-    if not db_keyword:
-        raise HTTPException(status_code=404, detail="Keyword not found")
-
-    success = crud.delete_memory_block_keyword(db, memory_id=memory_id, keyword_id=keyword_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Association not found")
-    return {"message": "Association deleted successfully"}
-
-@router.get("/memory-blocks/search/", response_model=List[schemas.MemoryBlock])
-def search_memory_blocks_endpoint(
-    keywords: str,
-    agent_id: Optional[uuid.UUID] = None,
-    conversation_id: Optional[uuid.UUID] = None,
-    limit: int = 10,
-    db: Session = Depends(get_db)
-):
-    # This endpoint is for agent-facing semantic search, not for the dashboard's simple search.
-    # It will remain as a keyword-based search for now as per the plan,
-    # with a note that complex logic will be implemented later.
-    keyword_list = [kw.strip() for kw in keywords.split(',') if kw.strip()]
-    if not keyword_list:
-        raise HTTPException(status_code=400, detail="At least one keyword is required for search.")
-    
-    memories = crud.retrieve_relevant_memories(
-        db=db,
-        keywords=keyword_list,
-        agent_id=agent_id,
-        conversation_id=conversation_id,
-        limit=limit
-    )
-    return memories
-
-@router.get("/memory-blocks/{memory_id}/keywords/", response_model=List[schemas.Keyword])
-def get_memory_block_keywords_endpoint(memory_id: uuid.UUID, db: Session = Depends(get_db)):
-    db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
-    if not db_memory_block:
-        raise HTTPException(status_code=404, detail="Memory block not found")
-
-    keywords = crud.get_memory_block_keywords(db, memory_id=memory_id)
-    return keywords
-
-@router.get("/keywords/{keyword_id}/memory-blocks/", response_model=List[schemas.MemoryBlock])
-def get_keyword_memory_blocks_endpoint(keyword_id: uuid.UUID, skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    """
-    Get all memory blocks associated with a specific keyword.
-    This endpoint is used for keyword analytics to show which memory blocks use each keyword.
-    """
-    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
-    if not db_keyword:
-        raise HTTPException(status_code=404, detail="Keyword not found")
-
-    memory_blocks = crud.get_keyword_memory_blocks(db, keyword_id=keyword_id, skip=skip, limit=limit)
-    return memory_blocks
-
-@router.get("/keywords/{keyword_id}/memory-blocks/count")
-def get_keyword_memory_blocks_count_endpoint(keyword_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Get the count of memory blocks associated with a specific keyword.
-    This endpoint is used for displaying usage statistics on keyword cards.
-    """
-    db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
-    if not db_keyword:
-        raise HTTPException(status_code=404, detail="Keyword not found")
-
-    count = crud.get_keyword_memory_blocks_count(db, keyword_id=keyword_id)
-    return {"count": count}
+    db.commit()
+    db.refresh(mb)
+    return mb
 
 # Consolidation Trigger Endpoint
-@router.post("/consolidation/trigger/", status_code=status.HTTP_202_ACCEPTED)
-def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
-    """
-    Trigger the memory block consolidation process manually.
-    This endpoint initiates the worker process to analyze memory blocks for duplicates
-    and generate consolidation suggestions.
-    """
-    from core.core.consolidation_worker import run_consolidation_analysis
-    logger.info("Manual trigger of consolidation process received")
-    
-    # Retrieve LLM_API_KEY from environment variables
-    llm_api_key = os.getenv("LLM_API_KEY")
-    if not llm_api_key:
-        logger.warning("LLM_API_KEY is not set. LLM-based consolidation will not occur.")
-        # Optionally, you might raise an HTTPException here if LLM is strictly required
-        # raise HTTPException(status_code=500, detail="LLM_API_KEY is not set, LLM-based consolidation cannot proceed.")
+# Consolidation endpoints moved to core.api.consolidation
 
-    try:
-        # Run the consolidation process in a non-blocking way if possible
-        # For simplicity in this implementation, we run it synchronously
-        run_consolidation_analysis(llm_api_key)
-        return {"message": "Consolidation process triggered successfully"}
-    except Exception as e:
-        logger.error(f"Error triggering consolidation process: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error triggering consolidation process: {str(e)}")
+"""Support and build-info endpoints moved to core.api.support"""
 
-# Consolidation Suggestions Endpoints
-@router.get("/consolidation-suggestions/", response_model=schemas.PaginatedConsolidationSuggestions)
-def get_consolidation_suggestions_endpoint(
-    status: Optional[str] = None,
-    group_id: Optional[uuid.UUID] = None,
-    sort_by: Optional[str] = "timestamp",
-    sort_order: Optional[str] = "desc",
-    skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db)
-):
-    """
-    Retrieve all consolidation suggestions with filtering, sorting, and pagination.
-    """
-    logger.info(f"Fetching consolidation suggestions with filters: status={status}, group_id={group_id}")
-    
-    # Get paginated suggestions and total count
-    suggestions, total_items = crud.get_consolidation_suggestions(
-        db=db,
-        status=status,
-        group_id=group_id,
-        skip=skip,
-        limit=limit
-    )
-    
-    total_pages = math.ceil(total_items / limit) if limit > 0 else 0
-
-    return {
-        "items": suggestions,
-        "total_items": total_items,
-        "total_pages": total_pages
-    }
-
-@router.get("/consolidation-suggestions/{suggestion_id}", response_model=schemas.ConsolidationSuggestion)
-def get_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Retrieve a specific consolidation suggestion by ID.
-    """
-    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
-    if not suggestion:
-        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
-    return suggestion
-
-@router.post("/consolidation-suggestions/{suggestion_id}/validate/", response_model=schemas.ConsolidationSuggestion)
-def validate_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Validate a consolidation suggestion, replacing original memory blocks with the consolidated version.
-    """
-    logger.info(f"Validating consolidation suggestion {suggestion_id}")
-    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
-    if not suggestion:
-        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
-    if suggestion.status != "pending":
-        raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
-
-    try:
-        crud.apply_consolidation(db, suggestion_id=suggestion_id)
-        # Fetch the updated suggestion to return
-        updated_suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
-        if not updated_suggestion:
-            raise HTTPException(status_code=404, detail="Updated consolidation suggestion not found")
-        # Update status to 'validated' if not already set by apply_consolidation
-        if updated_suggestion.status == "pending":
-            update_schema = schemas.ConsolidationSuggestionUpdate(status="validated")
-            updated_suggestion = crud.update_consolidation_suggestion(db, suggestion_id=suggestion_id, suggestion=update_schema)
-        return updated_suggestion
-    except Exception as e:
-        logger.error(f"Error validating suggestion {suggestion_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error validating suggestion: {str(e)}")
-
-@router.post("/consolidation-suggestions/{suggestion_id}/reject/", response_model=schemas.ConsolidationSuggestion)
-def reject_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Reject a consolidation suggestion, marking it as rejected.
-    """
-    logger.info(f"Rejecting consolidation suggestion {suggestion_id}")
-    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
-    if not suggestion:
-        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
-    if suggestion.status != "pending":
-        raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
-
-    # Create a schema object for the update
-    update_schema = schemas.ConsolidationSuggestionUpdate(status="rejected")
-    updated_suggestion = crud.update_consolidation_suggestion(db, suggestion_id=suggestion_id, suggestion=update_schema)
-    return updated_suggestion
-
-@router.delete("/consolidation-suggestions/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_consolidation_suggestion_endpoint(suggestion_id: uuid.UUID, db: Session = Depends(get_db)):
-    """
-    Deletes a consolidation suggestion from the database.
-    """
-    success = crud.delete_consolidation_suggestion(db, suggestion_id=suggestion_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
-    return {"message": "Consolidation suggestion deleted successfully"}
-
-# Health check endpoint
-@router.get("/health")
-def health_check():
-    return {"status": "ok"}
-
-@router.get("/build-info")
-def get_build_info():
-    """
-    Returns build and deployment information for the current running service.
-    """
-    build_sha = os.getenv("BUILD_SHA")
-    build_timestamp = os.getenv("BUILD_TIMESTAMP")
-    image_tag = os.getenv("IMAGE_TAG")
-    version = os.getenv("VERSION", "unknown")
-    
-    # Return None for missing values instead of default strings
-    return {
-        "build_sha": build_sha if build_sha else None,
-        "build_timestamp": build_timestamp if build_timestamp else None,
-        "image_tag": image_tag if image_tag else None,
-        "service_name": "hindsight-service",
-        "version": version
-    }
-
-# User info endpoint for OAuth2 authentication
 @router.get("/user-info")
 def get_user_info(
+    request: Request,
     x_auth_request_user: Optional[str] = Header(default=None),
     x_auth_request_email: Optional[str] = Header(default=None),
-    # In reverse-proxy mode, oauth2-proxy typically sets X-Forwarded-* headers to upstream
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    db: Session = Depends(get_db),
 ):
     """
-    Returns the authenticated user information from OAuth2 proxy headers.
-    These headers are set by the OAuth2 proxy when authentication is successful.
-
-    For local development, bypasses authentication and returns mock user info.
+    Return authenticated user info and memberships.
+    - Dev mode (DEV_MODE=true): returns a stable dev user and ensures it exists.
+    - Normal mode: reads headers set by oauth2-proxy, upserts user, and returns memberships.
     """
-    # Check if we're in development mode
-    is_dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+    try:
+        is_dev_mode = dev_mode_active()
+    except RuntimeError as exc:
+        logger.error("DEV_MODE misconfiguration detected: %s", exc)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DEV_MODE misconfigured")
+
+    flags = get_feature_flags()
 
     if is_dev_mode:
-        # Development mode: bypass authentication
+        email = "dev@localhost"
+        user = get_or_create_user(db, email=email, display_name="Development User")
+        if getattr(user, "beta_access_status", "") != "accepted":
+            user.beta_access_status = "accepted"
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+            else:
+                db.refresh(user)
+
+        # Comment out automatic superadmin privileges for dev user to test non-superadmin functionality
+        # if not user.is_superadmin:
+        #     user.is_superadmin = True
+        #     db.commit()
+        #     db.refresh(user)
+            
+        memberships = get_user_memberships(db, user.id)
+        beta_admin = is_beta_access_admin(user.email) or bool(user.is_superadmin)
         return {
             "authenticated": True,
-            "user": "dev_user",
-            "email": "dev@localhost"
+            "user_id": str(user.id),
+            "email": user.email,
+            "display_name": user.display_name,
+            "is_superadmin": bool(user.is_superadmin),
+            "beta_access_status": user.beta_access_status,
+            "memberships": memberships,
+            "beta_access_admin": beta_admin,
+            "llm_features_enabled": flags["llm_features_enabled"],
         }
 
-    # Production mode: check OAuth2 proxy headers
-    user = x_auth_request_user or x_forwarded_user
-    email = x_auth_request_email or x_forwarded_email
+    # If a PAT is provided, authenticate via PAT first
+    if authorization or x_api_key:
+        try:
+            from core.api.deps import get_current_user_context_or_pat
+            user, current_user = get_current_user_context_or_pat(
+                db=db,
+                authorization=authorization,
+                x_api_key=x_api_key,
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+            memberships = current_user.get("memberships") or []
+            return {
+                "authenticated": True,
+                "user_id": str(user.id),
+                "email": user.email,
+                "display_name": user.display_name,
+                "is_superadmin": bool(getattr(user, "is_superadmin", False)),
+                "beta_access_status": user.beta_access_status,
+                "memberships": memberships,
+                "pat": current_user.get("pat") or None,
+                "llm_features_enabled": flags["llm_features_enabled"],
+            }
+        except HTTPException as e:
+            return JSONResponse({"authenticated": False, "detail": e.detail}, status_code=e.status_code)
 
-    if not user and not email:
-        return {"authenticated": False, "message": "No authentication headers found"}
+    # Local dev fallback (no oauth, no PAT) when running on localhost
+    try:
+        allow_local = os.getenv("ALLOW_LOCAL_DEV_AUTH", "true").lower() == "true"
+    except Exception:
+        allow_local = True
+    host = (request.headers.get('host') or '').lower()
+    client_ip = None
+    try:
+        client_ip = request.client.host if request.client else None
+    except Exception:
+        client_ip = None
+    is_local = allow_local and (host.startswith('localhost') or host.startswith('127.0.0.1') or client_ip in ('127.0.0.1', '::1', None))
+    if is_local and not any([x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email]):
+        email = os.getenv('DEV_LOCAL_EMAIL', 'dev@localhost')
+        name = os.getenv('DEV_LOCAL_NAME', 'Development User')
+        user = get_or_create_user(db, email=email, display_name=name)
+        memberships = get_user_memberships(db, user.id)
+        return {
+            "authenticated": True,
+            "user_id": str(user.id),
+            "email": user.email,
+            "display_name": user.display_name,
+            "is_superadmin": bool(user.is_superadmin),
+            "beta_access_status": user.beta_access_status,
+            "memberships": memberships,
+            "llm_features_enabled": flags["llm_features_enabled"],
+        }
 
+    # Otherwise, fallback to oauth2-proxy headers
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if not name and not email:
+        return JSONResponse({"authenticated": False}, status_code=status.HTTP_401_UNAUTHORIZED)
+
+    if not email:
+        return {"authenticated": True, "user": name or None, "email": None}
+
+    user = get_or_create_user(db, email=email, display_name=name)
+    memberships = get_user_memberships(db, user.id)
+    beta_admin = is_beta_access_admin(user.email) or bool(user.is_superadmin)
     return {
         "authenticated": True,
-        "user": user,
-        "email": email,
+        "user_id": str(user.id),
+        "email": user.email,
+        "display_name": user.display_name,
+        "is_superadmin": bool(user.is_superadmin),
+        "beta_access_status": user.beta_access_status,
+        "memberships": memberships,
+        "beta_access_admin": beta_admin,
+        "llm_features_enabled": flags["llm_features_enabled"],
     }
 
 # Dashboard Stats Endpoints
 @router.get("/conversations/count")
-def get_conversations_count_endpoint(db: Session = Depends(get_db)):
+def get_conversations_count_endpoint(
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
     """
     Get the count of unique conversations from memory blocks.
     This endpoint is used by the dashboard to display conversation statistics.
     """
     try:
-        count = crud.get_unique_conversation_count(db)
+        user, current_user, scope_ctx = scoped
+        ensure_pat_allows_read(current_user, scope_ctx.organization_id)
+        count = crud.get_unique_conversation_count(db, current_user=current_user, scope_ctx=scope_ctx)
         return {"count": count or 0}  # Return 0 if count is None
     except Exception as e:
         logger.error(f"Error getting conversations count: {str(e)}")
@@ -872,6 +451,9 @@ def generate_pruning_suggestions_endpoint(
     """
     if request is None:
         request = {}
+
+    if not llm_features_enabled():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
     
     batch_size = request.get("batch_size", 50)
     target_count = request.get("target_count")
@@ -963,6 +545,9 @@ def compress_memory_block_endpoint(
     """
     if request is None:
         request = {}
+
+    if not llm_features_enabled():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
 
     user_instructions = request.get("user_instructions", "")
 
@@ -1269,6 +854,9 @@ async def bulk_compact_memory_blocks_endpoint(
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
     
+    if not llm_features_enabled():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
+
     logger.info(f"Bulk compaction request received with {len(request.get('memory_block_ids', []))} blocks")
     
     memory_block_ids = request.get("memory_block_ids", [])
@@ -1382,7 +970,13 @@ async def bulk_compact_memory_blocks_endpoint(
     
     try:
         # Use ThreadPoolExecutor for concurrent processing
-        loop = asyncio.get_event_loop()
+        # Use a fresh event loop retrieval that is future-safe; if no loop set, create one
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop; create a temporary one (mainly for sync test contexts)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
             # Create tasks for all memory blocks
             tasks = [
@@ -1435,7 +1029,13 @@ def search_memory_blocks_fulltext_endpoint(
     limit: int = 50,
     min_score: float = 0.1,
     include_archived: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     """
     Perform BM25-like full-text search on memory blocks using PostgreSQL's full-text search capabilities.
@@ -1455,6 +1055,48 @@ def search_memory_blocks_fulltext_endpoint(
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
     
     try:
+        current_user = None
+        if authorization or x_api_key:
+            try:
+                _u, current_user = get_current_user_context_or_pat(
+                    db=db,
+                    authorization=authorization,
+                    x_api_key=x_api_key,
+                    x_auth_request_user=x_auth_request_user,
+                    x_auth_request_email=x_auth_request_email,
+                    x_forwarded_user=x_forwarded_user,
+                    x_forwarded_email=x_forwarded_email,
+                )
+            except HTTPException:
+                raise
+        else:
+            name, email = resolve_identity_from_headers(
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+            if email:
+                u = get_or_create_user(db, email=email, display_name=name)
+                memberships = get_user_memberships(db, u.id)
+                current_user = {
+                    "id": u.id,
+                    "is_superadmin": bool(u.is_superadmin),
+                    "memberships": memberships,
+                    "memberships_by_org": {m["organization_id"]: m for m in memberships},
+                }
+
+        # Narrow memberships to PAT org if present
+        if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+            pat_org = str(current_user["pat"]["organization_id"])  # string key
+            m = (current_user.get("memberships_by_org") or {}).get(pat_org)
+            if m:
+                current_user = {
+                    **current_user,
+                    "memberships": [m],
+                    "memberships_by_org": {pat_org: m},
+                }
+
         results, metadata = crud.search_memory_blocks_fulltext(
             db=db,
             query=query.strip(),
@@ -1462,7 +1104,8 @@ def search_memory_blocks_fulltext_endpoint(
             conversation_id=conversation_id,
             limit=limit,
             min_score=min_score,
-            include_archived=include_archived
+            include_archived=include_archived,
+            current_user=current_user,
         )
         
         logger.info(f"Full-text search for '{query}' returned {len(results)} results")
@@ -1480,7 +1123,13 @@ def search_memory_blocks_semantic_endpoint(
     limit: int = 50,
     similarity_threshold: float = 0.7,
     include_archived: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     """
     Perform semantic search on memory blocks using embeddings (placeholder implementation).
@@ -1500,6 +1149,47 @@ def search_memory_blocks_semantic_endpoint(
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
     
     try:
+        current_user = None
+        if authorization or x_api_key:
+            try:
+                _u, current_user = get_current_user_context_or_pat(
+                    db=db,
+                    authorization=authorization,
+                    x_api_key=x_api_key,
+                    x_auth_request_user=x_auth_request_user,
+                    x_auth_request_email=x_auth_request_email,
+                    x_forwarded_user=x_forwarded_user,
+                    x_forwarded_email=x_forwarded_email,
+                )
+            except HTTPException:
+                raise
+        else:
+            name, email = resolve_identity_from_headers(
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+            current_user = None
+            if email:
+                u = get_or_create_user(db, email=email, display_name=name)
+                memberships = get_user_memberships(db, u.id)
+                current_user = {
+                    "id": u.id,
+                    "is_superadmin": bool(u.is_superadmin),
+                    "memberships": memberships,
+                    "memberships_by_org": {m["organization_id"]: m for m in memberships},
+                }
+
+        if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+            pat_org = str(current_user["pat"]["organization_id"])  # string key
+            m = (current_user.get("memberships_by_org") or {}).get(pat_org)
+            if m:
+                current_user = {
+                    **current_user,
+                    "memberships": [m],
+                    "memberships_by_org": {pat_org: m},
+                }
         results, metadata = crud.search_memory_blocks_semantic(
             db=db,
             query=query.strip(),
@@ -1507,7 +1197,8 @@ def search_memory_blocks_semantic_endpoint(
             conversation_id=conversation_id,
             limit=limit,
             similarity_threshold=similarity_threshold,
-            include_archived=include_archived
+            include_archived=include_archived,
+            current_user=current_user,
         )
         
         logger.info(f"Semantic search for '{query}' returned {len(results)} results (placeholder)")
@@ -1527,7 +1218,13 @@ def search_memory_blocks_hybrid_endpoint(
     semantic_weight: float = 0.3,
     min_combined_score: float = 0.1,
     include_archived: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
     """
     Perform hybrid search combining full-text and semantic search with weighted scoring.
@@ -1553,6 +1250,46 @@ def search_memory_blocks_hybrid_endpoint(
         raise HTTPException(status_code=400, detail="Fulltext and semantic weights must sum to 1.0")
     
     try:
+        current_user = None
+        if authorization or x_api_key:
+            try:
+                _u, current_user = get_current_user_context_or_pat(
+                    db=db,
+                    authorization=authorization,
+                    x_api_key=x_api_key,
+                    x_auth_request_user=x_auth_request_user,
+                    x_auth_request_email=x_auth_request_email,
+                    x_forwarded_user=x_forwarded_user,
+                    x_forwarded_email=x_forwarded_email,
+                )
+            except HTTPException:
+                raise
+        else:
+            name, email = resolve_identity_from_headers(
+                x_auth_request_user=x_auth_request_user,
+                x_auth_request_email=x_auth_request_email,
+                x_forwarded_user=x_forwarded_user,
+                x_forwarded_email=x_forwarded_email,
+            )
+            if email:
+                u = get_or_create_user(db, email=email, display_name=name)
+                memberships = get_user_memberships(db, u.id)
+                current_user = {
+                    "id": u.id,
+                    "is_superadmin": bool(u.is_superadmin),
+                    "memberships": memberships,
+                    "memberships_by_org": {m["organization_id"]: m for m in memberships},
+                }
+
+        if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
+            pat_org = str(current_user["pat"]["organization_id"])  # string key
+            m = (current_user.get("memberships_by_org") or {}).get(pat_org)
+            if m:
+                current_user = {
+                    **current_user,
+                    "memberships": [m],
+                    "memberships_by_org": {pat_org: m},
+                }
         results, metadata = crud.search_memory_blocks_hybrid(
             db=db,
             query=query.strip(),
@@ -1562,7 +1299,8 @@ def search_memory_blocks_hybrid_endpoint(
             fulltext_weight=fulltext_weight,
             semantic_weight=semantic_weight,
             min_combined_score=min_combined_score,
-            include_archived=include_archived
+            include_archived=include_archived,
+            current_user=current_user,
         )
         
         logger.info(f"Hybrid search for '{query}' returned {len(results)} results")
@@ -1574,6 +1312,17 @@ def search_memory_blocks_hybrid_endpoint(
 
 # Include the main router
 app.include_router(router)
+app.include_router(users_router)
+app.include_router(orgs_router)
+app.include_router(agents_router)
+app.include_router(keywords_router)
+app.include_router(memory_blocks_router)
+app.include_router(audits_router)
+app.include_router(bulk_operations_router)
+app.include_router(notifications_router)
+app.include_router(consolidation_router)
+app.include_router(support_router)
+app.include_router(beta_access_router)
 
 # Include memory optimization router
 try:

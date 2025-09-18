@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Beta Access Granted - Welcome to Hindsight AI!{% endblock %}
+
+{% block header_title %}Welcome to the Beta!{% endblock %}
+{% block header_subtitle %}Your access to Hindsight AI has been approved{% endblock %}
+
+{% block content %}
+<h2>Congratulations! You're In.</h2>
+
+<p>Hello!</p>
+
+<p>Great news! Your request for beta access to Hindsight AI has been approved. You now have full access to the platform.</p>
+
+<div class="highlight">
+    <p><strong>What you can do now:</strong></p>
+    <ul style="margin: 8px 0; padding-left: 20px;">
+        <li>Access all Hindsight AI features</li>
+        <li>Manage your AI memory and knowledge</li>
+        <li>Collaborate with other beta users</li>
+        <li>Provide feedback to help us improve</li>
+    </ul>
+</div>
+
+<div class="button-container">
+    <a href="{{ login_url }}" class="button">Start Using Hindsight AI</a>
+</div>
+
+<p>Thank you for joining our beta program! Your feedback and participation will help us build the best AI memory management platform possible.</p>
+
+<p style="margin-top: 32px; color: #64748b; font-size: 14px;">
+    If you have any questions or need help getting started, please don't hesitate to contact our support team.
+</p>
+{% endblock %}

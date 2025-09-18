@@ -1,3 +1,9 @@
+"""
+Maintenance script to normalize and de-duplicate keywords.
+
+Finds canonical forms, re-associates memory relations, and prunes duplicates
+to keep keyword taxonomy clean.
+"""
 import sys
 import os
 from sqlalchemy.orm import Session
