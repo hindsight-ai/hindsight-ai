@@ -1,0 +1,210 @@
+{
+  "summaryClients": [
+    {
+      "name": "Claude Desktop",
+      "method": "Config file",
+      "format": "JSON",
+      "location": "macOS: ~/Library/Application Support/Claude/claude_desktop_config.json<br>Windows: %APPDATA%\\Claude\\claude_desktop_config.json"
+    },
+    {
+      "name": "Claude Code",
+      "method": "VS Code settings",
+      "format": "JSON",
+      "location": "User/Workspace settings.json"
+    },
+    {
+      "name": "Cline",
+      "method": "Command Palette / config file",
+      "format": "JSON",
+      "location": "Workspace .cline/config.json"
+    },
+    {
+      "name": "Codex CLI",
+      "method": "Config file",
+      "format": "TOML",
+      "location": "~/.codex/config.toml"
+    },
+    {
+      "name": "Cursor",
+      "method": "Config file / UI",
+      "format": "JSON",
+      "location": "~/.cursor/mcp.json or .cursor/mcp.json"
+    },
+    {
+      "name": "Continue",
+      "method": "Config file",
+      "format": "YAML",
+      "location": ".continue/mcpServers/*.yaml"
+    },
+    {
+      "name": "LibreChat",
+      "method": "Config file",
+      "format": "YAML",
+      "location": "librechat.yaml"
+    },
+    {
+      "name": "VS Code GitHub Copilot",
+      "method": "MCP configuration",
+      "format": "JSON",
+      "location": ".vscode/mcp.json (workspace) or user-level equivalent"
+    }
+  ],
+  "clients": [
+    {
+      "name": "Claude Desktop",
+      "steps": [
+        "Open **Settings \u2192 Model Context Protocol \u2192 Open Configuration File**.",
+        "Extend the `mcpServers` object with the entry below, replacing placeholder values with your actual token and UUIDs.",
+        "Fully quit and relaunch Claude Desktop (or toggle MCP off/on) so it reloads the configuration."
+      ],
+      "codeSamples": [
+        {
+          "language": "json",
+          "code": "{\n  \"mcpServers\": {\n    \"hindsight-mcp\": {\n      \"command\": \"hindsight-mcp\",\n      \"transportType\": \"stdio\",\n      \"timeout\": 60,\n      \"env\": {\n        \"DEFAULT_AGENT_ID\": \"00000000-0000-0000-0000-000000000000\",\n        \"DEFAULT_CONVERSATION_ID\": \"00000000-0000-0000-0000-000000000000\",\n        \"HINDSIGHT_API_TOKEN\": \"hs_pat_xxx\"\n      }\n    }\n  }\n}"
+        }
+      ],
+      "notes": [
+        "The hosted API is used by default\u2014set `HINDSIGHT_API_BASE_URL` only for self-hosted deployments."
+      ]
+    },
+    {
+      "name": "Cline (VS Code)",
+      "intro": "Install the [Cline extension](https://github.com/cline/cline) and make sure the `hindsight-mcp` binary is available on your `PATH`.",
+      "steps": [
+        "Run **Cline: Manage MCP Servers \u2192 Add Server** from the Command Palette.",
+        "Set **Name** to `hindsight-mcp`, **Command** to `hindsight-mcp`, and leave **Args** empty (`[]`).",
+        "Add the environment variables you need (token plus optional defaults) as shown below.",
+        "Save the entry (written to `.cline/config.json`) and run **Cline: Reload MCP Servers**."
+      ],
+      "codeSamples": [
+        {
+          "language": "json",
+          "code": "{\n  \"DEFAULT_AGENT_ID\": \"00000000-0000-0000-0000-000000000000\",\n  \"DEFAULT_CONVERSATION_ID\": \"00000000-0000-0000-0000-000000000000\",\n  \"HINDSIGHT_API_TOKEN\": \"hs_pat_xxx\"\n}"
+        }
+      ],
+      "notes": [
+        "You can edit `.cline/config.json` directly later if you prefer working in JSON.",
+        "Add `HINDSIGHT_API_BASE_URL` only when pointing at a self-hosted or local deployment."
+      ]
+    },
+    {
+      "name": "Claude Code (VS Code)",
+      "steps": [
+        "Ensure `hindsight-mcp` is installed globally or reachable via `npx`.",
+        "Open VS Code **Settings (JSON)** and add/extend the `claudeCode.mcpServers` array as shown below.",
+        "Reload the Claude Code view (or restart VS Code) to pick up the change."
+      ],
+      "codeSamples": [
+        {
+          "language": "json",
+          "code": "\"claudeCode.mcpServers\": [\n  {\n    \"name\": \"hindsight-mcp\",\n    \"command\": \"hindsight-mcp\",\n    \"transport\": \"stdio\",\n    \"env\": {\n      \"DEFAULT_AGENT_ID\": \"00000000-0000-0000-0000-000000000000\",\n      \"DEFAULT_CONVERSATION_ID\": \"00000000-0000-0000-0000-000000000000\",\n      \"HINDSIGHT_API_TOKEN\": \"hs_pat_xxx\"\n    }\n  }\n]"
+        }
+      ]
+    },
+    {
+      "name": "Codex CLI",
+      "steps": [
+        "Install the [Codex CLI](https://github.com/OpenAI/codex-cli) if you have not already.",
+        "Install or link `hindsight-mcp` so the binary is on `PATH` (see the installation section above).",
+        "Add the TOML block below to the `mcp_servers` table in `~/.codex/config.toml`.",
+        "Restart any active Codex sessions and verify with `codex mcp --list` or the MCP Inspector."
+      ],
+      "codeSamples": [
+        {
+          "language": "toml",
+          "code": "[mcp_servers.hindsight-mcp]\ncommand = \"hindsight-mcp\"\nargs = []\nenv = {\n  DEFAULT_AGENT_ID = \"00000000-0000-0000-0000-000000000000\",\n  DEFAULT_CONVERSATION_ID = \"00000000-0000-0000-0000-000000000000\",\n  HINDSIGHT_API_TOKEN = \"hs_pat_your_token_here\"\n}"
+        }
+      ],
+      "notes": [
+        "Prefer `command = \"node\"` plus an absolute path or `command = \"npx\"` when you do not want a global install.",
+        "Omit `HINDSIGHT_API_BASE_URL` unless you need to target a non-hosted endpoint."
+      ]
+    },
+    {
+      "name": "Cursor",
+      "intro": "Cursor supports environment interpolation, so keep secrets out of the JSON by referencing `${env:VAR}` placeholders.",
+      "steps": [
+        "Create or open `~/.cursor/mcp.json` for global settings or `.cursor/mcp.json` for the current project.",
+        "Add the server definition shown below. Ensure `HINDSIGHT_API_TOKEN` is exported in your shell before launching Cursor.",
+        "Reload Cursor (Command Palette \u2192 `Cursor: Reload Window`) to apply the configuration."
+      ],
+      "codeSamples": [
+        {
+          "language": "json",
+          "code": "{\n  \"mcpServers\": {\n    \"hindsight-mcp\": {\n      \"command\": \"hindsight-mcp\",\n      \"transportType\": \"stdio\",\n      \"env\": {\n        \"HINDSIGHT_API_TOKEN\": \"${env:HINDSIGHT_API_TOKEN}\"\n      }\n    }\n  }\n}"
+        }
+      ],
+      "notes": [
+        "If the token is missing, Cursor prompts you to enter it securely the next time it launches.",
+        "Set `HINDSIGHT_API_BASE_URL` in the `env` block only when you need to override the hosted API."
+      ]
+    },
+    {
+      "name": "Continue (VS Code / JetBrains)",
+      "steps": [
+        "Create the directory `.continue/mcpServers/` in the root of your workspace if it does not already exist.",
+        "Add a new file `hindsight.yaml` with the contents below (environment variables are resolved via `${{ env.VAR }}` syntax).",
+        "Reload Continue (Command Palette \u2192 `Continue: Reload`) so the new server is registered."
+      ],
+      "codeSamples": [
+        {
+          "language": "yaml",
+          "code": "name: Hindsight Memory\nmcpServers:\n  - name: hindsight-mcp\n    command: hindsight-mcp\n    env:\n      HINDSIGHT_API_TOKEN: ${{ env.HINDSIGHT_API_TOKEN }}"
+        }
+      ],
+      "notes": [
+        "Add `HINDSIGHT_API_BASE_URL` if you are connecting to a self-hosted instance."
+      ]
+    },
+    {
+      "name": "LibreChat",
+      "steps": [
+        "Open `librechat.yaml` in your LibreChat deployment.",
+        "Add (or extend) the `mcpServers` section with the block below. LibreChat reads environment variables from the host system or a `.env` file.",
+        "Restart LibreChat so it loads the revised configuration."
+      ],
+      "codeSamples": [
+        {
+          "language": "yaml",
+          "code": "mcpServers:\n  hindsight-mcp:\n    command: hindsight-mcp\n    env:\n      HINDSIGHT_API_TOKEN: \"${HINDSIGHT_API_TOKEN}\"\n    # chatMenu: false  # Optional: limit to agents only"
+        }
+      ],
+      "notes": [
+        "Include `HINDSIGHT_API_BASE_URL` in the env map only when using a custom deployment."
+      ]
+    },
+    {
+      "name": "VS Code GitHub Copilot (MCP)",
+      "intro": "The Copilot MCP integration supports secure inputs. Use the configuration below to store your token via the built-in secret manager.",
+      "steps": [
+        "Open the Command Palette and run **MCP: Open Workspace Folder Configuration** (or the user-level equivalent).",
+        "Paste the JSON below into `.vscode/mcp.json`.",
+        "When prompted, supply your Hindsight API token\u2014VS Code stores it in the system keychain."
+      ],
+      "codeSamples": [
+        {
+          "language": "json",
+          "code": "{\n  \"servers\": {\n    \"hindsight-mcp\": {\n      \"command\": \"hindsight-mcp\",\n      \"env\": {\n        \"HINDSIGHT_API_TOKEN\": \"${user.input.hindsightApiToken}\"\n      }\n    }\n  },\n  \"inputs\": {\n    \"hindsightApiToken\": {\n      \"type\": \"command\",\n      \"command\": \"mcp.selectSecret\",\n      \"description\": \"Hindsight API token\"\n    }\n  }\n}"
+        }
+      ],
+      "notes": [
+        "Add `HINDSIGHT_API_BASE_URL` to the `env` block only for self-hosted environments."
+      ]
+    }
+  ],
+  "additionalSections": [
+    {
+      "title": "Other client categories",
+      "blocks": [
+        {
+          "type": "list",
+          "items": [
+            "**Code-based / SDK clients** (askit-mcp, Dolphin-MCP, MCP CLI, etc.): spawn `hindsight-mcp` from your runtime and pass environment variables programmatically.",
+            "**UI-first desktop apps** (Cherry Studio, Windsurf, DeepChat, Tome, etc.): add a stdio server in the app's MCP or Tools preferences with the same command and env values.",
+            "**Remote or web clients** (Runbear, Superinterface, WhatsMCP, etc.): most expect HTTP-based MCP servers. Use an MCP proxy to expose the local stdio process over HTTPS if required."
+          ]
+        }
+      ]
+    }
+  ]
+}
