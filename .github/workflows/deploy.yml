@@ -217,9 +217,9 @@ jobs:
             PRUNING_BATCH_SIZE=${{ secrets.PRUNING_BATCH_SIZE }}
             PRUNING_MAX_ITERATIONS=${{ secrets.PRUNING_MAX_ITERATIONS }}
             EMAIL_PROVIDER=${{ secrets.EMAIL_PROVIDER }}
-            FROM_EMAIL=${{ secrets.FROM_EMAIL }}
-            FROM_NAME=${{ secrets.FROM_NAME }}
-            REPLY_TO_EMAIL=${{ secrets.REPLY_TO_EMAIL }}
+            FROM_EMAIL=${{ toJSON(secrets.FROM_EMAIL) }}
+            FROM_NAME=${{ toJSON(secrets.FROM_NAME) }}
+            REPLY_TO_EMAIL=${{ toJSON(secrets.REPLY_TO_EMAIL) }}
             RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
             EMAIL_TEMPLATE_DIR=${{ secrets.EMAIL_TEMPLATE_DIR }}
             EMAIL_RATE_LIMIT_HOUR=${{ secrets.EMAIL_RATE_LIMIT_HOUR }}
