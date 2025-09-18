@@ -1119,7 +1119,7 @@ Last updated: manual
   - `OAUTH2_PROXY_COOKIE_SAMESITE=lax`, `OAUTH2_PROXY_COOKIE_SECURE=true`, cookie domain `.hindsight-ai.com`
   - `OAUTH2_PROXY_REVERSE_PROXY=true`, `OAUTH2_PROXY_SET_XAUTHREQUEST=true`, `OAUTH2_PROXY_PASS_ACCESS_TOKEN=true`, `OAUTH2_PROXY_SET_AUTHORIZATION_HEADER=true`
   - `OAUTH2_PROXY_SKIP_AUTH_ROUTES=/manifest.json$,/favicon.ico$,^/guest-api/.*`
-  - `OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE=/etc/oauth2-proxy/authorized_emails.txt`
+  - `OAUTH2_PROXY_EMAIL_DOMAINS=*` to accept any Google account that completes OAuth (set `OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE=/etc/oauth2-proxy/authorized_emails.txt` and mount `authorized_emails.txt` only if you need to reinstate a closed allowlist).
   - `OAUTH2_PROXY_LOGOUT_REDIRECT_URL=https://accounts.google.com/Logout`
 
 Traefik labels:

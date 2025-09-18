@@ -63,14 +63,14 @@ sequenceDiagram
     *   If the user is not authenticated (no valid `oauth2-proxy` cookie), `oauth2-proxy` generates a Google login URL and sends a `302 Redirect` response back to the user's browser.
     *   The user's browser then redirects to Google's authentication page.
     *   After the user successfully logs in with their Google account, Google redirects the user's browser back to `oauth2-proxy`'s callback URL (`https://www.hindsight-ai.com/oauth2/callback`) with an authorization code.
-    *   `oauth2-proxy` exchanges this code with Google for user tokens and then verifies the user's email address against the allowed list (e.g., `ibarz.jean@gmail.com`).
+    *   `oauth2-proxy` exchanges this code with Google for user tokens and then verifies the user's email address against the configured domain rules (`OAUTH2_PROXY_EMAIL_DOMAINS`). With the current `*` wildcard, any Google account that completes the flow is accepted.
     *   If the email is authorized, `oauth2-proxy` sets a secure authentication cookie in the user's browser and then signals Traefik to allow the original request to proceed.
 6.  **Authentication Check (Subsequent Access):**
     *   If the user already has a valid `oauth2-proxy` cookie, Traefik still forwards the request to `oauth2-proxy`.
     *   `oauth2-proxy` validates the existing cookie. If valid, it immediately signals Traefik to allow the request to proceed without redirecting to Google.
 7.  **Dashboard Access:** Once `oauth2-proxy` authorizes the request, Traefik routes the request to the `hindsight-dashboard-service`. The dashboard serves its content, which is then passed back through Traefik and Cloudflare to the user's browser.
 
-This entire process ensures that only pre-approved Google accounts can access your Hindsight AI Dashboard and API.
+This entire process ensures that only Google-authenticated accounts reach your Hindsight AI Dashboard and API, with access controlled via `OAUTH2_PROXY_EMAIL_DOMAINS` (default `*`).
 
 ## Beta Access Gate: Post-Login Decisions
 
@@ -124,7 +124,7 @@ To avoid confusion (or duplicate emails) when an administrator reopens the same 
 
 ### Manual Overrides & Revocation
 
-Administrators listed in `BETA_ACCESS_ADMINS` can visit `/beta-access/admin` directly (there is no navigation link) to inspect user status and perform manual overrides. Updates are audited as `beta_access_review` entries and support four outcomes:
+Administrators listed in `BETA_ACCESS_ADMINS` (comma-separated emails) can visit `/beta-access/admin` directly (there is no navigation link) to inspect user status and perform manual overrides. Updates are audited as `beta_access_review` entries and support four outcomes:
 
 * `accepted` / `denied` – mirror the standard decision flow and synchronise the most recent request record.
 * `revoked` – indicates access was granted previously but has now been intentionally rescinded. Users experience the same gating as `denied`, but audit trails retain the distinction.
