@@ -164,6 +164,15 @@ npm install
 npm start
 ```
 
+## Database Backups & Restores
+
+Postgres stores its data in the Docker volume `db_data`, mounted at `/var/lib/postgresql/data`. Run `docker volume inspect db_data` on the host if you need the absolute path. The helper scripts under `infra/scripts/` wrap `pg_dump`/`psql` and save backups to `hindsight_db_backups/data/`:
+
+- `./infra/scripts/backup_db.sh` — creates a timestamped SQL dump with the current Alembic revision in the filename. Run this on the source environment (e.g., staging) before copying data.
+- `./infra/scripts/restore_db.sh` — interactive restore that drops/recreates `hindsight_db`, imports the selected dump, and reapplies Alembic migrations. Run this on the destination environment (e.g., production) after copying the dump file over.
+
+This workflow lets you shuttle database state between environments by backing up on the source host, transferring the `.sql` artifact, and restoring it on the target.
+
 ## Deployment
 
 This section provides instructions for deploying the Hindsight AI application using Docker Compose, both locally and to a remote server.

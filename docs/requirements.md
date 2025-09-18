@@ -1121,6 +1121,7 @@ Last updated: manual
   - `OAUTH2_PROXY_SKIP_AUTH_ROUTES=/manifest.json$,/favicon.ico$,^/guest-api/.*`
   - `OAUTH2_PROXY_EMAIL_DOMAINS=*` to accept any Google account that completes OAuth (set `OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE=/etc/oauth2-proxy/authorized_emails.txt` and mount `authorized_emails.txt` only if you need to reinstate a closed allowlist).
   - `OAUTH2_PROXY_LOGOUT_REDIRECT_URL=https://accounts.google.com/Logout`
+  - Database persistence/backup: Postgres data lives in the Docker volume `db_data` (mounted at `/var/lib/postgresql/data`; inspect with `docker volume inspect db_data`). Backups are written to `hindsight_db_backups/data/`. To clone staging and production, run `./infra/scripts/backup_db.sh` on the source host, transfer the generated `.sql` file, then run `./infra/scripts/restore_db.sh` on the target and select that file. The restore script drops/recreates `hindsight_db` and reapplies Alembic migrations to match the backup revision.
 
 Traefik labels:
 - Dashboard router: `Host(${TRAEFIK_DASHBOARD_HOST})` → `api@internal` over `websecure` with `letsencrypt` resolver.
