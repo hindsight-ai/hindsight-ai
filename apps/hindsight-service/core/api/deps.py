@@ -245,7 +245,10 @@ def ensure_pat_allows_write(current_user: Dict[str, Any], target_org_id=None):
     pat_org = pat.get("organization_id")
     # If token has an org restriction and it conflicts with the requested target org, reject
     if pat_org and target_org_id and str(pat_org) != str(target_org_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token organization restriction mismatch")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Token organization restriction mismatch: token is limited to org {pat_org}, but request targeted org {target_org_id}",
+        )
 
     # Enforce the current user's membership permissions as an additional guard: a PAT
     # must not be usable for write if the token's owner currently lacks write on the
@@ -287,7 +290,10 @@ def ensure_pat_allows_read(current_user: Dict[str, Any], target_org_id=None, *, 
     pat_org = pat.get("organization_id")
     # If token has an org restriction and it conflicts with the requested target org, reject
     if pat_org and target_org_id and str(pat_org) != str(target_org_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token organization restriction mismatch")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Token organization restriction mismatch: token is limited to org {pat_org}, but request targeted org {target_org_id}",
+        )
 
     # Enforce user's current membership read permission. If write implies read and the
     # token has write scope, prefer checking can_write when applicable.
@@ -494,5 +500,8 @@ def get_scoped_user_and_context(
         pat_org = str(current_user["pat"]["organization_id"])  # store may be UUID or str
         req_org = _parse_uuid_maybe(organization_id)
         if req_org is not None and str(req_org) != str(pat_org):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token organization restriction mismatch")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Token organization restriction mismatch: token is limited to org {pat_org}, but request targeted org {req_org}",
+            )
     return user, current_user, scope_ctx
