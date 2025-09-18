@@ -12,7 +12,7 @@ import axios, { AxiosError } from 'axios';
 import { MemoryServiceClient, MemoryServiceClientConfig, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload, AdvancedSearchPayload } from './client/MemoryServiceClient';
 
 // --- Configuration ---
-const MEMORY_SERVICE_BASE_URL = process.env.MEMORY_SERVICE_BASE_URL || 'http://localhost:8000'; // Default to localhost:8000
+const API_BASE_URL = process.env.HINDSIGHT_API_BASE_URL || 'https://api.hindsight-ai.com'; // Default to hosted API
 const DEFAULT_AGENT_ID = process.env.DEFAULT_AGENT_ID;
 const DEFAULT_CONVERSATION_ID = process.env.DEFAULT_CONVERSATION_ID;
 const API_TOKEN = process.env.HINDSIGHT_API_TOKEN || process.env.HINDSIGHT_API_KEY;
@@ -20,8 +20,8 @@ const API_HEADER: 'Authorization' | 'X-API-Key' = process.env.HINDSIGHT_API_KEY 
 const ACTIVE_SCOPE_ENV = process.env.HINDSIGHT_ACTIVE_SCOPE as ('personal' | 'organization' | 'public' | undefined);
 const DEFAULT_ORGANIZATION_ID = process.env.HINDSIGHT_ORGANIZATION_ID;
 
-if (!MEMORY_SERVICE_BASE_URL) {
-  throw new Error('MEMORY_SERVICE_BASE_URL environment variable is required');
+if (!API_BASE_URL) {
+  throw new Error('HINDSIGHT_API_BASE_URL environment variable is required');
 }
 
 // --- Type Guards ---
@@ -107,7 +107,7 @@ if (resolvedScope === 'organization' && !DEFAULT_ORGANIZATION_ID) {
 }
 
 const clientConfig: MemoryServiceClientConfig = {
-  baseUrl: MEMORY_SERVICE_BASE_URL,
+  baseUrl: API_BASE_URL,
   apiToken: API_TOKEN,
   headerName: API_HEADER,
 };
@@ -316,6 +316,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Search method: 'fulltext' for keyword search, 'semantic' for meaning-based search, 'hybrid' for combined approach (optional, defaults to 'fulltext').",
               enum: ["fulltext", "semantic", "hybrid"],
             },
+            agent_id: {
+              type: "string",
+              description: "Optional agent UUID. Falls back to DEFAULT_AGENT_ID when omitted.",
+            },
+            conversation_id: {
+              type: "string",
+              description: "Optional conversation UUID. Falls back to DEFAULT_CONVERSATION_ID when omitted.",
+            },
             limit: {
               type: "number",
               description: "Maximum number of memories to retrieve (optional, default: 10).",
@@ -323,6 +331,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             min_score: {
               type: "number",
               description: "Minimum relevance score (0.0-1.0). Higher values return more relevant results (optional, default: 0.1).",
+            },
+            similarity_threshold: {
+              type: "number",
+              description: "Similarity threshold for semantic search (0.0-1.0).",
+            },
+            fulltext_weight: {
+              type: "number",
+              description: "Weighting applied to full-text results in hybrid mode (0.0-1.0).",
+            },
+            semantic_weight: {
+              type: "number",
+              description: "Weighting applied to semantic results in hybrid mode (0.0-1.0).",
+            },
+            min_combined_score: {
+              type: "number",
+              description: "Minimum combined score for hybrid search (0.0-1.0).",
+            },
+            include_archived: {
+              type: "boolean",
+              description: "Whether to include archived memories in the search (default: false).",
             },
           },
           required: ["search_query"],
@@ -565,42 +593,76 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // --- advanced_search_memories ---
-      else if (toolName === "advanced_search_memories") {
-        if (!typedArgs?.search_query || typeof typedArgs.search_query !== 'string') {
-          throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for advanced_search_memories. Requires 'search_query' (string).");
-        }
-        
-        // Fill in required IDs from environment
-        const agent_id = DEFAULT_AGENT_ID;
-        const conversation_id = DEFAULT_CONVERSATION_ID;
-        
-        if (!agent_id) {
-          throw new McpError(ErrorCode.InvalidParams, "Agent ID is required for advanced_search_memories and not provided via DEFAULT_AGENT_ID environment variable.");
-        }
-        
-        const st: string = typedArgs.search_type || 'fulltext';
-        const q: string = typedArgs.search_query;
-        const limit: number = typedArgs.limit || 10;
-        const min_score: number = typedArgs.min_score || 0.1;
-
-        let results: any[] = [];
-        if (st === 'fulltext') {
-          results = await memoryServiceClient.searchFulltext({ query: q, agent_id, conversation_id, limit, min_score, include_archived: false });
-        } else if (st === 'semantic') {
-          results = await memoryServiceClient.searchSemantic({ query: q, agent_id, conversation_id, limit, similarity_threshold: 0.7, include_archived: false });
-        } else {
-          results = await memoryServiceClient.searchHybrid({ query: q, agent_id, conversation_id, limit, fulltext_weight: 0.7, semantic_weight: 0.3, min_combined_score: 0.1, include_archived: false });
-        }
-
-        const formattedResults = results.map((block: any) => ({
-          content: block.content,
-          lessons_learned: block.lessons_learned,
-          timestamp: block.timestamp,
-          feedback_score: block.feedback_score
-        }));
-
-        return { content: [{ type: 'text', text: JSON.stringify({ results: formattedResults, search_type: st, query: q }, null, 2) }] };
+    else if (toolName === "advanced_search_memories") {
+      if (!typedArgs?.search_query || typeof typedArgs.search_query !== 'string') {
+        throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for advanced_search_memories. Requires 'search_query' (string).");
       }
+
+      const agent_id: string | undefined = (typeof typedArgs.agent_id === 'string' && typedArgs.agent_id.trim().length > 0)
+        ? typedArgs.agent_id.trim()
+        : DEFAULT_AGENT_ID;
+      const conversation_id: string | undefined = (typeof typedArgs.conversation_id === 'string' && typedArgs.conversation_id.trim().length > 0)
+        ? typedArgs.conversation_id.trim()
+        : DEFAULT_CONVERSATION_ID;
+
+      const st: string = typedArgs.search_type || 'fulltext';
+      const q: string = typedArgs.search_query;
+      const limit: number = typeof typedArgs.limit === 'number' ? typedArgs.limit : 10;
+      const min_score: number = typeof typedArgs.min_score === 'number' ? typedArgs.min_score : 0.1;
+      const similarity_threshold: number = typeof typedArgs.similarity_threshold === 'number' ? typedArgs.similarity_threshold : 0.7;
+      const fulltext_weight: number = typeof typedArgs.fulltext_weight === 'number' ? typedArgs.fulltext_weight : 0.7;
+      const semantic_weight: number = typeof typedArgs.semantic_weight === 'number' ? typedArgs.semantic_weight : 0.3;
+      const min_combined_score: number = typeof typedArgs.min_combined_score === 'number' ? typedArgs.min_combined_score : 0.1;
+      const include_archived: boolean = typeof typedArgs.include_archived === 'boolean' ? typedArgs.include_archived : false;
+
+      let results: any[] = [];
+      if (st === 'fulltext') {
+        const params = {
+          query: q,
+          ...(agent_id ? { agent_id } : {}),
+          ...(conversation_id ? { conversation_id } : {}),
+          limit,
+          include_archived,
+          min_score,
+        };
+        results = await memoryServiceClient.searchFulltext(params);
+      } else if (st === 'semantic') {
+        const params = {
+          query: q,
+          ...(agent_id ? { agent_id } : {}),
+          ...(conversation_id ? { conversation_id } : {}),
+          limit,
+          include_archived,
+          similarity_threshold,
+        };
+        results = await memoryServiceClient.searchSemantic(params);
+      } else {
+        const params = {
+          query: q,
+          ...(agent_id ? { agent_id } : {}),
+          ...(conversation_id ? { conversation_id } : {}),
+          limit,
+          include_archived,
+          fulltext_weight,
+          semantic_weight,
+          min_combined_score,
+        };
+        results = await memoryServiceClient.searchHybrid(params);
+      }
+
+      const formattedResults = results.map((block: any) => ({
+        content: block.content,
+        lessons_learned: block.lessons_learned,
+        timestamp: block.timestamp,
+        feedback_score: block.feedback_score,
+      }));
+
+      return {
+        content: [
+          { type: 'text', text: JSON.stringify({ results: formattedResults, search_type: st, query: q }, null, 2) },
+        ],
+      };
+    }
 
       // --- whoami ---
       else if (toolName === "whoami") {

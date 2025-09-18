@@ -1,9 +1,12 @@
 {
   "name": "hindsight-mcp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Model Context Protocol server for the Hindsight AI memory service",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "bin": {
+    "hindsight-mcp": "./build/index.js"
+  },
   "files": [
     "build",
     "README.md",
@@ -22,6 +25,7 @@
     "start": "node build/index.js",
     "dev": "nodemon --watch src --exec \"ts-node src/index.ts\"",
     "watch": "tsc -p tsconfig.json --watch",
+    "generate:docs": "node scripts/generate-docs.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

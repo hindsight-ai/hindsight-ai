@@ -54,7 +54,7 @@ Hindsight AI stores various types of operational memories within its `MemoryBloc
 
 Hindsight AI integrates with existing AI agents and external systems primarily through two mechanisms:
 1.  **FastAPI Backend API:** The `hindsight-service` exposes a RESTful API that allows for direct HTTP-based interaction with the memory service. This API provides endpoints for managing agents, memory blocks (creation, retrieval, update, archive, delete), feedback, keywords, and search.
-2.  **Model Context Protocol (MCP) Server:** The `hindsight-mcp` server provides a set of predefined tools for MCP-compatible AI agents to interact with the Hindsight AI memory service. These tools abstract the underlying API calls and handle environment variable injection for `agent_id`, `conversation_id`, and `MEMORY_SERVICE_BASE_URL`. Tools include `create_memory_block`, `retrieve_relevant_memories`, `retrieve_all_memory_blocks`, `retrieve_memory_blocks_by_conversation_id`, `report_memory_feedback`, and `get_memory_details`.
+2.  **Model Context Protocol (MCP) Server:** The `hindsight-mcp` server provides a set of predefined tools for MCP-compatible AI agents to interact with the Hindsight AI memory service. These tools abstract the underlying API calls and handle environment variable injection, e.g. `agent_id` or `conversation_id`. Tools include `create_memory_block`, `retrieve_relevant_memories`, `retrieve_all_memory_blocks`, `retrieve_memory_blocks_by_conversation_id`, `report_memory_feedback`, and `get_memory_details`.
 
 ### Feedback Mechanism
 
@@ -80,7 +80,7 @@ Edit `.env` and add your LLM API key:
 ```bash
 # Required for local development
 LLM_API_KEY=your_api_key_here
-LLM_MODEL_NAME=gemini-1.5-flash
+LLM_MODEL_NAME=gemini-2.5-flash
 ```
 
 ### 3. Start Services
