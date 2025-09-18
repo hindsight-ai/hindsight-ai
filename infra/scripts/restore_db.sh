@@ -81,6 +81,13 @@ if [[ -z "$BACKUP_FILE_PATH" ]]; then
     select choice in "${backups[@]}"; do
       if [[ -n "$choice" ]]; then
         BACKUP_FILE_PATH="$choice"
+        if [[ ! -f "$BACKUP_FILE_PATH" && -f "$BACKUP_DIR_DEFAULT/${choice##*/}" ]]; then
+          BACKUP_FILE_PATH="$BACKUP_DIR_DEFAULT/${choice##*/}"
+        fi
+        if [[ ! -f "$BACKUP_FILE_PATH" ]]; then
+          echo "Selected backup not found: $choice" >&2
+          continue
+        fi
         break
       else
         echo "Invalid selection. Please try again." >&2
