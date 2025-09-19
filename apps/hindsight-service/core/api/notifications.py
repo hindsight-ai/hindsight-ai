@@ -5,7 +5,8 @@ Provides REST API for managing notifications and user preferences.
 Supports both in-app notifications and email notification preferences.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from datetime import datetime
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 def get_notifications(
     unread_only: bool = False,
     limit: int = 50,
+    since: Optional[str] = None,
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context)
 ):
@@ -36,10 +38,18 @@ def get_notifications(
     user, current_user = user_context
     
     service = NotificationService(db)
+    since_dt: Optional[datetime] = None
+    if since:
+        try:
+            # Accept ISO8601
+            since_dt = datetime.fromisoformat(since)
+        except Exception:
+            since_dt = None
     notifications = service.get_user_notifications(
         user_id=user.id,
         unread_only=unread_only,
-        limit=limit
+        limit=limit,
+        since=since_dt,
     )
     # Adapt SQLAlchemy objects: schema expects `.metadata` (dict) but model uses metadata_json
     adapted: List[Any] = []
@@ -78,6 +88,28 @@ def mark_notification_read(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Notification not found"
         )
+
+
+@router.post("/read-all", status_code=status.HTTP_200_OK)
+def mark_all_notifications_read(
+    before: Optional[str] = None,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context)
+):
+    """
+    Mark all notifications read for the current user, optionally only those created
+    at or before the provided timestamp (ISO8601).
+    """
+    user, current_user = user_context
+    before_dt: Optional[datetime] = None
+    if before:
+        try:
+            before_dt = datetime.fromisoformat(before)
+        except Exception:
+            before_dt = None
+    service = NotificationService(db)
+    updated = service.mark_all_read(user.id, before_dt)
+    return {"updated": updated}
 
 
 @router.get("/stats", response_model=schemas.NotificationStatsResponse)

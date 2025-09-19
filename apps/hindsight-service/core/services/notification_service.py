@@ -190,7 +190,8 @@ class NotificationService:
         self,
         user_id: uuid.UUID,
         unread_only: bool = False,
-        limit: int = 50
+        limit: int = 50,
+        since: Optional[datetime] = None
     ) -> List[models.Notification]:
         """
         Get notifications for a user, ordered by most recent.
@@ -207,7 +208,47 @@ class NotificationService:
             models.Notification.expires_at > datetime.now(UTC)
         )
         
+        # Since filter for incremental fetching
+        if since is not None:
+            try:
+                if since.tzinfo is None:
+                    # Assume UTC if naive
+                    since = since.replace(tzinfo=UTC)
+            except Exception:
+                pass
+            query = query.filter(models.Notification.created_at > since)
+        
         return query.order_by(desc(models.Notification.created_at)).limit(limit).all()
+
+    def mark_all_read(self, user_id: uuid.UUID, before: Optional[datetime] = None) -> int:
+        """
+        Mark all notifications as read for a user. Returns number updated.
+        If `before` is provided, only notifications created at or before that timestamp
+        are updated.
+        """
+        q = self.db.query(models.Notification).filter(
+            and_(
+                models.Notification.user_id == user_id,
+                models.Notification.is_read == False,
+                models.Notification.expires_at > datetime.now(UTC),
+            )
+        )
+        if before is not None:
+            try:
+                if before.tzinfo is None:
+                    before = before.replace(tzinfo=UTC)
+            except Exception:
+                pass
+            q = q.filter(models.Notification.created_at <= before)
+        updated_count = 0
+        # Update in batches to avoid huge transactions; here it's small, do a single pass
+        rows = q.all()
+        for n in rows:
+            n.is_read = True
+            n.read_at = datetime.now(UTC)
+            updated_count += 1
+        self.db.commit()
+        return updated_count
 
     def mark_notification_read(self, notification_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """
