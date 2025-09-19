@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import RefreshIndicator from './RefreshIndicator';
 import usePageHeader from '../hooks/usePageHeader';
 import ArchivedMemoryCard from './ArchivedMemoryCard';
+import MemoryBlockDetailModal from './MemoryBlockDetailModal';
 import notificationService from '../services/notificationService';
 import StatCard from './StatCard';
 
@@ -35,6 +36,7 @@ const ArchivedMemoryBlockList: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [actionPendingId, setActionPendingId] = useState<string | null>(null);
+  const [detailModalId, setDetailModalId] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
@@ -166,7 +168,7 @@ const ArchivedMemoryBlockList: React.FC = () => {
   };
 
   const handleViewDetails = (id: string) => {
-    navigate(`/memory-blocks/${id}`);
+    setDetailModalId(id);
   };
 
   const handleRestore = async (id: string) => {
@@ -365,19 +367,19 @@ const ArchivedMemoryBlockList: React.FC = () => {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {memoryBlocks.map((block) => (
-            <ArchivedMemoryCard
-              key={block.id}
-              memoryBlock={block}
-              agentName={resolveAgentName(block.agent_id, (block as any).agent_name)}
-              onView={handleViewDetails}
-              onRestore={handleRestore}
-              onDelete={handleDelete}
-              actionPending={actionPendingId === block.id}
-            />
-          ))}
-        </div>
-      )}
+         {memoryBlocks.map((block) => (
+           <ArchivedMemoryCard
+             key={block.id}
+             memoryBlock={block}
+             agentName={resolveAgentName(block.agent_id, (block as any).agent_name)}
+             onView={handleViewDetails}
+             onRestore={handleRestore}
+             onDelete={handleDelete}
+             actionPending={actionPendingId === block.id}
+           />
+         ))}
+       </div>
+     )}
 
       {!loading && !emptyState && pagination.total_pages > 1 && (
         <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
@@ -434,8 +436,14 @@ const ArchivedMemoryBlockList: React.FC = () => {
               </select>
             </div>
           </div>
-        </div>
-      )}
+       </div>
+     )}
+
+      <MemoryBlockDetailModal
+        blockId={detailModalId || ''}
+        isOpen={Boolean(detailModalId)}
+        onClose={() => setDetailModalId(null)}
+      />
     </div>
   );
 };

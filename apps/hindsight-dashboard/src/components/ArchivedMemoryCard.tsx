@@ -61,10 +61,7 @@ const ArchivedMemoryCard: React.FC<ArchivedMemoryCardProps> = ({ memoryBlock, ag
 
   const conversationLabel = memoryBlock.conversation_id
     ? `Conversation ${memoryBlock.conversation_id.slice(-6)}`
-    : 'No conversation';
-
-  const visibility = (memoryBlock.visibility_scope || '').toLowerCase();
-  const visibilityLabel = visibility ? visibility.replace(/_/g, ' ') : 'workspace';
+    : null;
 
   return (
     <div
@@ -83,21 +80,20 @@ const ArchivedMemoryCard: React.FC<ArchivedMemoryCardProps> = ({ memoryBlock, ag
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-blue-600">
-              Archived {formatRelativeTime(memoryBlock.archived_at)}
+              Archived {memoryBlock.archived_at ? formatRelativeTime(memoryBlock.archived_at) : '—'}
             </p>
             <div className="text-lg font-semibold text-gray-900">
               {agentName}
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-              <span className={`${badgeClasses} border-blue-100 bg-blue-50 text-blue-600`}>
-                <svg className="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11c.5304 0 1.0391-.2107 1.4142-.5858C13.7893 10.0391 14 9.5304 14 9s-.2107-1.0391-.5858-1.4142C13.0391 7.2107 12.5304 7 12 7c-.5304 0-1.0391.2107-1.4142.5858C10.2107 7.9609 10 8.4696 10 9s.2107 1.0391.5858 1.4142C10.9609 10.7893 11.4696 11 12 11zm0 9c-2.3333-2.6667-7-4-7-7 0-3.3333 3-5 7-5s7 1.6667 7 5c0 3-4.6667 4.3333-7 7z" />
-                </svg>
-                {conversationLabel}
-              </span>
-              <span className={`${badgeClasses} border-gray-200 bg-gray-100 text-gray-600`}>
-                Visibility: {visibilityLabel}
-              </span>
+              {conversationLabel && (
+                <span className={`${badgeClasses} border-blue-100 bg-blue-50 text-blue-600`}>
+                  <svg className="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11c.5304 0 1.0391-.2107 1.4142-.5858C13.7893 10.0391 14 9.5304 14 9s-.2107-1.0391-.5858-1.4142C13.0391 7.2107 12.5304 7 12 7c-.5304 0-1.0391.2107-1.4142.5858C10.2107 7.9609 10 8.4696 10 9s.2107 1.0391.5858 1.4142C10.9609 10.7893 11.4696 11 12 11zm0 9c-2.3333-2.6667-7-4-7-7 0-3.3333 3-5 7-5s7 1.6667 7 5c0 3-4.6667 4.3333-7 7z" />
+                  </svg>
+                  {conversationLabel}
+                </span>
+              )}
               {memoryBlock.feedback_score != null && (
                 <span
                   className={`${badgeClasses} ${
@@ -150,8 +146,8 @@ const ArchivedMemoryCard: React.FC<ArchivedMemoryCardProps> = ({ memoryBlock, ag
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 text-xs text-gray-500">
         <div>
-          <span title={formatFullDate(memoryBlock.archived_at)}>
-            Archived {formatFullDate(memoryBlock.archived_at)}
+          <span title={memoryBlock.archived_at ? formatFullDate(memoryBlock.archived_at) : undefined}>
+            Archived {memoryBlock.archived_at ? formatFullDate(memoryBlock.archived_at) : 'Unavailable'}
           </span>
           {' · '}
           <span title={formatFullDate(memoryBlock.created_at)}>
