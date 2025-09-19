@@ -89,6 +89,7 @@ def create_keyword_endpoint(
 def get_all_keywords_endpoint(
     skip: int = 0,
     limit: int = 100,
+    include_counts: Optional[bool] = False,
     scope: Optional[str] = None,  # kept for backward-compat; unused with scope_ctx
     organization_id: Optional[uuid.UUID] = None,  # for legacy callers
     db: Session = Depends(get_db),
@@ -103,7 +104,159 @@ def get_all_keywords_endpoint(
         current_user=current_user,
         scope_ctx=scope_ctx,
     )
+    if not include_counts:
+        return keywords
+    # Attach counts (usage across visible memories)
+    from sqlalchemy import func, and_, or_
+    from core.db import models
+    # Build visibility filter similar to other endpoints
+    q = db.query(models.MemoryBlockKeyword.keyword_id, func.count(models.MemoryBlock.id).label('cnt')) \
+        .join(models.MemoryBlock, models.MemoryBlock.id == models.MemoryBlockKeyword.memory_id)
+    if current_user is None:
+        q = q.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
+    else:
+        org_ids: List[uuid.UUID] = []
+        for m in (current_user.get('memberships') or []):
+            try:
+                org_ids.append(uuid.UUID(m.get('organization_id')))
+            except Exception:
+                pass
+        q = q.filter(
+            or_(
+                models.MemoryBlock.visibility_scope == SCOPE_PUBLIC,
+                models.MemoryBlock.owner_user_id == current_user.get('id'),
+                and_(
+                    models.MemoryBlock.visibility_scope == SCOPE_ORGANIZATION,
+                    models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
+                ),
+            )
+        )
+    q = q.group_by(models.MemoryBlockKeyword.keyword_id)
+    counts = {str(row[0]): int(row[1]) for row in q.all()}
+    # Enrich keyword objects with a transient attribute
+    for k in keywords:
+        try:
+            setattr(k, 'usage_count', counts.get(str(k.keyword_id), 0))
+        except Exception:
+            pass
     return keywords
+
+@router.get("/trending")
+def get_trending_keywords(
+    window: str = "7d",
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
+    """
+    Return keywords most used in memory blocks created within the time window.
+    `window` examples: '7d', '24h'.
+    """
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func, and_, or_
+    from core.db import models
+
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, scope_ctx.organization_id)
+
+    # Parse window
+    w = (window or "7d").lower()
+    delta = timedelta(days=7)
+    try:
+        if w.endswith('d'):
+            delta = timedelta(days=int(w[:-1] or '7'))
+        elif w.endswith('h'):
+            delta = timedelta(hours=int(w[:-1] or '24'))
+    except Exception:
+        delta = timedelta(days=7)
+    since = datetime.now(timezone.utc) - delta
+
+    q = db.query(models.Keyword.keyword_id, models.Keyword.keyword_text, func.count(models.MemoryBlock.id).label('cnt')) \
+        .join(models.MemoryBlockKeyword, models.Keyword.keyword_id == models.MemoryBlockKeyword.keyword_id) \
+        .join(models.MemoryBlock, models.MemoryBlock.id == models.MemoryBlockKeyword.memory_id) \
+        .filter(models.MemoryBlock.created_at >= since)
+
+    # Visibility
+    if current_user is None:
+        q = q.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
+    else:
+        org_ids: List[uuid.UUID] = []
+        for m in (current_user.get('memberships') or []):
+            try:
+                org_ids.append(uuid.UUID(m.get('organization_id')))
+            except Exception:
+                pass
+        q = q.filter(
+            or_(
+                models.MemoryBlock.visibility_scope == SCOPE_PUBLIC,
+                models.MemoryBlock.owner_user_id == current_user.get('id'),
+                and_(
+                    models.MemoryBlock.visibility_scope == SCOPE_ORGANIZATION,
+                    models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
+                ),
+            )
+        )
+
+    q = q.group_by(models.Keyword.keyword_id, models.Keyword.keyword_text) \
+         .order_by(func.count(models.MemoryBlock.id).desc(), models.Keyword.keyword_text.asc()) \
+         .limit(max(1, min(limit, 100)))
+    rows = q.all()
+    return {
+        'items': [
+            {'keyword_id': str(r[0]), 'keyword_text': r[1], 'count': int(r[2])}
+            for r in rows
+        ],
+        'window': window,
+    }
+
+@router.get("/popular")
+def get_popular_keywords(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
+    """
+    Return top keywords by usage across visible memory blocks.
+    """
+    from sqlalchemy import func, and_, or_
+    from core.db import models
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, scope_ctx.organization_id)
+
+    q = db.query(models.Keyword.keyword_id, models.Keyword.keyword_text, func.count(models.MemoryBlock.id).label('cnt')) \
+        .join(models.MemoryBlockKeyword, models.Keyword.keyword_id == models.MemoryBlockKeyword.keyword_id) \
+        .join(models.MemoryBlock, models.MemoryBlock.id == models.MemoryBlockKeyword.memory_id)
+
+    if current_user is None:
+        q = q.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
+    else:
+        org_ids: List[uuid.UUID] = []
+        for m in (current_user.get('memberships') or []):
+            try:
+                org_ids.append(uuid.UUID(m.get('organization_id')))
+            except Exception:
+                pass
+        q = q.filter(
+            or_(
+                models.MemoryBlock.visibility_scope == SCOPE_PUBLIC,
+                models.MemoryBlock.owner_user_id == current_user.get('id'),
+                and_(
+                    models.MemoryBlock.visibility_scope == SCOPE_ORGANIZATION,
+                    models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
+                ),
+            )
+        )
+
+    q = q.group_by(models.Keyword.keyword_id, models.Keyword.keyword_text) \
+         .order_by(func.count(models.MemoryBlock.id).desc(), models.Keyword.keyword_text.asc()) \
+         .limit(max(1, min(limit, 200)))
+    rows = q.all()
+    return {
+        'items': [
+            {'keyword_id': str(r[0]), 'keyword_text': r[1], 'count': int(r[2])}
+            for r in rows
+        ]
+    }
 
 @router.get("/{keyword_id}", response_model=schemas.Keyword)
 def get_keyword_endpoint(
