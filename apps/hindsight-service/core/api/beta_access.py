@@ -135,7 +135,13 @@ def get_beta_access_status(
     user, current_user = user_context
     service = BetaAccessService(db)
     status = service.get_beta_access_status(user.id)
-    return {"status": status}
+    # Include latest request (if any) for transparency
+    from core.db.repositories import beta_access as beta_repo
+    latest = beta_repo.get_beta_access_request_by_email(db, user.email)
+    return {
+        "status": status,
+        "last_request": _serialize_request(latest) if latest else None,
+    }
 
 
 @router.get("/pending")
@@ -149,6 +155,48 @@ def get_pending_requests(
     service = BetaAccessService(db)
     requests = service.get_pending_requests(skip, limit)
     return {"requests": requests}
+
+
+@router.get("/pending/stuck")
+def get_stuck_pending_requests(
+    older_than_days: int = 7,
+    db: Session = Depends(get_db),
+    user_context = Depends(require_beta_access_admin),
+):
+    """
+    List pending requests older than the provided threshold (days).
+    """
+    user, current_user = user_context
+    from datetime import datetime, timezone, timedelta
+    threshold = datetime.now(timezone.utc) - timedelta(days=max(1, older_than_days))
+    from core.db import models
+    q = db.query(models.BetaAccessRequest).filter(
+        models.BetaAccessRequest.status == 'pending',
+        models.BetaAccessRequest.requested_at < threshold
+    ).order_by(models.BetaAccessRequest.requested_at.asc())
+    rows = q.all()
+    return {"requests": [_serialize_request(r) for r in rows], "older_than_days": older_than_days}
+
+
+@router.post("/review/{request_id}/resend-token", status_code=status.HTTP_200_OK)
+def resend_review_token(
+    request_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_context = Depends(require_beta_access_admin),
+):
+    """
+    Re-send the review token email to admins for a specific pending request.
+    """
+    user, current_user = user_context
+    request = beta_repo.get_beta_access_request(db, request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if request.status != 'pending':
+        raise HTTPException(status_code=400, detail=f"Request already {request.status}")
+    service = BetaAccessService(db)
+    # Reuse existing helper that emails admins
+    service._send_admin_notification_email(request.id, request.email, request.review_token)
+    return {"success": True}
 
 
 @router.get("/admin/users", status_code=status.HTTP_200_OK)
