@@ -45,6 +45,10 @@ const MemoryBlocksPage: React.FC = () => {
   const [selectedMemoryBlockId, setSelectedMemoryBlockId] = useState<string | null>(null);
   const [showCompactionModal, setShowCompactionModal] = useState<boolean>(false);
   const [selectedMemoryBlock, setSelectedMemoryBlock] = useState<MemoryBlockRow | null>(null);
+  const [sort, setSort] = useState<{ field: 'created_at' | 'feedback_score'; order: 'asc' | 'desc' }>({
+    field: 'created_at',
+    order: 'desc'
+  });
 
   const [pagination, setPagination] = useState<PaginationState>({
     page: 1,
@@ -69,8 +73,8 @@ const MemoryBlocksPage: React.FC = () => {
         conversation_id: conversationFilter,
         skip: skip,
         per_page: pagination.per_page,
-        sort_by: 'created_at',
-        sort_order: 'desc',
+        sort_by: sort.field,
+        sort_order: sort.order,
         include_archived: false,
       });
 
@@ -93,7 +97,7 @@ const MemoryBlocksPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, agentFilter, conversationFilter, pagination.page, pagination.per_page]);
+  }, [searchTerm, agentFilter, conversationFilter, pagination.page, pagination.per_page, sort]);
 
   // Fetch available agents for filter dropdown
   const fetchAgents = useCallback(async () => {
@@ -397,6 +401,7 @@ const MemoryBlocksPage: React.FC = () => {
                 } else if (value === 'feedback') {
                   setSort({ field: 'feedback_score', order: 'desc' });
                 }
+                setPagination((prev) => ({ ...prev, page: 1 }));
               }}
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
