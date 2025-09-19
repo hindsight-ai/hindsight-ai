@@ -1,12 +1,16 @@
-import { useContext } from 'react';
-import PageHeaderContext from '../context/PageHeaderContext';
+import { useContext, useMemo } from 'react';
+import PageHeaderContext, { PageHeaderConfig } from '../context/PageHeaderContext';
 
 const usePageHeader = () => {
   const context = useContext(PageHeaderContext);
-  if (!context) {
-    throw new Error('usePageHeader must be used within a PageHeaderContext provider');
-  }
-  return context;
+
+  const fallback = useMemo(() => ({
+    setHeaderContent: (_config: PageHeaderConfig) => {},
+    clearHeaderContent: () => {},
+    headerConfig: {}
+  }), []);
+
+  return context ?? fallback;
 };
 
 export default usePageHeader;
