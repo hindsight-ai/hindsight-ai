@@ -193,10 +193,13 @@ def resend_review_token(
         raise HTTPException(status_code=404, detail="Request not found")
     if request.status != 'pending':
         raise HTTPException(status_code=400, detail=f"Request already {request.status}")
+    # Generate a fresh token and extend expiry before sending notification
+    updated = beta_repo.regenerate_beta_access_review_token(db, request_id, lifetime_days=7)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Request not found")
     service = BetaAccessService(db)
-    # Reuse existing helper that emails admins
-    service._send_admin_notification_email(request.id, request.email, request.review_token)
-    return {"success": True}
+    service._send_admin_notification_email(updated.id, updated.email, updated.review_token)
+    return {"success": True, "request_id": str(updated.id), "token_expires_at": updated.token_expires_at.isoformat() if updated.token_expires_at else None}
 
 
 @router.get("/admin/users", status_code=status.HTTP_200_OK)

@@ -14,7 +14,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background-color: #f3f4f6; /* bg-gray-100 */
-    overflow: hidden; /* Page height equals viewport; internal panes handle scroll */
+    overflow: hidden; /* Page height equals viewport; internal panes handle scroll on ≥sm */
   }
 
   * { box-sizing: border-box; }
@@ -41,8 +41,8 @@
 /* Notification Styles */
 .notification-container {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  right: calc(16px + env(safe-area-inset-right));
   z-index: 99999;
   max-width: 400px;
   pointer-events: none;
@@ -184,10 +184,13 @@
 
 /* Responsive adjustments */
 @media (max-width: 640px) {
+  /* Allow natural document scrolling on small screens to avoid nested scroll issues */
+  html, body { overflow: auto; }
+
   .notification-container {
-    bottom: 10px;
-    right: 10px;
-    left: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    right: calc(10px + env(safe-area-inset-right));
+    left: calc(10px + env(safe-area-inset-left));
     max-width: none;
   }
 
@@ -211,6 +214,16 @@
   .notification-button {
     padding: 4px 8px;
     font-size: 11px;
+  }
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
