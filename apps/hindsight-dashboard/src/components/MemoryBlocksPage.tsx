@@ -8,6 +8,8 @@ import MemoryBlockDetailModal from './MemoryBlockDetailModal';
 import MemoryCompactionModal from './MemoryCompactionModal';
 import { UIMemoryBlock } from '../types/domain';
 import { useAuth } from '../context/AuthContext';
+import RefreshIndicator from './RefreshIndicator';
+import usePageHeader from '../hooks/usePageHeader';
 
 // Result structure returned from compaction/compression endpoints (partial / evolving)
 interface MemoryCompactionResult {
@@ -291,10 +293,10 @@ const MemoryBlocksPage: React.FC = () => {
     alert('Find Duplicates functionality coming soon!');
   };
 
-  const handleRefresh = () => {
-    fetchMemoryBlocks();
+  const handleRefresh = useCallback(() => {
+    void fetchMemoryBlocks();
     notificationService.showSuccess('Data refreshed successfully');
-  };
+  }, [fetchMemoryBlocks]);
 
   // Clear all filters
   const clearFilters = () => {
@@ -306,9 +308,25 @@ const MemoryBlocksPage: React.FC = () => {
 
   const hasActiveFilters = Boolean(searchTerm || agentFilter || conversationFilter);
 
+  const { setHeaderContent, clearHeaderContent } = usePageHeader();
+
+  useEffect(() => {
+    setHeaderContent({
+      description: 'Search, filter, and review memory blocks across your workspace.',
+      actions: (
+        <RefreshIndicator
+          lastUpdated={lastUpdated}
+          onRefresh={handleRefresh}
+          loading={loading}
+        />
+      )
+    });
+
+    return () => clearHeaderContent();
+  }, [setHeaderContent, clearHeaderContent, lastUpdated, loading, handleRefresh]);
+
   return (
     <div className="space-y-6">
-
       {/* Search and Filters */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -377,27 +395,12 @@ const MemoryBlocksPage: React.FC = () => {
       </div>
 
       {/* Results Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm text-gray-600">
             {loading ? 'Loading...' : `${pagination.total_items} memory blocks found`}
           </span>
-          {lastUpdated && (
-            <span className="text-xs text-gray-500">
-              Last updated: {lastUpdated.toLocaleTimeString()}
-            </span>
-          )}
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={loading}
-          className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 disabled:opacity-50"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Refresh
-        </button>
       </div>
 
       {/* Memory Blocks Grid */}
@@ -485,6 +488,7 @@ const MemoryBlocksPage: React.FC = () => {
                 onCompactMemory={handleCompactMemory}
                 availableAgents={availableAgents}
                 llmEnabled={features.llmEnabled}
+                showHeaderDate={false}
               />
             ))}
           </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StatCard from './StatCard';
 import MemoryBlockCard from './MemoryBlockCard';
@@ -6,6 +6,8 @@ import MemoryBlockPreviewModal from './MemoryBlockPreviewModal';
 import memoryService from '../api/memoryService';
 import agentService from '../api/agentService';
 import { MemoryBlock } from '../api/memoryService';
+import RefreshIndicator from './RefreshIndicator';
+import usePageHeader from '../hooks/usePageHeader';
 
 interface StatInfo {
   count: number;
@@ -33,20 +35,11 @@ const Dashboard: React.FC = () => {
   const [showMemoryModal, setShowMemoryModal] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  useEffect(() => {
-    fetchDashboardData();
+  const fetchConversationsCount = useCallback(async () => {
+    return memoryService.getConversationsCount();
   }, []);
 
-  // Refresh when organization scope changes globally
-  useEffect(() => {
-    const handler = () => {
-      fetchDashboardData();
-    };
-    window.addEventListener('orgScopeChanged', handler);
-    return () => window.removeEventListener('orgScopeChanged', handler);
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -125,15 +118,41 @@ const Dashboard: React.FC = () => {
       // Update last updated timestamp
       setLastUpdated(new Date());
     }
-  };
+  }, [fetchConversationsCount]);
 
-  const fetchConversationsCount = async () => {
-    return memoryService.getConversationsCount();
-  };
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      fetchDashboardData();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, [fetchDashboardData]);
 
-  const refreshData = () => {
-    fetchDashboardData();
-  };
+  const refreshData = useCallback(() => {
+    void fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  useEffect(() => {
+    void fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  const { setHeaderContent, clearHeaderContent } = usePageHeader();
+
+  useEffect(() => {
+    setHeaderContent({
+      description: 'Monitor key performance metrics and keep track of the latest memory blocks.',
+      actions: (
+        <RefreshIndicator
+          lastUpdated={lastUpdated}
+          onRefresh={refreshData}
+          loading={loading}
+        />
+      )
+    });
+
+    return () => clearHeaderContent();
+  }, [setHeaderContent, clearHeaderContent, lastUpdated, loading, refreshData]);
 
   // Click handlers for navigation
   const handleStatCardClick = (statType) => {
@@ -213,29 +232,12 @@ const Dashboard: React.FC = () => {
 
       {/* Recent Memory Blocks Section */}
       <div className="bg-white p-6 rounded-lg shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
             <svg className="w-5 h-5 text-gray-500 mr-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
             </svg>
             <h3 className="text-lg font-semibold text-gray-800">Recent Memory Blocks</h3>
-          </div>
-          <div className="flex items-center gap-3">
-            {lastUpdated && (
-              <div className="text-sm text-gray-500 font-medium">
-                Last updated: {lastUpdated.toLocaleString()}
-              </div>
-            )}
-            <button
-              onClick={refreshData}
-              className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition duration-200 flex items-center"
-              disabled={loading}
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refresh
-            </button>
           </div>
         </div>
 
@@ -269,6 +271,7 @@ const Dashboard: React.FC = () => {
                 key={memoryBlock.id}
                 memoryBlock={memoryBlock}
                 onClick={() => handleMemoryBlockClick(memoryBlock)}
+                showHeaderDate={false}
               />
             ))}
           </div>
