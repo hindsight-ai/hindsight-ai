@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import agentService from '../api/agentService';
 import memoryService from '../api/memoryService';
 import { Agent } from '../api/agentService';
 import { UIMemoryBlock } from '../types/domain';
+import RefreshIndicator from './RefreshIndicator';
+import usePageHeader from '../hooks/usePageHeader';
 
 // Interfaces for analytics data
 interface AgentWithStats extends Agent {
@@ -22,21 +24,9 @@ const AnalyticsPage: React.FC = () => {
   const [conversations, setConversations] = useState<ConversationStats[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  useEffect(() => {
-    fetchAnalyticsData();
-  }, []);
-
-  // Refresh when organization scope changes globally
-  useEffect(() => {
-    const handler = () => {
-      fetchAnalyticsData();
-    };
-    window.addEventListener('orgScopeChanged', handler);
-    return () => window.removeEventListener('orgScopeChanged', handler);
-  }, []);
-
-  const fetchAnalyticsData = async () => {
+  const fetchAnalyticsData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -104,8 +94,39 @@ const AnalyticsPage: React.FC = () => {
       setError('Failed to load analytics data. Please try again.');
     } finally {
       setLoading(false);
+      setLastUpdated(new Date());
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void fetchAnalyticsData();
+  }, [fetchAnalyticsData]);
+
+  // Refresh when organization scope changes globally
+  useEffect(() => {
+    const handler = () => {
+      fetchAnalyticsData();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, [fetchAnalyticsData]);
+
+  const handleRefresh = useCallback(() => {
+    fetchAnalyticsData();
+  }, [fetchAnalyticsData]);
+
+  const { setHeaderContent, clearHeaderContent } = usePageHeader();
+
+  useEffect(() => {
+    setHeaderContent({
+      description: 'Review performance trends across agents and conversations.',
+      actions: (
+        <RefreshIndicator lastUpdated={lastUpdated} onRefresh={handleRefresh} loading={loading} />
+      )
+    });
+
+    return () => clearHeaderContent();
+  }, [setHeaderContent, clearHeaderContent, lastUpdated, loading, handleRefresh]);
 
   const formatDate = (dateString: string | undefined): string => {
     if (!dateString) return 'Unknown';

@@ -25,10 +25,10 @@ const RefreshIndicator: React.FC<RefreshIndicatorProps> = ({
         disabled={loading}
         aria-label="Refresh data"
         title="Refresh data"
-        className={`p-2 rounded-full text-gray-500 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed ${buttonClassName}`}
+        className={`inline-flex items-center justify-center px-2.5 py-1.5 rounded-full text-gray-600 hover:text-gray-800 hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed ${buttonClassName}`}
       >
         <svg
-          className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
+          className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
