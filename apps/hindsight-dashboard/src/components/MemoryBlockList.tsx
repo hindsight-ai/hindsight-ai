@@ -10,6 +10,7 @@ import MemoryBlockTable from './MemoryBlockTable';
 import PaginationControls from './PaginationControls';
 import { UIMemoryBlock, UIMemoryKeyword } from '../types/domain';
 import { Agent } from '../api/agentService';
+import RefreshIndicator from './RefreshIndicator';
 
 // Interfaces for component state
 interface FiltersState {
@@ -541,6 +542,14 @@ const MemoryBlockList: React.FC = () => {
         </div>
       )}
 
+      <div className="flex justify-end mb-4">
+        <RefreshIndicator
+          lastUpdated={lastUpdated}
+          onRefresh={handleRefreshData}
+          loading={loading}
+        />
+      </div>
+
       {/* Empty State Message */}
       {!loading && !error && memoryBlocks.length === 0 && !areFiltersActive() && (
         <div className="empty-state-message">
@@ -632,107 +641,54 @@ const MemoryBlockList: React.FC = () => {
               )}
             </div>
 
-            {/* Last Updated and Refresh - Right Side */}
-            <div className="header-actions" style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              flexShrink: 0, // Prevent shrinking
-              marginLeft: 'auto' // Push to the right
-            }}>
-              {lastUpdated && (
-                <div className="last-updated" style={{
-                  fontSize: '0.85em',
-                  color: '#666',
-                  fontWeight: '500',
-                  whiteSpace: 'nowrap'
-                }}>
-                  Last updated: {lastUpdated.toLocaleString()}
-                </div>
-              )}
+            {/* Developer-only test controls */}
+            {VITE_DEV_MODE && (
+              <div className="header-actions" style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                flexShrink: 0,
+                marginLeft: 'auto'
+              }}>
+                <button
+                  className="test-save-button"
+                  data-testid="save-button"
+                  onClick={() => notificationService.showSuccess('Item saved successfully')}
+                  style={{
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    padding: '6px 10px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  Test Save
+                </button>
 
-              <button
-                className="refresh-button"
-                data-testid="refresh-data"
-                onClick={handleRefreshData}
-                disabled={loading}
-                style={{
-                  backgroundColor: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  padding: '6px 12px',
-                  borderRadius: '4px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  opacity: loading ? 0.6 : 1,
-                  transition: 'background-color 0.2s ease',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0
-                }}
-              >
-                {loading ? (
-                  <>
-                    <span data-testid="loading-indicator" style={{
-                      display: 'inline-block',
-                      animation: 'spin 1s linear infinite'
-                    }}>⟳</span>
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <span>🔄</span>
-                    Refresh
-                  </>
-                )}
-              </button>
-
-              {/* Test buttons for feedback system - only show in development mode */}
-              {VITE_DEV_MODE && (
-                <>
-                  <button
-                    className="test-save-button"
-                    data-testid="save-button"
-                    onClick={() => notificationService.showSuccess('Item saved successfully')}
-                    style={{
-                      backgroundColor: '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      padding: '6px 10px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0
-                    }}
-                  >
-                    Test Save
-                  </button>
-
-                  <button
-                    className="test-invalid-button"
-                    data-testid="invalid-action"
-                    onClick={() => notificationService.showError('Invalid action performed')}
-                    style={{
-                      backgroundColor: '#dc3545',
-                      color: 'white',
-                      border: 'none',
-                      padding: '6px 10px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0
-                    }}
-                  >
-                    Test Error
-                  </button>
-                </>
-              )}
-            </div>
+                <button
+                  className="test-invalid-button"
+                  data-testid="invalid-action"
+                  onClick={() => notificationService.showError('Invalid action performed')}
+                  style={{
+                    backgroundColor: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    padding: '6px 10px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  Test Error
+                </button>
+              </div>
+            )}
           </div>
 
           <MemoryBlockTable

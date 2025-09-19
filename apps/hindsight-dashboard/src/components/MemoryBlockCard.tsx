@@ -17,9 +17,10 @@ interface MemoryBlockCardProps {
   onCompactMemory?: (id: string, result: any) => void;
   availableAgents?: Agent[];
   llmEnabled?: boolean;
+  showHeaderDate?: boolean; // whether to show created_at near agent name in header (default true)
 }
 
-const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick, onArchive, onDelete, onSuggestKeywords, onCompactMemory, availableAgents = [], llmEnabled = true }) => {
+const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick, onArchive, onDelete, onSuggestKeywords, onCompactMemory, availableAgents = [], llmEnabled = true, showHeaderDate = true }) => {
   const [showCompactionModal, setShowCompactionModal] = useState(false);
   const handleCompactClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -30,7 +31,18 @@ const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick,
     setShowCompactionModal(true);
   };
   const handleCompactionApplied = (memoryId: string, compactionResult: any) => { onCompactMemory?.(memoryId, compactionResult); setShowCompactionModal(false); };
-  const formatDate = (dateString?: string) => { if (!dateString) return 'Unknown'; const date = new Date(dateString); if (isNaN(date.getTime())) return 'Invalid Date'; return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); };
+  const formatDateLong = (dateString?: string) => {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+  const formatDateShort = (dateString?: string) => {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
   const getAgentName = () => { if (availableAgents?.length && memoryBlock.agent_id) { const agent = availableAgents.find(a => a.agent_id === memoryBlock.agent_id); if (agent?.agent_name) return agent.agent_name; } if ((memoryBlock as any).agent_name) return (memoryBlock as any).agent_name; if (memoryBlock.agent_id) return `Agent ${memoryBlock.agent_id.slice(-8)}`; return 'Unknown Agent'; };
   const getConversationName = () => memoryBlock.conversation_id ? `Conversation: ${memoryBlock.conversation_id.slice(-4)}` : 'No Conversation';
   const getKeywords = () => { const kw = (memoryBlock as any).keywords; if (Array.isArray(kw)) { return kw.map((k: any) => typeof k === 'string' ? k : (k.keyword_text || k.keyword || '')).filter(Boolean); } if (memoryBlock.content) { const words = memoryBlock.content.toLowerCase().split(/\s+/); const common = ['the','a','an','and','or','but','in','on','at','to','for','of','with','by']; return words.filter(w => w.length > 3 && !common.includes(w)).slice(0,5); } return []; };
@@ -38,9 +50,9 @@ const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick,
   const getMetadata = () => { const metadata: Record<string, any> = {}; if (memoryBlock.feedback_score !== undefined) metadata.feedback_score = memoryBlock.feedback_score; if (memoryBlock.retrieval_count !== undefined) metadata.retrieval_count = memoryBlock.retrieval_count; if ((memoryBlock as any).priority) metadata.priority = (memoryBlock as any).priority; if ((memoryBlock as any).category) metadata.category = (memoryBlock as any).category; return metadata; };
   const keywords = getKeywords(); const metadata = getMetadata();
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-300" onClick={() => onClick?.(memoryBlock.id)}>
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-300 overflow-hidden" onClick={() => onClick?.(memoryBlock.id)}>
       {/* Header with Agent Info and Actions */}
-      <div className="flex justify-between items-start mb-4">
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-2 sm:flex-nowrap">
         <div className="flex items-start gap-4 flex-1">
           <div className="bg-purple-100 p-3 rounded-lg flex-shrink-0">
             <svg className="w-6 h-6 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -49,12 +61,20 @@ const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick,
           </div>
           <div className="flex-1 min-w-0">
             <h4 className="font-semibold text-gray-800 truncate">{getConversationName()}</h4>
-            <p className="text-sm text-gray-500">{getAgentName()} • {formatDate(memoryBlock.created_at || memoryBlock.timestamp)}</p>
+            <p className="text-sm text-gray-500">
+              {getAgentName()}
+              {showHeaderDate && (
+                <>
+                  {' '}
+                  • {formatDateLong(memoryBlock.created_at || memoryBlock.timestamp)}
+                </>
+              )}
+            </p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-1 ml-4">
+        <div className="flex items-center gap-1 ml-4 flex-shrink-0">
           {onSuggestKeywords && (
             <button
               onClick={(e) => {
@@ -132,12 +152,23 @@ const MemoryBlockCard: React.FC<MemoryBlockCardProps> = ({ memoryBlock, onClick,
         {/* Footer with timestamp and actions */}
         <div className="flex items-center justify-between pt-4 border-t border-gray-100">
           <div className="text-xs text-gray-500">
-            Created {formatDate(memoryBlock.created_at || memoryBlock.timestamp)}
-            {memoryBlock.updated_at && memoryBlock.updated_at !== (memoryBlock.created_at || memoryBlock.timestamp) && (
-              <span className="ml-2">
-                • Updated {formatDate(memoryBlock.updated_at)}
-              </span>
-            )}
+            {/* Compact footer on small screens: omit year to save space */}
+            <span className="sm:hidden">
+              Created {formatDateShort(memoryBlock.created_at || memoryBlock.timestamp)}
+              {memoryBlock.updated_at && memoryBlock.updated_at !== (memoryBlock.created_at || memoryBlock.timestamp) && (
+                <>
+                  {' '}• Updated {formatDateShort(memoryBlock.updated_at)}
+                </>
+              )}
+            </span>
+            <span className="hidden sm:inline">
+              Created {formatDateLong(memoryBlock.created_at || memoryBlock.timestamp)}
+              {memoryBlock.updated_at && memoryBlock.updated_at !== (memoryBlock.created_at || memoryBlock.timestamp) && (
+                <span className="ml-2">
+                  • Updated {formatDateLong(memoryBlock.updated_at)}
+                </span>
+              )}
+            </span>
           </div>
 
           {/* Additional actions could go here */}

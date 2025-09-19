@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import notificationService from '../services/notificationService';
 import { VITE_DEV_MODE } from '../lib/viteEnv';
 
@@ -7,11 +7,13 @@ interface DebugPanelProps {
 }
 
 const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
-  // Only show in development mode OR when explicitly made visible
-  const isDevMode = VITE_DEV_MODE;
-  if (!isDevMode && !visible) {
-    return null;
-  }
+  // Show when explicitly visible OR when in dev mode and user opted in via localStorage
+  const [pref, setPref] = useState(false);
+  useEffect(() => {
+    try { setPref(localStorage.getItem('SHOW_DEBUG_PANEL') === 'true'); } catch {}
+  }, []);
+  const shouldShow = Boolean(visible || (VITE_DEV_MODE && pref));
+  if (!shouldShow) return null;
 
   const showSuccessToast = () => {
     notificationService.showSuccess('This is a success notification! Operation completed successfully.');
@@ -47,6 +49,14 @@ const DebugPanel: React.FC<DebugPanelProps> = ({ visible = false }) => {
 
   return (
     <div className="fixed bottom-4 right-4 z-50 bg-white border border-gray-300 rounded-lg shadow-lg p-4 max-w-xs">
+      <button
+        onClick={() => { try { localStorage.setItem('SHOW_DEBUG_PANEL', 'false'); } catch {}; setPref(false); }}
+        className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 flex items-center justify-center"
+        title="Hide debug panel"
+        aria-label="Hide debug panel"
+      >
+        ×
+      </button>
       <div className="text-xs font-semibold text-gray-700 mb-3 text-center">
         🛠️ Debug Panel
       </div>

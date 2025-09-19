@@ -62,9 +62,8 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ className = '' }) =
       <button
         onClick={toggleDropdown}
         className={`
-          relative p-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1
-          transition-colors duration-200
+          relative inline-flex items-center justify-center w-12 h-12 rounded-md border border-gray-300 bg-white hover:bg-gray-50
+          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors duration-200
           ${isOpen ? 'bg-gray-50 ring-2 ring-blue-500 ring-offset-1' : ''}
           ${loading ? 'opacity-75' : ''}
         `}

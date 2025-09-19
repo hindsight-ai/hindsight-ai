@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Portal from './Portal';
 import memoryService, { Keyword } from '../api/memoryService';
 import notificationService from '../services/notificationService';
 import StatCard from './StatCard';
 import { UIMemoryBlock } from '../types/domain';
+import RefreshIndicator from './RefreshIndicator';
+import usePageHeader from '../hooks/usePageHeader';
 
 interface ExtendedKeyword extends Keyword {
   created_at?: string;
@@ -29,8 +31,8 @@ const KeywordManager: React.FC = () => {
   const [keywordUsageCounts, setKeywordUsageCounts] = useState<KeywordUsageCounts>({});
 
   useEffect(() => {
-    fetchKeywords();
-  }, []);
+    void fetchKeywords();
+  }, [fetchKeywords]);
 
   // Refresh keywords when organization scope changes
   useEffect(() => {
@@ -47,7 +49,7 @@ const KeywordManager: React.FC = () => {
     }
   }, [keywords]);
 
-  const fetchKeywords = async (): Promise<void> => {
+  const fetchKeywords = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
@@ -73,7 +75,7 @@ const KeywordManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleAddKeyword = async (): Promise<void> => {
     if (!newKeywordText.trim()) return;
@@ -170,74 +172,64 @@ const KeywordManager: React.FC = () => {
     }).length
   };
 
+  const { setHeaderContent, clearHeaderContent } = usePageHeader();
+
+  useEffect(() => {
+    setHeaderContent({
+      description: 'Manage your keyword catalog and track how often each term appears in memories.',
+      actions: (
+        <RefreshIndicator
+          lastUpdated={lastUpdated}
+          onRefresh={fetchKeywords}
+          loading={loading}
+        />
+      )
+    });
+
+    return () => clearHeaderContent();
+  }, [setHeaderContent, clearHeaderContent, lastUpdated, loading, fetchKeywords]);
+
   return (
     <div className="space-y-6">
-      {/* Header Section */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <svg className="w-6 h-6 text-blue-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-          </svg>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Keywords</h1>
-            <p className="text-gray-600">Manage and organize your keyword tags</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {lastUpdated && (
-            <span className="text-sm text-gray-500">
-              Last updated: {lastUpdated.toLocaleTimeString()}
-            </span>
-          )}
-          <button
-            onClick={fetchKeywords}
-            disabled={loading}
-            className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 disabled:opacity-50"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh
-          </button>
-        </div>
-      </div>
-
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 md:gap-5">
         <StatCard
-          title="Total Keywords"
+          title="Total"
           value={keywordStats.total}
           color="blue"
           loading={loading}
           error={!!error}
+          compact
           icon={
-            <svg className="w-6 h-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-[14px] h-[14px] text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
             </svg>
           }
         />
 
         <StatCard
-          title="Recent Keywords"
+          title="Recent"
           value={keywordStats.recent}
           color="green"
           loading={loading}
           error={!!error}
+          compact
           icon={
-            <svg className="w-6 h-6 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-[14px] h-[14px] text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           }
         />
 
         <StatCard
-          title="Filtered Results"
+          title="Filtered"
           value={filteredKeywords.length}
           color="purple"
           loading={loading}
           error={!!error}
+          compact
           icon={
-            <svg className="w-6 h-6 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-[14px] h-[14px] text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
           }
@@ -380,30 +372,34 @@ const KeywordManager: React.FC = () => {
                           autoFocus
                         />
                       ) : (
-                        <span className="text-sm font-medium text-gray-800 truncate block">
+                        <span
+                          className="text-sm font-medium text-gray-800 truncate block cursor-text"
+                          onClick={() => { try { if (window.innerWidth < 640) setEditingKeyword(keyword); } catch {} }}
+                          title="Click to edit"
+                        >
                           {keyword.keyword_text}
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2 ml-2">
                       {editingKeyword?.keyword_id === keyword.keyword_id ? (
                         <>
                           <button
                             onClick={() => handleEditKeyword(keyword)}
-                            className="text-green-600 hover:text-green-800 p-1 rounded hover:bg-green-50 transition-colors"
+                            className="text-green-600 hover:text-green-800 w-9 h-9 p-2 rounded-md hover:bg-green-50 transition-colors border border-transparent hover:border-green-200 flex items-center justify-center"
                             title="Save"
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                             </svg>
                           </button>
                           <button
                             onClick={() => setEditingKeyword(null)}
-                            className="text-gray-600 hover:text-gray-800 p-1 rounded hover:bg-gray-50 transition-colors"
+                            className="text-gray-600 hover:text-gray-800 w-9 h-9 p-2 rounded-md hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-200 flex items-center justify-center"
                             title="Cancel"
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                           </button>
@@ -412,19 +408,19 @@ const KeywordManager: React.FC = () => {
                         <>
                           <button
                             onClick={() => setEditingKeyword(keyword)}
-                            className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors"
+                            className="text-blue-600 hover:text-blue-800 w-9 h-9 p-2 rounded-md hover:bg-blue-50 transition-colors border border-transparent hover:border-blue-200 flex items-center justify-center"
                             title="Edit"
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                           </button>
                           <button
                             onClick={() => handleDeleteKeyword(keyword.keyword_id)}
-                            className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 transition-colors"
+                            className="text-red-600 hover:text-red-800 w-9 h-9 p-2 rounded-md hover:bg-red-50 transition-colors border border-transparent hover:border-red-200 flex items-center justify-center"
                             title="Delete"
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                           </button>
@@ -434,17 +430,17 @@ const KeywordManager: React.FC = () => {
                   </div>
 
                   {/* Usage stats and actions */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">
-                        Used in {usageCount} {usageCount === 1 ? 'memory' : 'memories'}
-                      </span>
-                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">
+                          Used in {usageCount} {usageCount === 1 ? 'memory' : 'memories'}
+                        </span>
+                      </div>
 
                     {usageCount > 0 && (
                       <button
                         onClick={() => handleViewAssociations(keyword)}
-                        className="text-xs text-blue-600 hover:text-blue-800 underline"
+                        className="hidden sm:inline text-xs text-blue-600 hover:text-blue-800 underline"
                         title="View associated memory blocks"
                       >
                         View memories

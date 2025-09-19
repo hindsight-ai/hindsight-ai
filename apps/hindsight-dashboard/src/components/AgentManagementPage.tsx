@@ -117,12 +117,8 @@ const AgentManagementPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header with Create Agent Button */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">Agents</h2>
-          <p className="text-gray-500">Manage your AI agents</p>
-        </div>
+      {/* Page Controls */}
+      <div className="flex justify-end items-center">
         <button
           onClick={() => setShowAddModal(true)}
           className="bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium hover:bg-gray-800 transition-colors"
@@ -169,7 +165,7 @@ const AgentManagementPage = () => {
           {filteredAgents.map((agent) => (
             <div
               key={agent.agent_id}
-              className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex justify-between items-start cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200"
+              className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex justify-between items-start cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200 overflow-hidden flex-wrap gap-2 sm:flex-nowrap"
               onClick={() => handleAgentClick(agent)}
             >
               <div className="flex items-start gap-4 flex-1">
