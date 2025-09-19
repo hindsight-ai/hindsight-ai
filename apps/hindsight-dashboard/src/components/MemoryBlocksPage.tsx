@@ -9,6 +9,7 @@ import MemoryCompactionModal from './MemoryCompactionModal';
 import { UIMemoryBlock } from '../types/domain';
 import { useAuth } from '../context/AuthContext';
 import RefreshIndicator from './RefreshIndicator';
+import { isValidUuid, sanitizeUuidInput } from '../utils/uuid';
 import usePageHeader from '../hooks/usePageHeader';
 
 // Result structure returned from compaction/compression endpoints (partial / evolving)
@@ -30,6 +31,8 @@ interface PaginationState { page: number; per_page: number; total_items: number;
 // Derive UI memory block shape (union the API minimal block with UI optional fields)
 type MemoryBlockRow = UIMemoryBlock & MemoryBlock & { [k: string]: any };
 
+const CONVERSATION_ID_ERROR = 'Enter a valid conversation ID (UUID).';
+
 const MemoryBlocksPage: React.FC = () => {
   const { features } = useAuth();
   const llmDisabled = !features.llmEnabled;
@@ -39,6 +42,7 @@ const MemoryBlocksPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [agentFilter, setAgentFilter] = useState<string>('');
   const [conversationFilter, setConversationFilter] = useState<string>('');
+  const [conversationFilterError, setConversationFilterError] = useState<string | null>(null);
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
@@ -61,8 +65,21 @@ const MemoryBlocksPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const sanitizedConversationFilter = sanitizeUuidInput(conversationFilter);
+  const hasConversationFilter = sanitizedConversationFilter.length > 0;
+  const conversationFilterIsValid = !hasConversationFilter || isValidUuid(sanitizedConversationFilter);
+
   // Fetch memory blocks with current filters
   const fetchMemoryBlocks = useCallback(async () => {
+    const normalizedConversationId = sanitizeUuidInput(conversationFilter);
+    const shouldFilterByConversation = normalizedConversationId.length > 0;
+
+    if (shouldFilterByConversation && !isValidUuid(normalizedConversationId)) {
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -70,12 +87,12 @@ const MemoryBlocksPage: React.FC = () => {
       const response: PaginatedResponse<MemoryBlockRow> = await memoryService.getMemoryBlocks({
         search_query: searchTerm,
         agent_id: agentFilter,
-        conversation_id: conversationFilter,
-        skip: skip,
+        skip,
         per_page: pagination.per_page,
         sort_by: sort.field,
         sort_order: sort.order,
         include_archived: false,
+        ...(shouldFilterByConversation ? { conversation_id: normalizedConversationId } : {}),
       });
 
       if (response && Array.isArray(response.items)) {
@@ -114,16 +131,22 @@ const MemoryBlocksPage: React.FC = () => {
   // Initialize from URL parameters
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
-  const rawPage = urlParams.get('page');
-  const pageFromUrl = rawPage ? parseInt(rawPage, 10) || 1 : 1;
+    const rawPage = urlParams.get('page');
+    const pageFromUrl = rawPage ? parseInt(rawPage, 10) || 1 : 1;
     const searchFromUrl = urlParams.get('search') || '';
     const agentFromUrl = urlParams.get('agent') || '';
     const conversationFromUrl = urlParams.get('conversation') || '';
+    const normalizedConversationFromUrl = sanitizeUuidInput(conversationFromUrl);
 
     setPagination(prev => ({ ...prev, page: pageFromUrl }));
     setSearchTerm(searchFromUrl);
     setAgentFilter(agentFromUrl);
     setConversationFilter(conversationFromUrl);
+    setConversationFilterError(
+      normalizedConversationFromUrl && !isValidUuid(normalizedConversationFromUrl)
+        ? CONVERSATION_ID_ERROR
+        : null
+    );
   }, [location.search]);
 
   // Update URL when filters change
@@ -133,8 +156,11 @@ const MemoryBlocksPage: React.FC = () => {
     else urlParams.delete('search');
     if (agentFilter) urlParams.set('agent', agentFilter);
     else urlParams.delete('agent');
-    if (conversationFilter) urlParams.set('conversation', conversationFilter);
-    else urlParams.delete('conversation');
+    if (conversationFilterIsValid && sanitizedConversationFilter) {
+      urlParams.set('conversation', sanitizedConversationFilter);
+    } else {
+      urlParams.delete('conversation');
+    }
     if (pagination.page > 1) urlParams.set('page', pagination.page.toString());
     else urlParams.delete('page');
 
@@ -143,7 +169,8 @@ const MemoryBlocksPage: React.FC = () => {
     if (newPath !== `${location.pathname}${location.search}`) {
       navigate(newPath, { replace: true });
     }
-  }, [searchTerm, agentFilter, conversationFilter, pagination.page, location.pathname, navigate]);
+  }, [searchTerm, agentFilter, conversationFilterIsValid, sanitizedConversationFilter, pagination.page, location.pathname, navigate]);
+
 
   // Debounced search
   useEffect(() => {
@@ -199,7 +226,17 @@ const MemoryBlocksPage: React.FC = () => {
   };
 
   const handleConversationFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setConversationFilter(e.target.value);
+    const value = e.target.value;
+    setConversationFilter(value);
+
+    const trimmed = sanitizeUuidInput(value);
+    if (!trimmed) {
+      setConversationFilterError(null);
+    } else if (isValidUuid(trimmed)) {
+      setConversationFilterError(null);
+    } else {
+      setConversationFilterError(CONVERSATION_ID_ERROR);
+    }
   };
 
   // Handle pagination
@@ -307,10 +344,15 @@ const MemoryBlocksPage: React.FC = () => {
     setSearchTerm('');
     setAgentFilter('');
     setConversationFilter('');
+    setConversationFilterError(null);
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
-  const hasActiveFilters = Boolean(searchTerm || agentFilter || conversationFilter);
+  const hasActiveFilters = Boolean(
+    searchTerm ||
+    agentFilter ||
+    (conversationFilterIsValid && sanitizedConversationFilter)
+  );
 
   const { setHeaderContent, clearHeaderContent } = usePageHeader();
 
@@ -381,8 +423,11 @@ const MemoryBlocksPage: React.FC = () => {
               value={conversationFilter}
               onChange={handleConversationFilterChange}
               placeholder="Filter by conversation"
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 ${conversationFilterError ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'}`}
             />
+            {conversationFilterError && (
+              <p className="mt-1 text-xs text-red-500">{conversationFilterError}</p>
+            )}
           </div>
 
           <div className="flex flex-col">
@@ -422,9 +467,9 @@ const MemoryBlocksPage: React.FC = () => {
                   Agent {availableAgents.find((a) => a.agent_id === agentFilter)?.agent_name || agentFilter}
                 </span>
               )}
-              {conversationFilter && (
+              {conversationFilterIsValid && sanitizedConversationFilter && (
                 <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">
-                  Conversation {conversationFilter}
+                  Conversation {sanitizedConversationFilter}
                 </span>
               )}
             </div>

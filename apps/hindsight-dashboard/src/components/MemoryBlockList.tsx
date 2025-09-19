@@ -11,6 +11,7 @@ import PaginationControls from './PaginationControls';
 import { UIMemoryBlock, UIMemoryKeyword } from '../types/domain';
 import { Agent } from '../api/agentService';
 import RefreshIndicator from './RefreshIndicator';
+import { isValidUuid } from '../utils/uuid';
 
 // Interfaces for component state
 interface FiltersState {
@@ -261,11 +262,6 @@ const MemoryBlockList: React.FC = () => {
   };
 
   // Helper function to validate UUID format
-  const isValidUUID = (uuidString: string): boolean => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(uuidString);
-  };
-
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>): void => {
     const { name, value } = e.target;
     if (name === 'search') {
@@ -284,7 +280,7 @@ const MemoryBlockList: React.FC = () => {
   };
 
   const handleAgentIdApply = (agentId: string): void => {
-    if (agentId === '' || isValidUUID(agentId)) {
+    if (agentId === '' || isValidUuid(agentId)) {
       setFilters((prevFilters) => ({
         ...prevFilters,
         agent_id: agentId,

@@ -10,6 +10,7 @@ import ArchivedMemoryCard from './ArchivedMemoryCard';
 import MemoryBlockDetailModal from './MemoryBlockDetailModal';
 import notificationService from '../services/notificationService';
 import StatCard from './StatCard';
+import { isValidUuid, sanitizeUuidInput } from '../utils/uuid';
 
 interface PaginationState {
   page: number;
@@ -19,6 +20,7 @@ interface PaginationState {
 }
 
 const DEFAULT_PAGE_SIZE = 12;
+const CONVERSATION_ID_ERROR = 'Enter a valid conversation ID (UUID).';
 
 const formatCount = (value: number | undefined): string => {
   if (value == null) return '0';
@@ -42,6 +44,7 @@ const ArchivedMemoryBlockList: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [agentFilter, setAgentFilter] = useState<string>('');
   const [conversationFilter, setConversationFilter] = useState<string>('');
+  const [conversationFilterError, setConversationFilterError] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<'recent' | 'oldest' | 'feedback'>('recent');
 
   const [pagination, setPagination] = useState<PaginationState>({
@@ -50,6 +53,10 @@ const ArchivedMemoryBlockList: React.FC = () => {
     total_items: 0,
     total_pages: 1
   });
+
+  const sanitizedConversationFilter = sanitizeUuidInput(conversationFilter);
+  const hasConversationFilter = sanitizedConversationFilter.length > 0;
+  const conversationFilterIsValid = !hasConversationFilter || isValidUuid(sanitizedConversationFilter);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -77,6 +84,12 @@ const ArchivedMemoryBlockList: React.FC = () => {
       return;
     }
 
+    if (hasConversationFilter && !conversationFilterIsValid) {
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -90,7 +103,9 @@ const ArchivedMemoryBlockList: React.FC = () => {
       };
       if (debouncedSearch) params.search_query = debouncedSearch;
       if (agentFilter) params.agent_id = agentFilter;
-      if (conversationFilter) params.conversation_id = conversationFilter;
+      if (conversationFilterIsValid && sanitizedConversationFilter) {
+        params.conversation_id = sanitizedConversationFilter;
+      }
 
       const response = await memoryService.getArchivedMemoryBlocks(params);
       const items = Array.isArray(response.items) ? response.items : [];
@@ -109,7 +124,7 @@ const ArchivedMemoryBlockList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [featureDisabled, pagination.page, pagination.per_page, sortOption, debouncedSearch, agentFilter, conversationFilter]);
+  }, [featureDisabled, pagination.page, pagination.per_page, sortOption, debouncedSearch, agentFilter, conversationFilterIsValid, sanitizedConversationFilter, hasConversationFilter]);
 
   useEffect(() => {
     fetchAgents();
@@ -141,6 +156,20 @@ const ArchivedMemoryBlockList: React.FC = () => {
     setPagination((prev) => ({ ...prev, page: 1 }));
   }, [debouncedSearch, agentFilter, conversationFilter, sortOption]);
 
+  const handleConversationFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setConversationFilter(value);
+
+    const trimmed = sanitizeUuidInput(value);
+    if (!trimmed) {
+      setConversationFilterError(null);
+    } else if (isValidUuid(trimmed)) {
+      setConversationFilterError(null);
+    } else {
+      setConversationFilterError(CONVERSATION_ID_ERROR);
+    }
+  };
+
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({
       ...prev,
@@ -156,10 +185,10 @@ const ArchivedMemoryBlockList: React.FC = () => {
     return Boolean(
       debouncedSearch ||
       agentFilter ||
-      conversationFilter ||
+      (conversationFilterIsValid && sanitizedConversationFilter) ||
       sortOption !== 'recent'
     );
-  }, [debouncedSearch, agentFilter, conversationFilter, sortOption]);
+  }, [debouncedSearch, agentFilter, conversationFilterIsValid, sanitizedConversationFilter, sortOption]);
 
   const agentNameLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -332,10 +361,13 @@ const ArchivedMemoryBlockList: React.FC = () => {
               </label>
               <input
                 value={conversationFilter}
-                onChange={(event) => setConversationFilter(event.target.value)}
+                onChange={handleConversationFilterChange}
                 placeholder="Filter by conversation"
-                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 ${conversationFilterError ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'}`}
               />
+              {conversationFilterError && (
+                <p className="mt-1 text-xs text-red-500">{conversationFilterError}</p>
+              )}
             </div>
 
             <div className="w-full sm:w-44">
@@ -369,9 +401,9 @@ const ArchivedMemoryBlockList: React.FC = () => {
                   Agent {resolveAgentName(agentFilter)}
                 </span>
               )}
-              {conversationFilter && (
+              {conversationFilterIsValid && sanitizedConversationFilter && (
                 <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">
-                  Conversation {conversationFilter}
+                  Conversation {sanitizedConversationFilter}
                 </span>
               )}
               {sortOption !== 'recent' && (
@@ -386,6 +418,7 @@ const ArchivedMemoryBlockList: React.FC = () => {
                 setDebouncedSearch('');
                 setAgentFilter('');
                 setConversationFilter('');
+                setConversationFilterError(null);
                 setSortOption('recent');
               }}
               className="text-xs font-medium uppercase tracking-wide text-blue-700 underline decoration-dotted"

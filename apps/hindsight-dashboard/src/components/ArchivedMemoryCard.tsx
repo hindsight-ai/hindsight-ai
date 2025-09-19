@@ -1,6 +1,54 @@
 import React from 'react';
 import { UIMemoryBlock } from '../types/domain';
 
+type KeywordLike =
+  | string
+  | {
+      keyword?: string | null;
+      keyword_text?: string | null;
+      name?: string | null;
+      label?: string | null;
+      value?: string | null;
+      text?: string | null;
+    };
+
+const keywordValueKeys = ['keyword_text', 'keyword', 'name', 'label', 'text', 'value'] as const;
+
+const normalizeKeywords = (rawKeywords: unknown): string[] => {
+  if (!Array.isArray(rawKeywords)) return [];
+
+  const seen = new Set<string>();
+  const labels: string[] = [];
+
+  for (const keyword of rawKeywords as KeywordLike[]) {
+    if (!keyword) continue;
+
+    let label: string | undefined;
+
+    if (typeof keyword === 'string') {
+      label = keyword;
+    } else if (typeof keyword === 'object') {
+      const bucket = keyword as Record<string, unknown>;
+      for (const key of keywordValueKeys) {
+        const value = bucket[key];
+        if (typeof value === 'string' && value.trim()) {
+          label = value;
+          break;
+        }
+      }
+    }
+
+    if (!label) continue;
+    const trimmed = label.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+
+    seen.add(trimmed);
+    labels.push(trimmed);
+  }
+
+  return labels;
+};
+
 const formatFullDate = (value?: string): string => {
   if (!value) return 'Unknown';
   const date = new Date(value);
@@ -40,7 +88,7 @@ const truncate = (value?: string, maxLength = 220): string => {
 };
 
 interface ArchivedMemoryCardProps {
-  memoryBlock: UIMemoryBlock & { keywords?: string[]; archived_at?: string; agent_name?: string };
+  memoryBlock: UIMemoryBlock & { keywords?: KeywordLike[]; archived_at?: string; agent_name?: string };
   agentName: string;
   onView: (id: string) => void;
   onRestore: (id: string) => Promise<void> | void;
@@ -51,9 +99,7 @@ interface ArchivedMemoryCardProps {
 const badgeClasses = 'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium';
 
 const ArchivedMemoryCard: React.FC<ArchivedMemoryCardProps> = ({ memoryBlock, agentName, onView, onRestore, onDelete, actionPending = false }) => {
-  const keywords = Array.isArray(memoryBlock.keywords)
-    ? memoryBlock.keywords
-    : []; // ensure array
+  const keywords = normalizeKeywords(memoryBlock.keywords);
 
   const contentPreview = truncate(
     memoryBlock.lessons_learned || (memoryBlock as any).summary || memoryBlock.content
