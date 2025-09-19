@@ -19,7 +19,8 @@ def _create_memory_block_with_score(
     memory_block: models.MemoryBlock,
     score: float,
     search_type: str,
-    rank_explanation: Optional[str] = None
+    rank_explanation: Optional[str] = None,
+    snippets: Optional[Dict[str, str]] = None,
 ) -> schemas.MemoryBlockWithScore:
     """
     Convert a MemoryBlock model to a MemoryBlockWithScore schema with search metadata.
@@ -51,7 +52,8 @@ def _create_memory_block_with_score(
         'keywords': keywords_list,  # Use converted keywords
         'search_score': score,
         'search_type': search_type,
-        'rank_explanation': rank_explanation
+        'rank_explanation': rank_explanation,
+        'snippets': snippets,
     }
     
     return schemas.MemoryBlockWithScore(**memory_block_dict)
@@ -119,9 +121,20 @@ class SearchService:
                 search_query_func
             )
             
+            # Optional Postgres highlighting snippets using ts_headline
+            hl_content = func.ts_headline('english', models.MemoryBlock.content, search_query_func,
+                                          'MaxFragments=2, MinWords=5, MaxWords=20')
+            hl_errors = func.ts_headline('english', models.MemoryBlock.errors, search_query_func,
+                                         'MaxFragments=1, MinWords=4, MaxWords=16')
+            hl_lessons = func.ts_headline('english', models.MemoryBlock.lessons_learned, search_query_func,
+                                          'MaxFragments=1, MinWords=4, MaxWords=16')
+
             base_query = db.query(
                 models.MemoryBlock,
-                rank_expression.label('rank')
+                rank_expression.label('rank'),
+                hl_content.label('hl_content'),
+                hl_errors.label('hl_errors'),
+                hl_lessons.label('hl_lessons'),
             ).filter(
                 models.MemoryBlock.search_vector.op('@@')(search_query_func)
             ).filter(
@@ -174,11 +187,25 @@ class SearchService:
             # Extract memory blocks and prepare results with scores
             memory_blocks_with_scores = []
             
-            for memory_block, rank in results_with_rank:
+            for row in results_with_rank:
+                # Row layout: (MemoryBlock, rank, hl_content, hl_errors, hl_lessons)
+                memory_block = row[0]
+                rank = row[1]
+                snippets_map: Dict[str, str] = {}
+                try:
+                    if row[2]:
+                        snippets_map['content'] = row[2]
+                    if row[3]:
+                        snippets_map['errors'] = row[3]
+                    if row[4]:
+                        snippets_map['lessons_learned'] = row[4]
+                except Exception:
+                    pass
                 score = float(rank) if rank else 0.0
                 memory_block_with_score = _create_memory_block_with_score(
                     memory_block, score, "fulltext", 
-                    f"BM25 relevance score: {score:.4f}"
+                    f"BM25 relevance score: {score:.4f}",
+                    snippets=snippets_map or None,
                 )
                 memory_blocks_with_scores.append(memory_block_with_score)
             
@@ -537,9 +564,28 @@ class SearchService:
         for i, memory_block in enumerate(raw_results):
             # Basic search doesn't have a real score, so use inverted rank
             score = 1.0 - (i / (len(raw_results) + 1))  # Score from 1.0 to close to 0
+            # Build a simple snippet around the first term occurrence in content
+            snippet: Optional[str] = None
+            try:
+                terms = search_terms
+                text_val = (memory_block.content or '')
+                idx = -1
+                for t in terms:
+                    idx = text_val.lower().find(t.lower())
+                    if idx >= 0:
+                        break
+                if idx >= 0:
+                    start = max(0, idx - 60)
+                    end = min(len(text_val), idx + 60)
+                    snippet = (('…' if start > 0 else '') + text_val[start:end] + ('…' if end < len(text_val) else ''))
+                else:
+                    snippet = text_val[:120] + ('…' if len(text_val) > 120 else '')
+            except Exception:
+                snippet = None
             result_with_score = _create_memory_block_with_score(
                 memory_block, score, "basic",
-                f"Basic search result rank: {i+1}"
+                f"Basic search result rank: {i+1}",
+                snippets={'content': snippet} if snippet else None,
             )
             results.append(result_with_score)
         

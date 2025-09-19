@@ -426,6 +426,58 @@ def get_user_info(
         "llm_features_enabled": flags["llm_features_enabled"],
     }
 
+# Search suggestions endpoint (prefix-based keyword suggestions)
+@router.get("/search/suggestions")
+def get_search_suggestions(
+    q: Optional[str] = None,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
+    """
+    Return simple prefix-based keyword suggestions for the active visibility scope.
+    This endpoint is additive and returns a small list of candidate keywords.
+    """
+    if not q or not q.strip():
+        return {"keywords": [], "recent_queries": []}
+    q = q.strip()
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, scope_ctx.organization_id)
+
+    from sqlalchemy import or_, and_
+    from core.db import models
+    query = db.query(models.Keyword)
+
+    # Scope: restrict to keywords visible to current user
+    if current_user is None:
+        query = query.filter(models.Keyword.visibility_scope == SCOPE_PUBLIC)
+    else:
+        org_ids = []
+        for m in (current_user.get('memberships') or []):
+            try:
+                org_ids.append(uuid.UUID(str(m.get('organization_id'))))
+            except Exception:
+                pass
+        query = query.filter(
+            or_(
+                models.Keyword.visibility_scope == SCOPE_PUBLIC,
+                and_(
+                    models.Keyword.visibility_scope == SCOPE_PERSONAL,
+                    models.Keyword.owner_user_id == current_user.get('id')
+                ),
+                and_(
+                    models.Keyword.visibility_scope == SCOPE_ORGANIZATION,
+                    models.Keyword.organization_id.in_(org_ids) if org_ids else False,
+                ),
+            )
+        )
+
+    # Prefix filter
+    query = query.filter(models.Keyword.keyword_text.ilike(f"{q}%"))
+    keywords = query.order_by(models.Keyword.keyword_text.asc()).limit(max(1, min(limit, 50))).all()
+    texts = [k.keyword_text for k in keywords]
+    return {"keywords": texts, "recent_queries": []}
+
 # Dashboard Stats Endpoints
 @router.get("/conversations/count")
 def get_conversations_count_endpoint(

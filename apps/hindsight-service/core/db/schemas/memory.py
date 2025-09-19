@@ -112,6 +112,8 @@ class MemoryBlockWithScore(MemoryBlock):
     search_score: float
     search_type: str = "basic"
     rank_explanation: Optional[str] = None
+    # Optional search snippets (e.g., highlighted fragments)
+    snippets: Optional[Dict[str, str]] = None
 
 
 class SearchMetadata(BaseModel):
