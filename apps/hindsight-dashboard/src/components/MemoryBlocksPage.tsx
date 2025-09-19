@@ -9,6 +9,7 @@ import MemoryCompactionModal from './MemoryCompactionModal';
 import { UIMemoryBlock } from '../types/domain';
 import { useAuth } from '../context/AuthContext';
 import RefreshIndicator from './RefreshIndicator';
+import { isValidUuid, sanitizeUuidInput } from '../utils/uuid';
 import usePageHeader from '../hooks/usePageHeader';
 
 // Result structure returned from compaction/compression endpoints (partial / evolving)
@@ -30,6 +31,8 @@ interface PaginationState { page: number; per_page: number; total_items: number;
 // Derive UI memory block shape (union the API minimal block with UI optional fields)
 type MemoryBlockRow = UIMemoryBlock & MemoryBlock & { [k: string]: any };
 
+const CONVERSATION_ID_ERROR = 'Enter a valid conversation ID (UUID).';
+
 const MemoryBlocksPage: React.FC = () => {
   const { features } = useAuth();
   const llmDisabled = !features.llmEnabled;
@@ -39,12 +42,17 @@ const MemoryBlocksPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [agentFilter, setAgentFilter] = useState<string>('');
   const [conversationFilter, setConversationFilter] = useState<string>('');
+  const [conversationFilterError, setConversationFilterError] = useState<string | null>(null);
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
   const [selectedMemoryBlockId, setSelectedMemoryBlockId] = useState<string | null>(null);
   const [showCompactionModal, setShowCompactionModal] = useState<boolean>(false);
   const [selectedMemoryBlock, setSelectedMemoryBlock] = useState<MemoryBlockRow | null>(null);
+  const [sort, setSort] = useState<{ field: 'created_at' | 'feedback_score'; order: 'asc' | 'desc' }>({
+    field: 'created_at',
+    order: 'desc'
+  });
 
   const [pagination, setPagination] = useState<PaginationState>({
     page: 1,
@@ -57,8 +65,21 @@ const MemoryBlocksPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const sanitizedConversationFilter = sanitizeUuidInput(conversationFilter);
+  const hasConversationFilter = sanitizedConversationFilter.length > 0;
+  const conversationFilterIsValid = !hasConversationFilter || isValidUuid(sanitizedConversationFilter);
+
   // Fetch memory blocks with current filters
   const fetchMemoryBlocks = useCallback(async () => {
+    const normalizedConversationId = sanitizeUuidInput(conversationFilter);
+    const shouldFilterByConversation = normalizedConversationId.length > 0;
+
+    if (shouldFilterByConversation && !isValidUuid(normalizedConversationId)) {
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -66,12 +87,12 @@ const MemoryBlocksPage: React.FC = () => {
       const response: PaginatedResponse<MemoryBlockRow> = await memoryService.getMemoryBlocks({
         search_query: searchTerm,
         agent_id: agentFilter,
-        conversation_id: conversationFilter,
-        skip: skip,
+        skip,
         per_page: pagination.per_page,
-        sort_by: 'created_at',
-        sort_order: 'desc',
+        sort_by: sort.field,
+        sort_order: sort.order,
         include_archived: false,
+        ...(shouldFilterByConversation ? { conversation_id: normalizedConversationId } : {}),
       });
 
       if (response && Array.isArray(response.items)) {
@@ -93,7 +114,7 @@ const MemoryBlocksPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, agentFilter, conversationFilter, pagination.page, pagination.per_page]);
+  }, [searchTerm, agentFilter, conversationFilter, pagination.page, pagination.per_page, sort]);
 
   // Fetch available agents for filter dropdown
   const fetchAgents = useCallback(async () => {
@@ -110,16 +131,22 @@ const MemoryBlocksPage: React.FC = () => {
   // Initialize from URL parameters
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
-  const rawPage = urlParams.get('page');
-  const pageFromUrl = rawPage ? parseInt(rawPage, 10) || 1 : 1;
+    const rawPage = urlParams.get('page');
+    const pageFromUrl = rawPage ? parseInt(rawPage, 10) || 1 : 1;
     const searchFromUrl = urlParams.get('search') || '';
     const agentFromUrl = urlParams.get('agent') || '';
     const conversationFromUrl = urlParams.get('conversation') || '';
+    const normalizedConversationFromUrl = sanitizeUuidInput(conversationFromUrl);
 
     setPagination(prev => ({ ...prev, page: pageFromUrl }));
     setSearchTerm(searchFromUrl);
     setAgentFilter(agentFromUrl);
     setConversationFilter(conversationFromUrl);
+    setConversationFilterError(
+      normalizedConversationFromUrl && !isValidUuid(normalizedConversationFromUrl)
+        ? CONVERSATION_ID_ERROR
+        : null
+    );
   }, [location.search]);
 
   // Update URL when filters change
@@ -129,8 +156,11 @@ const MemoryBlocksPage: React.FC = () => {
     else urlParams.delete('search');
     if (agentFilter) urlParams.set('agent', agentFilter);
     else urlParams.delete('agent');
-    if (conversationFilter) urlParams.set('conversation', conversationFilter);
-    else urlParams.delete('conversation');
+    if (conversationFilterIsValid && sanitizedConversationFilter) {
+      urlParams.set('conversation', sanitizedConversationFilter);
+    } else {
+      urlParams.delete('conversation');
+    }
     if (pagination.page > 1) urlParams.set('page', pagination.page.toString());
     else urlParams.delete('page');
 
@@ -139,7 +169,8 @@ const MemoryBlocksPage: React.FC = () => {
     if (newPath !== `${location.pathname}${location.search}`) {
       navigate(newPath, { replace: true });
     }
-  }, [searchTerm, agentFilter, conversationFilter, pagination.page, location.pathname, navigate]);
+  }, [searchTerm, agentFilter, conversationFilterIsValid, sanitizedConversationFilter, pagination.page, location.pathname, navigate]);
+
 
   // Debounced search
   useEffect(() => {
@@ -195,7 +226,17 @@ const MemoryBlocksPage: React.FC = () => {
   };
 
   const handleConversationFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setConversationFilter(e.target.value);
+    const value = e.target.value;
+    setConversationFilter(value);
+
+    const trimmed = sanitizeUuidInput(value);
+    if (!trimmed) {
+      setConversationFilterError(null);
+    } else if (isValidUuid(trimmed)) {
+      setConversationFilterError(null);
+    } else {
+      setConversationFilterError(CONVERSATION_ID_ERROR);
+    }
   };
 
   // Handle pagination
@@ -303,10 +344,15 @@ const MemoryBlocksPage: React.FC = () => {
     setSearchTerm('');
     setAgentFilter('');
     setConversationFilter('');
+    setConversationFilterError(null);
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
-  const hasActiveFilters = Boolean(searchTerm || agentFilter || conversationFilter);
+  const hasActiveFilters = Boolean(
+    searchTerm ||
+    agentFilter ||
+    (conversationFilterIsValid && sanitizedConversationFilter)
+  );
 
   const { setHeaderContent, clearHeaderContent } = usePageHeader();
 
@@ -327,68 +373,111 @@ const MemoryBlocksPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Search and Filters */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="relative">
-            <label htmlFor="search" className="text-sm font-medium text-gray-700 block mb-1">Search</label>
-            <input
-              type="text"
-              id="search"
-              placeholder="Search memories..."
-              value={searchTerm}
-              onChange={handleSearchChange}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-            />
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none pt-7">
-              <svg className="w-5 h-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      {/* Filters */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col">
+            <label htmlFor="memory-search" className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Search
+            </label>
+            <div className="relative mt-1">
+              <input
+                id="memory-search"
+                type="search"
+                placeholder="Search memories..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                className="w-full rounded-xl border border-gray-200 pl-10 pr-4 py-2.5 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+              <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-4.35-4.35M9.5 17a7.5 7.5 0 107.5-7.5 7.5 7.5 0 00-7.5 7.5z" />
               </svg>
             </div>
           </div>
-          <div>
-            <label htmlFor="agent-filter" className="text-sm font-medium text-gray-700 block mb-1">Filter by Agent</label>
+
+          <div className="flex flex-col">
+            <label htmlFor="memory-agent-filter" className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Agent
+            </label>
             <select
-              id="agent-filter"
+              id="memory-agent-filter"
               value={agentFilter}
               onChange={handleAgentFilterChange}
-              className="w-full py-2 px-3 border border-gray-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
               <option value="">All agents</option>
               {availableAgents.map((agent) => (
                 <option key={agent.agent_id} value={agent.agent_id}>
-                  {agent.agent_name || 'Unnamed Agent'}
+                  {agent.agent_name || `Agent ${agent.agent_id?.slice(-6)}`}
                 </option>
               ))}
             </select>
           </div>
-          <div>
-            <label htmlFor="conversation-filter" className="text-sm font-medium text-gray-700 block mb-1">Conversation ID</label>
+
+          <div className="flex flex-col">
+            <label htmlFor="memory-conversation-filter" className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Conversation ID
+            </label>
             <input
-              type="text"
-              id="conversation-filter"
-              placeholder="Filter by conversation"
+              id="memory-conversation-filter"
               value={conversationFilter}
               onChange={handleConversationFilterChange}
-              className="w-full py-2 px-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Filter by conversation"
+              className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 ${conversationFilterError ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'}`}
             />
+            {conversationFilterError && (
+              <p className="mt-1 text-xs text-red-500">{conversationFilterError}</p>
+            )}
+          </div>
+
+          <div className="flex flex-col">
+            <label htmlFor="memory-sort" className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Sort
+            </label>
+            <select
+              id="memory-sort"
+              value={sort.field === 'created_at' ? (sort.order === 'asc' ? 'oldest' : 'recent') : sort.field}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === 'recent') {
+                  setSort({ field: 'created_at', order: 'desc' });
+                } else if (value === 'oldest') {
+                  setSort({ field: 'created_at', order: 'asc' });
+                } else if (value === 'feedback') {
+                  setSort({ field: 'feedback_score', order: 'desc' });
+                }
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="recent">Recently created</option>
+              <option value="oldest">Oldest first</option>
+              <option value="feedback">Highest feedback</option>
+            </select>
           </div>
         </div>
 
-        {/* Filter Actions */}
         {hasActiveFilters && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Active filters:</span>
-              {searchTerm && <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Search: "{searchTerm}"</span>}
-              {agentFilter && <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Agent: {availableAgents.find(a => a.agent_id === agentFilter)?.agent_name || agentFilter}</span>}
-              {conversationFilter && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">Conversation: {conversationFilter}</span>}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-700">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">Active filters:</span>
+              {searchTerm && <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">Search "{searchTerm}"</span>}
+              {agentFilter && (
+                <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">
+                  Agent {availableAgents.find((a) => a.agent_id === agentFilter)?.agent_name || agentFilter}
+                </span>
+              )}
+              {conversationFilterIsValid && sanitizedConversationFilter && (
+                <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">
+                  Conversation {sanitizedConversationFilter}
+                </span>
+              )}
             </div>
             <button
               onClick={clearFilters}
-              className="text-sm text-gray-600 hover:text-gray-800 underline"
+              className="text-xs font-medium uppercase tracking-wide text-blue-700 underline decoration-dotted"
             >
-              Clear all filters
+              Clear all
             </button>
           </div>
         )}

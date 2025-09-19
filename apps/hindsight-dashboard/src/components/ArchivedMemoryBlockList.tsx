@@ -1,33 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import memoryService from '../api/memoryService';
-import agentService from '../api/agentService'; // Import agentService
-import MemoryBlockFilterBar from './MemoryBlockFilterBar';
-import MemoryBlockTable from './MemoryBlockTable';
-import PaginationControls from './PaginationControls';
-import { UIMemoryBlock, UIMemoryKeyword } from '../types/domain';
-import { Agent } from '../api/agentService';
+import agentService, { Agent } from '../api/agentService';
+import { UIMemoryBlock } from '../types/domain';
 import { useAuth } from '../context/AuthContext';
 import RefreshIndicator from './RefreshIndicator';
 import usePageHeader from '../hooks/usePageHeader';
-
-// Interfaces for component state
-interface FiltersState {
-  search_query: string;
-  agent_id: string;
-  conversation_id: string;
-  feedback_score_range: [number, number];
-  retrieval_count_range: [number, number];
-  start_date: string;
-  end_date: string;
-  keywords: string[];
-  search_type: string;
-  min_score: string;
-  similarity_threshold: string;
-  fulltext_weight: string;
-  semantic_weight: string;
-  min_combined_score: string;
-}
+import ArchivedMemoryCard from './ArchivedMemoryCard';
+import MemoryBlockDetailModal from './MemoryBlockDetailModal';
+import notificationService from '../services/notificationService';
+import StatCard from './StatCard';
+import { isValidUuid, sanitizeUuidInput } from '../utils/uuid';
 
 interface PaginationState {
   page: number;
@@ -36,53 +19,61 @@ interface PaginationState {
   total_pages: number;
 }
 
-interface SortState {
-  field: string;
-  order: 'asc' | 'desc';
-}
+const DEFAULT_PAGE_SIZE = 12;
+const CONVERSATION_ID_ERROR = 'Enter a valid conversation ID (UUID).';
 
-const ArchivedMemoryBlockList = () => {
+const formatCount = (value: number | undefined): string => {
+  if (value == null) return '0';
+  return value.toLocaleString();
+};
+
+const ArchivedMemoryBlockList: React.FC = () => {
   const { features } = useAuth();
   const featureDisabled = !features.archivedEnabled;
+  const navigate = useNavigate();
+
   const [memoryBlocks, setMemoryBlocks] = useState<UIMemoryBlock[]>([]);
+  const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [actionPendingId, setActionPendingId] = useState<string | null>(null);
+  const [detailModalId, setDetailModalId] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [agentIdInput, setAgentIdInput] = useState<string>(''); // Local state for agent ID input
-  const [filters, setFilters] = useState<FiltersState>({
-    search_query: '',
-    agent_id: '',
-    conversation_id: '',
-    feedback_score_range: [0, 100],
-    retrieval_count_range: [0, 1000],
-    start_date: '',
-    end_date: '',
-    keywords: [],
-    search_type: 'fulltext',
-    min_score: '',
-    similarity_threshold: '',
-    fulltext_weight: '',
-    semantic_weight: '',
-    min_combined_score: '',
-  });
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  const [agentFilter, setAgentFilter] = useState<string>('');
+  const [conversationFilter, setConversationFilter] = useState<string>('');
+  const [conversationFilterError, setConversationFilterError] = useState<string | null>(null);
+  const [sortOption, setSortOption] = useState<'recent' | 'oldest' | 'feedback'>('recent');
+
   const [pagination, setPagination] = useState<PaginationState>({
     page: 1,
-    per_page: 10,
+    per_page: DEFAULT_PAGE_SIZE,
     total_items: 0,
-    total_pages: 0,
+    total_pages: 1
   });
-  const [sort, setSort] = useState<SortState>({
-    field: 'created_at',
-    order: 'desc',
-  });
-  const [pageInputValue, setPageInputValue] = useState<string>('1'); // Local state for page input
-  const [availableKeywords, setAvailableKeywords] = useState<UIMemoryKeyword[]>([]);
-  const [selectedMemoryBlocks, setSelectedMemoryBlocks] = useState<string[]>([]); // Keep for consistency, but bulk actions won't be used
-  const [showFilters, setShowFilters] = useState<boolean>(true);
-  const [availableAgentIds, setAvailableAgentIds] = useState<string[]>([]); // New state for agent IDs
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const sanitizedConversationFilter = sanitizeUuidInput(conversationFilter);
+  const hasConversationFilter = sanitizedConversationFilter.length > 0;
+  const conversationFilterIsValid = !hasConversationFilter || isValidUuid(sanitizedConversationFilter);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+    }, 350);
+    return () => clearTimeout(timeout);
+  }, [searchTerm]);
+
+  const fetchAgents = useCallback(async () => {
+    try {
+      const response = await agentService.getAgents({ per_page: 500 });
+      const agents = Array.isArray(response.items) ? response.items : [];
+      setAvailableAgents(agents);
+    } catch (err) {
+      console.error('Failed to load agents for filter dropdown:', err);
+    }
+  }, []);
 
   const fetchArchivedMemoryBlocks = useCallback(async () => {
     if (featureDisabled) {
@@ -92,95 +83,66 @@ const ArchivedMemoryBlockList = () => {
       setLastUpdated(new Date());
       return;
     }
+
+    if (hasConversationFilter && !conversationFilterIsValid) {
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
+
     try {
-      // Convert page-based pagination to offset-based pagination for backend API
       const skip = (pagination.page - 1) * pagination.per_page;
-      const response = await memoryService.getArchivedMemoryBlocks({
-        ...filters,
-        min_feedback_score: filters.feedback_score_range[0],
-        max_feedback_score: filters.feedback_score_range[1],
-        min_retrieval_count: filters.retrieval_count_range[0],
-        max_retrieval_count: filters.retrieval_count_range[1],
-        skip: skip,
+      const params: Record<string, any> = {
+        skip,
         per_page: pagination.per_page,
-        sort_by: sort.field,
-        sort_order: sort.order,
-        keywords: filters.keywords.join(','),
-      });
-      setMemoryBlocks(response.items);
-      setPagination((prevPagination) => ({
-        ...prevPagination,
-        total_items: response.total_items,
-        total_pages: response.total_pages,
+        sort_by: sortOption === 'feedback' ? 'feedback_score' : 'archived_at',
+        sort_order: sortOption === 'oldest' ? 'asc' : 'desc'
+      };
+      if (debouncedSearch) params.search_query = debouncedSearch;
+      if (agentFilter) params.agent_id = agentFilter;
+      if (conversationFilterIsValid && sanitizedConversationFilter) {
+        params.conversation_id = sanitizedConversationFilter;
+      }
+
+      const response = await memoryService.getArchivedMemoryBlocks(params);
+      const items = Array.isArray(response.items) ? response.items : [];
+
+      setMemoryBlocks(items);
+      setPagination((prev) => ({
+        ...prev,
+        total_items: response.total_items ?? items.length,
+        total_pages:
+          response.total_pages ?? Math.max(1, Math.ceil((response.total_items ?? items.length) / prev.per_page))
       }));
       setLastUpdated(new Date());
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError('Failed to fetch archived memory blocks: ' + errorMessage);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to load archived memories: ${message}`);
     } finally {
       setLoading(false);
     }
-  }, [filters, pagination.page, pagination.per_page, sort, featureDisabled]);
-
-  const fetchKeywords = useCallback(async () => {
-    try {
-      const response = await memoryService.getKeywords();
-      setAvailableKeywords(response);
-    } catch (err) {
-      console.error('Failed to fetch keywords:', err);
-    }
-  }, []);
-
-  const fetchAgentIds = useCallback(async () => {
-    try {
-      const response = await agentService.getAgents({ per_page: 1000 }); // Fetch a reasonable number of agents
-      setAvailableAgentIds(response.items.map((agent: Agent) => agent.agent_id));
-    } catch (err) {
-      console.error('Failed to fetch agent IDs:', err);
-    }
-  }, []);
+  }, [featureDisabled, pagination.page, pagination.per_page, sortOption, debouncedSearch, agentFilter, conversationFilterIsValid, sanitizedConversationFilter, hasConversationFilter]);
 
   useEffect(() => {
-    setSelectedMemoryBlocks([]);
-  }, [memoryBlocks]);
-
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  // Initialize pagination state from URL parameters
-  useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const pageFromUrl = parseInt(urlParams.get('page') || '1') || 1;
-    const perPageFromUrl = parseInt(urlParams.get('per_page') || '10') || 10;
-
-    setPagination((prevPagination) => ({
-      ...prevPagination,
-      page: pageFromUrl,
-      per_page: perPageFromUrl,
-    }));
-  }, [location.search]);
+    fetchAgents();
+  }, [fetchAgents]);
 
   useEffect(() => {
-    setMemoryBlocks([]);
-    setLoading(true);
     fetchArchivedMemoryBlocks();
-    fetchKeywords();
-    fetchAgentIds();
-  }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchArchivedMemoryBlocks, fetchKeywords, fetchAgentIds]);
+  }, [fetchArchivedMemoryBlocks]);
 
   const handleManualRefresh = useCallback(() => {
     fetchArchivedMemoryBlocks();
-    fetchKeywords();
-    fetchAgentIds();
-  }, [fetchArchivedMemoryBlocks, fetchKeywords, fetchAgentIds]);
+  }, [fetchArchivedMemoryBlocks]);
 
   const { setHeaderContent, clearHeaderContent } = usePageHeader();
 
   useEffect(() => {
     setHeaderContent({
-      description: 'Browse archived memory blocks and bring important information back when needed.',
+      description: 'Review archived memories, restore important insights, or permanently purge data you no longer need.',
       actions: (
         <RefreshIndicator lastUpdated={lastUpdated} onRefresh={handleManualRefresh} loading={loading} />
       )
@@ -189,346 +151,381 @@ const ArchivedMemoryBlockList = () => {
     return () => clearHeaderContent();
   }, [setHeaderContent, clearHeaderContent, lastUpdated, loading, handleManualRefresh]);
 
-  // Refresh when organization scope changes globally
+  // Update debounced search results when filters change
   useEffect(() => {
-    const handler = () => {
-      setPagination(prev => ({ ...prev, page: 1 }));
-      setMemoryBlocks([]);
-      setLoading(true);
-      fetchArchivedMemoryBlocks();
-      fetchKeywords();
-      fetchAgentIds();
-    };
-    window.addEventListener('orgScopeChanged', handler);
-    return () => window.removeEventListener('orgScopeChanged', handler);
-  }, [fetchArchivedMemoryBlocks, fetchKeywords, fetchAgentIds]);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  }, [debouncedSearch, agentFilter, conversationFilter, sortOption]);
 
-  // Update URL parameters when pagination state changes
-  useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
+  const handleConversationFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setConversationFilter(value);
 
-    // Only update URL if pagination values are different from URL
-    const currentPage = parseInt(urlParams.get('page') || '1') || 1;
-    const currentPerPage = parseInt(urlParams.get('per_page') || '10') || 10;
-
-    if (pagination.page !== currentPage || pagination.per_page !== currentPerPage) {
-      urlParams.set('page', pagination.page.toString());
-      urlParams.set('per_page', pagination.per_page.toString());
-
-      // Preserve other existing parameters
-      const newSearch = urlParams.toString();
-      navigate(`${location.pathname}?${newSearch}`, { replace: true });
-    }
-  }, [pagination.page, pagination.per_page, location.pathname, location.search, navigate]);
-
-  useEffect(() => {
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
-
-    debounceTimeoutRef.current = setTimeout(() => {
-      setFilters((prevFilters) => ({
-        ...prevFilters,
-        search_query: searchTerm,
-      }));
-    }, 500);
-
-    return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
-    };
-  }, [searchTerm]);
-
-  const toggleFilters = () => {
-    setShowFilters(!showFilters);
-  };
-
-  // Helper function to validate UUID format
-  const isValidUUID = (uuidString: string): boolean => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(uuidString);
-  };
-
-  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>): void => {
-    const { name, value } = e.target;
-    if (name === 'search') {
-      setSearchTerm(value);
-    } else if (name === 'agent_id') {
-      setAgentIdInput(value);
+    const trimmed = sanitizeUuidInput(value);
+    if (!trimmed) {
+      setConversationFilterError(null);
+    } else if (isValidUuid(trimmed)) {
+      setConversationFilterError(null);
     } else {
-      setFilters((prevFilters) => ({
-        ...prevFilters,
-        [name]: value,
-      }));
+      setConversationFilterError(CONVERSATION_ID_ERROR);
     }
   };
 
-  const handleAgentIdApply = (agentId: string): void => {
-    if (agentId === '' || isValidUUID(agentId)) {
-      setError(null);
-      setFilters((prevFilters) => ({
-        ...prevFilters,
-        agent_id: agentId,
-      }));
-      setAgentIdInput(agentId);
-    } else {
-      setError('Invalid Agent ID format. Please enter a valid UUID or select from suggestions.');
-      setFilters((prevFilters) => ({
-        ...prevFilters,
-        agent_id: '',
-      }));
-      setAgentIdInput('');
-    }
-  };
-
-  const handleRangeFilterChange = (name: string, value: number | [number, number]): void => {
-    setFilters((prevFilters) => ({
-      ...prevFilters,
-      [name]: value,
+  const handlePageChange = (newPage: number) => {
+    setPagination((prev) => ({
+      ...prev,
+      page: Math.max(1, Math.min(newPage, prev.total_pages || 1))
     }));
   };
 
-  const handleKeywordChange = (selectedKeywords: string[]): void => {
-    setFilters((prevFilters) => ({
-      ...prevFilters,
-      keywords: selectedKeywords,
-    }));
+  const handlePerPageChange = (value: number) => {
+    setPagination({ page: 1, per_page: value, total_items: 0, total_pages: 1 });
   };
 
-  const handleSortChange = (field: string): void => {
-    setSort((prevSort) => ({
-      field,
-      order: prevSort.field === field && prevSort.order === 'asc' ? 'desc' : 'asc',
-    }));
-  };
-
-  const handlePerPageChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
-    setPagination((prevPagination) => ({
-      ...prevPagination,
-      per_page: parseInt(e.target.value),
-      page: 1,
-    }));
-    // The useEffect will handle triggering fetchArchivedMemoryBlocks when pagination state changes
-  };
-
-  const handlePageChange = (newPage: number): void => {
-    const totalPages = pagination.total_pages;
-    if (newPage >= 1 && newPage <= totalPages) {
-      setPagination((prevPagination) => ({
-        ...prevPagination,
-        page: newPage,
-      }));
-    }
-  };
-
-  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    // Only update the local input value, don't trigger fetch
-    setPageInputValue(e.target.value);
-  };
-
-  const handlePageInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === 'Enter') {
-      handlePageInputSubmit();
-    }
-  };
-
-  const handlePageInputBlur = (): void => {
-    handlePageInputSubmit();
-  };
-
-  const handlePageInputSubmit = (): void => {
-    const page = parseInt(pageInputValue);
-    const totalPages = pagination.total_pages;
-    if (!isNaN(page) && page >= 1 && page <= totalPages) {
-      handlePageChange(page);
-    } else {
-      // Reset to current page if invalid
-      setPageInputValue(pagination.page.toString());
-    }
-  };
-
-  const handleSelectMemoryBlock = (id: string): void => {
-    setSelectedMemoryBlocks((prevSelected) =>
-      prevSelected.includes(id)
-        ? prevSelected.filter((blockId) => blockId !== id)
-        : [...prevSelected, id]
+  const hasActiveFilters = useMemo(() => {
+    return Boolean(
+      debouncedSearch ||
+      agentFilter ||
+      (conversationFilterIsValid && sanitizedConversationFilter) ||
+      sortOption !== 'recent'
     );
+  }, [debouncedSearch, agentFilter, conversationFilterIsValid, sanitizedConversationFilter, sortOption]);
+
+  const agentNameLookup = useMemo(() => {
+    const map = new Map<string, string>();
+    availableAgents.forEach((agent) => {
+      if (agent.agent_id) {
+        map.set(agent.agent_id, agent.agent_name || `Agent ${agent.agent_id.slice(-6)}`);
+      }
+    });
+    return map;
+  }, [availableAgents]);
+
+  const resolveAgentName = (agentId?: string, fallback?: string) => {
+    if (!agentId) return fallback || 'Unknown agent';
+    return agentNameLookup.get(agentId) || fallback || `Agent ${agentId.slice(-6)}`;
   };
 
-  const handleSelectAllMemoryBlocks = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    if (e.target.checked) {
-      const allBlockIds = memoryBlocks.map((block) => block.id);
-      setSelectedMemoryBlocks(allBlockIds);
-    } else {
-      setSelectedMemoryBlocks([]);
+  const handleViewDetails = (id: string) => {
+    setDetailModalId(id);
+  };
+
+  const handleRestore = async (id: string) => {
+    try {
+      setActionPendingId(id);
+      await memoryService.updateMemoryBlock(id, { archived: false } as any);
+      notificationService.showSuccess('Memory restored successfully');
+      await fetchArchivedMemoryBlocks();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      notificationService.showError(`Failed to restore memory: ${message}`);
+    } finally {
+      setActionPendingId(null);
     }
   };
 
-  const handleActionChange = async (e: React.ChangeEvent<HTMLSelectElement>, id: string): Promise<void> => {
-    const selectedAction = e.target.value;
-    e.target.value = ""; 
-
-    if (selectedAction === 'view_edit') {
-      navigate(`/memory-blocks/${id}`);
-    } else if (selectedAction === 'hard_delete') { // New action for hard delete
-      if (window.confirm('Are you sure you want to PERMANENTLY delete this archived memory block? This action cannot be undone.')) {
-        try {
-          await memoryService.deleteMemoryBlock(id); // Use the hard delete endpoint
-          fetchArchivedMemoryBlocks(); // Refresh the list after deletion
-        } catch (err: unknown) {
-          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-          setError('Failed to hard delete memory block: ' + errorMessage);
-        }
+  const handleDelete = async (id: string) => {
+    try {
+      if (!window.confirm('This will permanently delete the memory block. Continue?')) {
+        return;
       }
-    } else if (selectedAction === 'unarchive') { // New action to unarchive
-      if (window.confirm('Are you sure you want to unarchive this memory block? It will reappear in the main Memory Blocks list.')) {
-        try {
-          // Assuming an unarchive endpoint or update endpoint that sets archived to false
-          await memoryService.updateMemoryBlock(id, { archived: false } as any); 
-          fetchArchivedMemoryBlocks(); // Refresh the list after unarchiving
-        } catch (err: unknown) {
-          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-          setError('Failed to unarchive memory block: ' + errorMessage);
-        }
-      }
+      setActionPendingId(id);
+      await memoryService.deleteMemoryBlock(id);
+      notificationService.showSuccess('Memory permanently deleted');
+      await fetchArchivedMemoryBlocks();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      notificationService.showError(`Failed to delete memory block: ${message}`);
+    } finally {
+      setActionPendingId(null);
     }
   };
 
-  // Wrapper functions for child component compatibility
-  const handleTableActionChange = (e: { target: { value: string } }, id: string): void => {
-    // Convert the simple event object to a proper React.ChangeEvent
-    const syntheticEvent = {
-      target: { value: e.target.value }
-    } as React.ChangeEvent<HTMLSelectElement>;
-    handleActionChange(syntheticEvent, id);
-  };
+  const totalArchived = pagination.total_items;
+  const uniqueAgentsOnPage = useMemo(() => {
+    return new Set(memoryBlocks.map((block) => block.agent_id || '')).size;
+  }, [memoryBlocks]);
 
-  const handleTableKeywordClick = (keyword: string): void => {
-    // Convert single keyword click to array format for our handler
-    handleKeywordChange([keyword]);
-  };
+  const mostRecentArchivedAt = memoryBlocks[0]?.archived_at;
 
-  const resetFilters = () => {
-    setSearchTerm('');
-    setAgentIdInput('');
-    setFilters({
-      search_query: '',
-      agent_id: '',
-      conversation_id: '',
-      feedback_score_range: [0, 100],
-      retrieval_count_range: [0, 1000],
-      start_date: '',
-      end_date: '',
-      keywords: [],
-      search_type: 'fulltext',
-      min_score: '',
-      similarity_threshold: '',
-      fulltext_weight: '',
-      semantic_weight: '',
-      min_combined_score: '',
-    });
-  };
+  const showingStart = useMemo(() => {
+    if (!totalArchived) return 0;
+    return (pagination.page - 1) * pagination.per_page + 1;
+  }, [pagination.page, pagination.per_page, totalArchived]);
 
-  const areFiltersActive = () => {
-    return Object.entries(filters).some(([key, value]) => {
-      if (Array.isArray(value)) {
-        if (key === 'feedback_score_range') return value[0] !== 0 || value[1] !== 100;
-        if (key === 'retrieval_count_range') return value[0] !== 0 || value[1] !== 1000;
-        return value.length > 0;
-      }
-      return value !== '';
-    });
-  };
+  const showingEnd = useMemo(() => {
+    if (!totalArchived) return 0;
+    return Math.min(pagination.page * pagination.per_page, totalArchived);
+  }, [pagination.page, pagination.per_page, totalArchived]);
 
-  if (loading) return <p className="loading-message">Loading archived memory blocks...</p>;
-  if (error) return <p className="error-message">Error: {error}</p>;
+  const emptyState = !loading && !error && memoryBlocks.length === 0;
+
+  const renderSkeletonCards = () => (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div
+          key={index}
+          className="h-full rounded-2xl border border-gray-200 bg-white p-6 shadow-sm animate-pulse"
+        >
+          <div className="h-4 w-32 rounded bg-gray-200" />
+          <div className="mt-3 h-6 w-48 rounded bg-gray-200" />
+          <div className="mt-4 h-3 w-full rounded bg-gray-200" />
+          <div className="mt-2 h-3 w-5/6 rounded bg-gray-200" />
+          <div className="mt-2 h-3 w-3/4 rounded bg-gray-200" />
+          <div className="mt-6 flex gap-2">
+            <div className="h-6 w-20 rounded-full bg-gray-200" />
+            <div className="h-6 w-16 rounded-full bg-gray-200" />
+          </div>
+          <div className="mt-6 h-4 w-40 rounded bg-gray-200" />
+        </div>
+      ))}
+    </div>
+  );
 
   if (featureDisabled) {
     return (
-      <div className="p-6">
-        <div className="max-w-3xl mx-auto text-center bg-gray-100 border border-dashed border-gray-300 rounded-xl p-10 text-gray-500">
-          <h2 className="text-xl font-semibold text-gray-600 mb-2">Archived Memories</h2>
-          <p className="text-sm text-gray-500">Feature coming soon.</p>
-        </div>
+      <div className="mx-auto max-w-3xl rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-6 py-16 text-center text-gray-500">
+        <h2 className="text-xl font-semibold text-gray-700">Archived memories</h2>
+        <p className="mt-2 text-sm">The archived memories feature is not yet enabled for your workspace.</p>
       </div>
     );
   }
 
   return (
-    <div className="memory-block-list-container">
-      {/* Empty State Message */}
-      {!loading && !error && memoryBlocks.length === 0 && !areFiltersActive() && (
-        <div className="empty-state-message">
-          <p>No Archived Memory Blocks Found</p>
-          <p>
-            There are no memory blocks currently archived.
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard
+          title="Archived memories"
+          value={totalArchived}
+          color="purple"
+          loading={loading && !totalArchived}
+        />
+        <StatCard
+          title="Agents represented"
+          value={uniqueAgentsOnPage}
+          color="blue"
+          loading={loading && !memoryBlocks.length}
+        />
+        <StatCard
+          title="Most recent archive"
+          value={mostRecentArchivedAt ? new Date(mostRecentArchivedAt).toLocaleDateString() : '—'}
+          color="green"
+          loading={loading && !memoryBlocks.length}
+        />
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="w-full lg:max-w-md">
+            <label htmlFor="archived-search" className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Search
+            </label>
+            <div className="mt-1 flex items-center gap-3">
+              <div className="relative flex-1">
+                <input
+                  id="archived-search"
+                  type="search"
+                  placeholder="Search archived memories..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 pl-10 pr-4 py-2.5 text-sm text-gray-700 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+                <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-4.35-4.35M9.5 17a7.5 7.5 0 107.5-7.5 7.5 7.5 0 00-7.5 7.5z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex w-full flex-col gap-4 sm:flex-row lg:justify-end">
+            <div className="w-full sm:w-48">
+              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Agent
+              </label>
+              <select
+                value={agentFilter}
+                onChange={(event) => setAgentFilter(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">All agents</option>
+                {availableAgents.map((agent) => (
+                  <option key={agent.agent_id} value={agent.agent_id}>
+                    {agent.agent_name || `Agent ${agent.agent_id?.slice(-6)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="w-full sm:w-48">
+              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Conversation ID
+              </label>
+              <input
+                value={conversationFilter}
+                onChange={handleConversationFilterChange}
+                placeholder="Filter by conversation"
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 ${conversationFilterError ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : 'border-gray-200 focus:border-blue-400 focus:ring-blue-100'}`}
+              />
+              {conversationFilterError && (
+                <p className="mt-1 text-xs text-red-500">{conversationFilterError}</p>
+              )}
+            </div>
+
+            <div className="w-full sm:w-44">
+              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Sort by
+              </label>
+              <select
+                value={sortOption}
+                onChange={(event) => setSortOption(event.target.value as typeof sortOption)}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="recent">Recently archived</option>
+                <option value="oldest">Oldest archived</option>
+                <option value="feedback">Highest feedback score</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {hasActiveFilters && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-700">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">Active filters:</span>
+              {debouncedSearch && (
+                <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">
+                  Search "{debouncedSearch}"
+                </span>
+              )}
+              {agentFilter && (
+                <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">
+                  Agent {resolveAgentName(agentFilter)}
+                </span>
+              )}
+              {conversationFilterIsValid && sanitizedConversationFilter && (
+                <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">
+                  Conversation {sanitizedConversationFilter}
+                </span>
+              )}
+              {sortOption !== 'recent' && (
+                <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">
+                  Sorted by {sortOption === 'oldest' ? 'Oldest first' : 'Highest feedback'}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setDebouncedSearch('');
+                setAgentFilter('');
+                setConversationFilter('');
+                setConversationFilterError(null);
+                setSortOption('recent');
+              }}
+              className="text-xs font-medium uppercase tracking-wide text-blue-700 underline decoration-dotted"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        renderSkeletonCards()
+      ) : emptyState ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm">
+          <svg className="h-12 w-12 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7m-5 4l-3 3-3-3m3 3V4" />
+          </svg>
+          <h3 className="mt-4 text-lg font-semibold text-gray-800">No archived memories yet</h3>
+          <p className="mt-2 max-w-md text-sm text-gray-500">
+            Memories you archive will appear here. Try adjusting your filters or head back to the main memory view to archive specific items.
           </p>
         </div>
-      )}
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+         {memoryBlocks.map((block) => (
+           <ArchivedMemoryCard
+             key={block.id}
+             memoryBlock={block}
+             agentName={resolveAgentName(block.agent_id, (block as any).agent_name)}
+             onView={handleViewDetails}
+             onRestore={handleRestore}
+             onDelete={handleDelete}
+             actionPending={actionPendingId === block.id}
+           />
+         ))}
+       </div>
+     )}
 
-      {/* Empty State Message when filters are active but no results */}
-      {!loading && !error && memoryBlocks.length === 0 && areFiltersActive() && (
-        <div className="empty-state-message">
-          <p>No Archived Memory Blocks Match Your Filters</p>
-          <p>
-            We couldn't find any archived memory blocks that match your current search criteria.
-            Try adjusting your filters or clearing them.
-          </p>
-          <button onClick={resetFilters}>
-            Clear Active Filters
-          </button>
-        </div>
-      )}
+      {!loading && !emptyState && pagination.total_pages > 1 && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
+          <div className="text-sm text-gray-600">
+            Showing {showingStart}-{showingEnd} of {formatCount(totalArchived)} archived memories
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => handlePageChange(1)}
+                disabled={pagination.page === 1}
+                className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 transition hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                First
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePageChange(pagination.page - 1)}
+                disabled={pagination.page === 1}
+                className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 transition hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePageChange(pagination.page + 1)}
+                disabled={pagination.page === pagination.total_pages}
+                className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 transition hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePageChange(pagination.total_pages)}
+                disabled={pagination.page === pagination.total_pages}
+                className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 transition hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Last
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>Rows:</span>
+              <select
+                value={pagination.per_page}
+                onChange={(event) => handlePerPageChange(Number(event.target.value))}
+                className="rounded-lg border border-gray-200 px-2 py-1 text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100"
+              >
+                {[12, 24, 48].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+       </div>
+     )}
 
-      {(!loading && !error && (memoryBlocks.length > 0 || areFiltersActive())) && (
-        <div>
-          <MemoryBlockFilterBar
-            filters={filters}
-            searchTerm={searchTerm}
-            agentIdInput={agentIdInput}
-            onFilterChange={handleFilterChange}
-            onRangeFilterChange={handleRangeFilterChange}
-            onKeywordChange={handleKeywordChange}
-            onAgentIdApply={handleAgentIdApply}
-            availableKeywords={availableKeywords}
-            availableAgentIds={availableAgentIds}
-            showFilters={showFilters}
-            toggleFilters={toggleFilters}
-            resetFilters={resetFilters}
-            areFiltersActive={areFiltersActive}
-            // Advanced search props (placeholders for archived view)
-            onAdvancedFilterChange={() => {}}
-            showAdvancedSearch={false}
-            toggleAdvancedSearch={() => {}}
-          />
-
-          {/* No BulkActionBar for archived blocks */}
-
-          <MemoryBlockTable
-            memoryBlocks={memoryBlocks}
-            selectedMemoryBlocks={selectedMemoryBlocks}
-            onSelectMemoryBlock={handleSelectMemoryBlock}
-            onSelectAllMemoryBlocks={handleSelectAllMemoryBlocks}
-            sort={sort}
-            onSortChange={handleSortChange}
-            onActionChange={handleTableActionChange}
-            onKeywordClick={handleTableKeywordClick}
-            navigate={navigate}
-            isArchivedView={true} // Pass a prop to indicate archived view
-          />
-
-          <PaginationControls
-            pagination={pagination}
-            onPageChange={handlePageChange}
-            onPerPageChange={handlePerPageChange}
-            onPageInputChange={handlePageInputChange}
-            pageInputValue={pageInputValue}
-            onPageInputKeyPress={handlePageInputKeyPress}
-            onPageInputBlur={handlePageInputBlur}
-          />
-        </div>
-      )}
+      <MemoryBlockDetailModal
+        blockId={detailModalId || ''}
+        isOpen={Boolean(detailModalId)}
+        onClose={() => setDetailModalId(null)}
+      />
     </div>
   );
 };
