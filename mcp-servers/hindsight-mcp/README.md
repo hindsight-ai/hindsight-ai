@@ -76,7 +76,7 @@ Configuration is driven entirely through environment variables so secrets never 
 
 | Variable | Description | Example |
 | --- | --- | --- |
-| `HINDSIGHT_API_TOKEN` | Personal Access Token (PAT) for the hosted Hindsight service. Provide **either** this or `HINDSIGHT_API_KEY`. | `hs_pat_xxxxxxxxxxxx` |
+| `HINDSIGHT_API_TOKEN` | Personal Access Token (PAT) for the hosted Hindsight service. | `hs_pat_xxxxxxxxxxxx` |
 
 ### Optional overrides and helpers
 
@@ -85,7 +85,6 @@ Configuration is driven entirely through environment variables so secrets never 
 | `HINDSIGHT_API_BASE_URL` | Base URL override. Defaults to `https://api.hindsight-ai.com`; set this only for self-hosted or local deployments. |
 | `DEFAULT_AGENT_ID` | Fallback agent UUID when a tool omits `agent_id`. Must reference an existing agent. |
 | `DEFAULT_CONVERSATION_ID` | Fallback conversation UUID when a tool omits `conversation_id`. Any UUID is acceptable; new values are created as needed. |
-| `HINDSIGHT_API_KEY` | Alternative credential sent as `X-API-Key`. Provide only one of token/key. |
 | `HINDSIGHT_ACTIVE_SCOPE` | Override scope header (`personal`, `organization`, `public`). Defaults based on token/org inference. |
 | `HINDSIGHT_ORGANIZATION_ID` | Organization override. Takes precedence over the token scope—set sparingly and ensure it matches the token’s organization. |
 
@@ -340,7 +339,7 @@ The Copilot MCP integration supports secure inputs. Use the configuration below 
 
 ### Smoke tests
 
-Export `HINDSIGHT_API_BASE_URL` and `HINDSIGHT_API_TOKEN` (or `HINDSIGHT_API_KEY`) in your shell, then run:
+Export `HINDSIGHT_API_BASE_URL` and `HINDSIGHT_API_TOKEN` in your shell, then run:
 
 ```bash
 curl -sS "$HINDSIGHT_API_BASE_URL/health"
@@ -351,8 +350,6 @@ curl -sS -H "Authorization: Bearer $HINDSIGHT_API_TOKEN" \
 curl -sS -H "Authorization: Bearer $HINDSIGHT_API_TOKEN" \
   "$HINDSIGHT_API_BASE_URL/memory-blocks/?limit=1" | jq .
 ```
-
-If you use API keys, swap the header for `X-API-Key: $HINDSIGHT_API_KEY`.
 
 ### Common issues
 
