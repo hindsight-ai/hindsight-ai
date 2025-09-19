@@ -7,7 +7,7 @@ with comprehensive scope and permission checks.
 from typing import List, Optional
 import uuid, os, math
 from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
 
 from core.db import schemas, crud, models
@@ -136,6 +136,175 @@ def get_all_memory_blocks_endpoint(
         "total_items": total_items,
         "total_pages": total_pages
     }
+
+@router.get("/export")
+def export_memory_blocks_endpoint(
+    format: str = Query(default="json"),
+    agent_id: Optional[str] = Query(default=None),
+    conversation_id: Optional[str] = Query(default=None),
+    include_archived: bool = False,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
+    """
+    Export memory blocks matching current filters.
+    Supported formats: json (default), csv.
+    """
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, scope_ctx.organization_id)
+
+    agent_uuid = parse_optional_uuid(agent_id)
+    conversation_uuid = parse_optional_uuid(conversation_id)
+
+    items = crud.get_all_memory_blocks(
+        db,
+        agent_id=agent_uuid,
+        conversation_id=conversation_uuid,
+        search_query=None,
+        sort_by=None,
+        sort_order="desc",
+        skip=0,
+        limit=None,
+        get_total=False,
+        include_archived=include_archived,
+        current_user=current_user,
+        scope_ctx=scope_ctx,
+    )
+
+    fmt = (format or "json").lower()
+    if fmt == "csv":
+        import io, csv
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        headers = [
+            'id','created_at','updated_at','agent_id','conversation_id','content','errors','lessons_learned',
+            'feedback_score','archived','visibility_scope','owner_user_id','organization_id'
+        ]
+        writer.writerow(headers)
+        for m in items:
+            writer.writerow([
+                str(m.id),
+                getattr(m, 'created_at', None),
+                getattr(m, 'updated_at', None),
+                str(getattr(m, 'agent_id', '') or ''),
+                str(getattr(m, 'conversation_id', '') or ''),
+                (getattr(m, 'content', '') or '').replace('\n', ' ').strip(),
+                (getattr(m, 'errors', '') or '').replace('\n', ' ').strip(),
+                (getattr(m, 'lessons_learned', '') or '').replace('\n', ' ').strip(),
+                getattr(m, 'feedback_score', None),
+                bool(getattr(m, 'archived', False)),
+                getattr(m, 'visibility_scope', ''),
+                str(getattr(m, 'owner_user_id', '') or '') if getattr(m, 'owner_user_id', None) else '',
+                str(getattr(m, 'organization_id', '') or '') if getattr(m, 'organization_id', None) else '',
+            ])
+        buf.seek(0)
+        return StreamingResponse(iter([buf.getvalue()]), media_type='text/csv', headers={
+            'Content-Disposition': 'attachment; filename="memory_blocks.csv"'
+        })
+    # default JSON
+    payload = [
+        {
+            'id': str(m.id),
+            'created_at': getattr(m, 'created_at', None).isoformat() if getattr(m, 'created_at', None) else None,
+            'updated_at': getattr(m, 'updated_at', None).isoformat() if getattr(m, 'updated_at', None) else None,
+            'agent_id': str(getattr(m, 'agent_id', '')) if getattr(m, 'agent_id', None) else None,
+            'conversation_id': str(getattr(m, 'conversation_id', '')) if getattr(m, 'conversation_id', None) else None,
+            'content': getattr(m, 'content', None),
+            'errors': getattr(m, 'errors', None),
+            'lessons_learned': getattr(m, 'lessons_learned', None),
+            'feedback_score': getattr(m, 'feedback_score', None),
+            'archived': bool(getattr(m, 'archived', False)),
+            'visibility_scope': getattr(m, 'visibility_scope', None),
+            'owner_user_id': str(getattr(m, 'owner_user_id', '')) if getattr(m, 'owner_user_id', None) else None,
+            'organization_id': str(getattr(m, 'organization_id', '')) if getattr(m, 'organization_id', None) else None,
+        }
+        for m in items
+    ]
+    return JSONResponse(content=payload)
+
+@router.post("/bulk-change-scope")
+def bulk_change_scope_endpoint(
+    payload: dict,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
+):
+    """
+    Bulk change visibility scope for multiple memory blocks.
+    Delegates to the single-item change scope logic for permission checks and auditing.
+    """
+    u, current_user = user_context
+    ids = payload.get('memory_block_ids') or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="memory_block_ids is required")
+
+    target_payload = {
+        'visibility_scope': payload.get('visibility_scope'),
+        'organization_id': payload.get('organization_id'),
+        'new_owner_user_id': payload.get('new_owner_user_id'),
+    }
+
+    from core.api.main import change_memory_block_scope as _change_single
+    successes = []
+    failures = []
+    for sid in ids:
+        try:
+            mid = uuid.UUID(str(sid))
+        except Exception:
+            failures.append({'memory_block_id': sid, 'error': 'invalid_uuid'})
+            continue
+        try:
+            result = _change_single(memory_id=mid, payload=target_payload, db=db, user_context=(u, current_user))
+            successes.append(str(result.id))
+        except HTTPException as e:
+            failures.append({'memory_block_id': str(mid), 'error': e.detail, 'status': e.status_code})
+        except Exception as e:
+            failures.append({'memory_block_id': str(mid), 'error': str(e)})
+
+    return {
+        'updated_count': len(successes),
+        'updated_ids': successes,
+        'failed': failures,
+    }
+
+@router.post("/{memory_id}/pin", response_model=schemas.MemoryBlock)
+def pin_memory_block(
+    memory_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
+):
+    current = crud.get_memory_block(db, memory_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
+    if not can_write(current, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    meta = dict(getattr(current, 'metadata_col', {}) or {})
+    meta['pinned'] = True
+    updated = crud.update_memory_block(db, memory_id=memory_id, memory_block=schemas.MemoryBlockUpdate(metadata_col=meta))
+    return updated
+
+@router.post("/{memory_id}/unpin", response_model=schemas.MemoryBlock)
+def unpin_memory_block(
+    memory_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
+):
+    current = crud.get_memory_block(db, memory_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    u, current_user = user_context
+    ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
+    if not can_write(current, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    meta = dict(getattr(current, 'metadata_col', {}) or {})
+    if 'pinned' in meta:
+        try:
+            del meta['pinned']
+        except Exception:
+            pass
+    updated = crud.update_memory_block(db, memory_id=memory_id, memory_block=schemas.MemoryBlockUpdate(metadata_col=meta))
+    return updated
 
 @router.get("/{memory_id}/keywords/", response_model=List[schemas.Keyword])
 def get_memory_block_keywords_endpoint(
