@@ -65,7 +65,7 @@ const ArchivedMemoryCard: React.FC<ArchivedMemoryCardProps> = ({ memoryBlock, ag
 
   return (
     <div
-      className="group relative flex h-full flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+      className="group relative flex h-full cursor-pointer flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
       onClick={() => onView(memoryBlock.id)}
       role="button"
       tabIndex={0}
