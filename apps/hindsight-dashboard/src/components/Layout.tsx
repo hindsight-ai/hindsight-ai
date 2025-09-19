@@ -19,7 +19,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, onOpenAbout, onToggleD
   const handleSidebarCollapse = (collapsed: boolean) => setSidebarCollapsed(collapsed);
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
+    <div className="flex min-h-[100dvh] bg-gray-100 overflow-hidden">
       <div className="fixed left-0 top-0 h-full z-10">
         <Sidebar 
           isOpen={sidebarOpen} 

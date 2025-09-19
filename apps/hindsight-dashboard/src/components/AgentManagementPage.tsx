@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import agentService, { Agent } from '../api/agentService';
 import AddAgentModal from './AddAgentModal';
 import AgentDetailsModal from './AgentDetailsModal';
+import RefreshIndicator from './RefreshIndicator';
+import usePageHeader from '../hooks/usePageHeader';
 
 const AgentManagementPage = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -11,6 +13,7 @@ const AgentManagementPage = () => {
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState<boolean>(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchAgents = useCallback(async () => {
     setLoading(true);
@@ -28,6 +31,7 @@ const AgentManagementPage = () => {
       setError('Failed to load agents. Please try again.');
     } finally {
       setLoading(false);
+      setLastUpdated(new Date());
     }
   }, []);
 
@@ -88,6 +92,21 @@ const AgentManagementPage = () => {
     });
   };
 
+  const handleManualRefresh = useCallback(() => {
+    fetchAgents();
+  }, [fetchAgents]);
+
+  const { setHeaderContent, clearHeaderContent } = usePageHeader();
+
+  useEffect(() => {
+    setHeaderContent({
+      description: 'Manage the agents connected to your workspace and keep their details up to date.',
+      actions: <RefreshIndicator lastUpdated={lastUpdated} onRefresh={handleManualRefresh} loading={loading} />
+    });
+
+    return () => clearHeaderContent();
+  }, [setHeaderContent, clearHeaderContent, lastUpdated, loading, handleManualRefresh]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -117,32 +136,27 @@ const AgentManagementPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header with Create Agent Button */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">Agents</h2>
-          <p className="text-gray-500">Manage your AI agents</p>
+
+      {/* Search & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="w-full sm:max-w-md">
+          <input
+            type="text"
+            placeholder="Search agents by name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center text-sm font-medium hover:bg-gray-800 transition-colors"
+          className="bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center justify-center text-sm font-medium hover:bg-gray-800 transition-colors"
         >
           <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
           </svg>
           Create Agent
         </button>
-      </div>
-
-      {/* Search Bar */}
-      <div className="max-w-md">
-        <input
-          type="text"
-          placeholder="Search agents by name..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
       </div>
 
       {/* Agent Cards Grid */}
@@ -169,7 +183,7 @@ const AgentManagementPage = () => {
           {filteredAgents.map((agent) => (
             <div
               key={agent.agent_id}
-              className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex justify-between items-start cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200"
+              className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex justify-between items-start cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200 overflow-hidden flex-wrap gap-2 sm:flex-nowrap"
               onClick={() => handleAgentClick(agent)}
             >
               <div className="flex items-start gap-4 flex-1">

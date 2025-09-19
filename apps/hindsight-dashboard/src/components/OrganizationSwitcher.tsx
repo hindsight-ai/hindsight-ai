@@ -33,7 +33,7 @@ const OrganizationSwitcher: React.FC = () => {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between w-full px-3 py-2 text-left bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors duration-200 min-w-[320px]"
+        className="flex items-center justify-between w-full md:min-w-[320px] md:max-w-[420px] px-3 py-2 text-left bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors duration-200"
         disabled={loading}
       >
         <div className="flex items-center space-x-2">
@@ -58,7 +58,7 @@ const OrganizationSwitcher: React.FC = () => {
             className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
           ></div>
-          <div className="absolute top-full left-0 mt-1 w-[320px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-80 overflow-y-auto">
+          <div className="absolute top-full left-0 right-0 md:right-auto mt-1 w-full md:w-[320px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-80 overflow-y-auto">
             {error && (
               <div className="px-3 py-2 text-sm text-red-600 bg-red-50 border-b border-gray-200">
                 {error}

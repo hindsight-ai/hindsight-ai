@@ -68,7 +68,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onCollapseChange, on
   return (
     <>
       {isOpen && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} />}
-      <aside className={`fixed top-0 left-0 h-screen z-50 ${isCollapsed ? 'w-16' : 'w-64'} flex-shrink-0 bg-[#0F172A] text-gray-300 flex flex-col overflow-y-auto transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+      <aside className={`fixed top-0 left-0 h-[100dvh] z-50 ${isCollapsed ? 'w-16' : 'w-64'} flex-shrink-0 bg-[#0F172A] text-gray-300 flex flex-col overflow-y-auto transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
         <div className="h-16 flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-700">
           <div className={`flex flex-col transition-all duration-200 ${isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'}`}>
             <h1 className="text-lg font-bold text-white leading-tight">Hindsight AI</h1>
@@ -87,6 +87,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onCollapseChange, on
                 <button
                   key={item.path}
                   onClick={() => {
+                    try {
+                      const cur = localStorage.getItem('SHOW_DEBUG_PANEL') === 'true';
+                      localStorage.setItem('SHOW_DEBUG_PANEL', cur ? 'false' : 'true');
+                    } catch {}
                     onToggleDebugPanel?.();
                     onClose();
                   }}

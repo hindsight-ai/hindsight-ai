@@ -8,6 +8,8 @@ import PaginationControls from './PaginationControls';
 import { UIMemoryBlock, UIMemoryKeyword } from '../types/domain';
 import { Agent } from '../api/agentService';
 import { useAuth } from '../context/AuthContext';
+import RefreshIndicator from './RefreshIndicator';
+import usePageHeader from '../hooks/usePageHeader';
 
 // Interfaces for component state
 interface FiltersState {
@@ -78,6 +80,7 @@ const ArchivedMemoryBlockList = () => {
   const [selectedMemoryBlocks, setSelectedMemoryBlocks] = useState<string[]>([]); // Keep for consistency, but bulk actions won't be used
   const [showFilters, setShowFilters] = useState<boolean>(true);
   const [availableAgentIds, setAvailableAgentIds] = useState<string[]>([]); // New state for agent IDs
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -86,6 +89,7 @@ const ArchivedMemoryBlockList = () => {
       setMemoryBlocks([]);
       setLoading(false);
       setError(null);
+      setLastUpdated(new Date());
       return;
     }
     setLoading(true);
@@ -111,6 +115,7 @@ const ArchivedMemoryBlockList = () => {
         total_items: response.total_items,
         total_pages: response.total_pages,
       }));
+      setLastUpdated(new Date());
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError('Failed to fetch archived memory blocks: ' + errorMessage);
@@ -164,6 +169,25 @@ const ArchivedMemoryBlockList = () => {
     fetchKeywords();
     fetchAgentIds();
   }, [filters, pagination.page, pagination.per_page, sort, location.pathname, fetchArchivedMemoryBlocks, fetchKeywords, fetchAgentIds]);
+
+  const handleManualRefresh = useCallback(() => {
+    fetchArchivedMemoryBlocks();
+    fetchKeywords();
+    fetchAgentIds();
+  }, [fetchArchivedMemoryBlocks, fetchKeywords, fetchAgentIds]);
+
+  const { setHeaderContent, clearHeaderContent } = usePageHeader();
+
+  useEffect(() => {
+    setHeaderContent({
+      description: 'Browse archived memory blocks and bring important information back when needed.',
+      actions: (
+        <RefreshIndicator lastUpdated={lastUpdated} onRefresh={handleManualRefresh} loading={loading} />
+      )
+    });
+
+    return () => clearHeaderContent();
+  }, [setHeaderContent, clearHeaderContent, lastUpdated, loading, handleManualRefresh]);
 
   // Refresh when organization scope changes globally
   useEffect(() => {
