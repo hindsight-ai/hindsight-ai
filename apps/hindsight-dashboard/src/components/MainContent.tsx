@@ -61,12 +61,13 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
 
   const description = headerConfig.description ?? defaultDescriptions[title];
   const descriptionPadding = headerConfig.actions ? 'pr-24 sm:pr-32' : '';
+  const containerClasses = 'max-w-[1440px] w-full px-4 sm:px-6 lg:px-8 xl:px-0 xl:mx-auto 2xl:ml-0 2xl:mr-auto';
 
   return (
     <PageHeaderContext.Provider value={headerContextValue}>
       <main className={`flex-1 flex flex-col overflow-hidden bg-gray-50 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'lg:p-4' : 'lg:p-4'}`}>
         <header className="p-4">
-          <div className="max-w-[1200px] w-full mx-auto">
+          <div className={containerClasses}>
             {/* Row 1: organization left, actions right (single row across sizes) */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -102,7 +103,7 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
           </div>
         </header>
         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4">
-          <div className="max-w-[1200px] w-full">
+          <div className={containerClasses}>
             {children}
           </div>
         </div>

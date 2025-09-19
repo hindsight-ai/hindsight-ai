@@ -30,25 +30,6 @@ const KeywordManager: React.FC = () => {
   const [loadingAssociations, setLoadingAssociations] = useState<boolean>(false);
   const [keywordUsageCounts, setKeywordUsageCounts] = useState<KeywordUsageCounts>({});
 
-  useEffect(() => {
-    void fetchKeywords();
-  }, [fetchKeywords]);
-
-  // Refresh keywords when organization scope changes
-  useEffect(() => {
-    const handler = () => {
-      fetchKeywords();
-    };
-    window.addEventListener('orgScopeChanged', handler);
-    return () => window.removeEventListener('orgScopeChanged', handler);
-  }, []);
-
-  useEffect(() => {
-    if (keywords.length > 0) {
-      fetchKeywordUsageCounts();
-    }
-  }, [keywords]);
-
   const fetchKeywords = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -76,6 +57,25 @@ const KeywordManager: React.FC = () => {
       setLoading(false);
     }
   }, []);
+
+  // Refresh keywords when organization scope changes
+  useEffect(() => {
+    const handler = () => {
+      fetchKeywords();
+    };
+    window.addEventListener('orgScopeChanged', handler);
+    return () => window.removeEventListener('orgScopeChanged', handler);
+  }, [fetchKeywords]);
+
+  useEffect(() => {
+    void fetchKeywords();
+  }, [fetchKeywords]);
+
+  useEffect(() => {
+    if (keywords.length > 0) {
+      fetchKeywordUsageCounts();
+    }
+  }, [keywords]);
 
   const handleAddKeyword = async (): Promise<void> => {
     if (!newKeywordText.trim()) return;
