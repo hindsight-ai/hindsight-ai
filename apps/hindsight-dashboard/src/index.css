@@ -262,3 +262,16 @@
   width: 0 !important;
   background: transparent !important;
 }
+/* Hide default input clear button */
+input[type="search"].no-clear::-webkit-search-decoration,
+input[type="search"].no-clear::-webkit-search-cancel-button,
+input[type="search"].no-clear::-webkit-search-results-button,
+input[type="search"].no-clear::-webkit-search-results-decoration {
+  display: none;
+}
+
+input[type="search"].no-clear {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
