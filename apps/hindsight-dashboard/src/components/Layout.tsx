@@ -8,9 +8,10 @@ interface LayoutProps {
   children: React.ReactNode;
   onOpenAbout?: () => void;
   onToggleDebugPanel?: () => void;
+  onOpenGetStarted?: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, title, onOpenAbout, onToggleDebugPanel }) => {
+const Layout: React.FC<LayoutProps> = ({ children, title, onOpenAbout, onToggleDebugPanel, onOpenGetStarted }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -29,7 +30,13 @@ const Layout: React.FC<LayoutProps> = ({ children, title, onOpenAbout, onToggleD
         />
       </div>
       <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-16 ml-0' : 'lg:ml-64 ml-0'}`}>
-        <MainContent title={title} toggleSidebar={toggleSidebar} sidebarCollapsed={sidebarCollapsed} onOpenAbout={onOpenAbout}>
+        <MainContent
+          title={title}
+          toggleSidebar={toggleSidebar}
+          sidebarCollapsed={sidebarCollapsed}
+          onOpenAbout={onOpenAbout}
+          onOpenHelp={onOpenGetStarted}
+        >
           {children}
         </MainContent>
       </div>

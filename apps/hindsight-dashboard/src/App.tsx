@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -32,6 +32,7 @@ import NotFoundPage from './components/NotFoundPage';
 import organizationService from './api/organizationService';
 import betaAccessService from './api/betaAccessService';
 import notificationService from './services/notificationService';
+import GetStartedModal from './components/GetStartedModal';
 
 interface UserInfo {
   authenticated?: boolean;
@@ -42,6 +43,8 @@ function AppContent() {
   const { user, loading, guest } = useAuth() as any; // Will type AuthContext after migration
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [showGetStarted, setShowGetStarted] = useState(false);
+  const hasAutoOpenedRef = useRef(false);
 
   useEffect(() => { document.title = 'Hindsight-AI'; }, []);
 
@@ -51,6 +54,48 @@ function AppContent() {
     if (status === 'denied' || status === 'revoked') return 'denied';
     return 'not_requested';
   };
+
+  const getStartedStorageKey = useMemo(() => {
+    if (!user || !(user as UserInfo)?.authenticated) return null;
+    const typed = user as any;
+    const identifier = typed?.user_id || typed?.email || 'default';
+    return `hindsight.get-started.${identifier}`;
+  }, [user]);
+
+  useEffect(() => {
+    hasAutoOpenedRef.current = false;
+  }, [getStartedStorageKey]);
+
+  const markGetStartedSeen = useCallback(() => {
+    hasAutoOpenedRef.current = true;
+    if (!getStartedStorageKey) return;
+    try { localStorage.setItem(getStartedStorageKey, new Date().toISOString()); } catch {}
+  }, [getStartedStorageKey]);
+
+  const handleOpenGetStarted = useCallback(() => {
+    hasAutoOpenedRef.current = true;
+    setShowGetStarted(true);
+  }, []);
+
+  const handleCloseGetStarted = useCallback(() => {
+    markGetStartedSeen();
+    setShowGetStarted(false);
+  }, [markGetStartedSeen]);
+
+  useEffect(() => {
+    if (loading || guest || !getStartedStorageKey) return;
+    if (!(user as UserInfo)?.authenticated) return;
+    if (location.pathname !== '/dashboard') return;
+    if (hasAutoOpenedRef.current) return;
+    try {
+      const seen = localStorage.getItem(getStartedStorageKey);
+      if (seen) return;
+    } catch {
+      // If storage is unavailable, still surface the guide once per session.
+    }
+    hasAutoOpenedRef.current = true;
+    setShowGetStarted(true);
+  }, [loading, guest, location.pathname, getStartedStorageKey, user]);
   useEffect(() => { try { window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch {} }, [location.pathname, location.search, (user as UserInfo)?.authenticated, guest]);
   useEffect(() => {
     const isOAuthPath = location.pathname.startsWith('/oauth2');
@@ -260,7 +305,12 @@ function AppContent() {
     <div className="App" data-testid="dashboard-container">
       <NotificationContainer />
       <DebugPanel visible={showDebugPanel} />
-      <Layout title={getPageTitle(location.pathname)} onOpenAbout={() => setShowAboutModal(true)} onToggleDebugPanel={() => setShowDebugPanel(prev => !prev)}>
+      <Layout
+        title={getPageTitle(location.pathname)}
+        onOpenAbout={() => setShowAboutModal(true)}
+        onToggleDebugPanel={() => setShowDebugPanel(prev => !prev)}
+        onOpenGetStarted={handleOpenGetStarted}
+      >
         <Routes>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profile" element={<ProfilePage />} />
@@ -279,6 +329,7 @@ function AppContent() {
         </Routes>
       </Layout>
       <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} />
+      <GetStartedModal isOpen={showGetStarted} onClose={handleCloseGetStarted} />
     </div>
   );
 }
