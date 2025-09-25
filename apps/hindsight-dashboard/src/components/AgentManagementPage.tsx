@@ -78,9 +78,13 @@ const AgentManagementPage = () => {
     fetchAgents();
   };
 
-  const filteredAgents = agents.filter(agent =>
-    agent.agent_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const trimmedSearchTerm = searchTerm.trim();
+  const normalizedSearchTerm = trimmedSearchTerm.toLowerCase();
+  const hasActiveFilters = normalizedSearchTerm.length > 0;
+
+  const filteredAgents = hasActiveFilters
+    ? agents.filter((agent) => (agent.agent_name || '').toLowerCase().includes(normalizedSearchTerm))
+    : agents;
 
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'Unknown';
@@ -95,6 +99,10 @@ const AgentManagementPage = () => {
   const handleManualRefresh = useCallback(() => {
     fetchAgents();
   }, [fetchAgents]);
+
+  const clearFilters = useCallback(() => {
+    setSearchTerm('');
+  }, []);
 
   const { setHeaderContent, clearHeaderContent } = usePageHeader();
 
@@ -158,6 +166,23 @@ const AgentManagementPage = () => {
           Create Agent
         </button>
       </div>
+
+      {hasActiveFilters && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-700">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">Active filters:</span>
+            <span className="rounded-full bg-white px-2 py-1 text-xs text-blue-700">
+              Search "{trimmedSearchTerm}"
+            </span>
+          </div>
+          <button
+            onClick={clearFilters}
+            className="text-xs font-medium uppercase tracking-wide text-blue-700 underline decoration-dotted"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
 
       {/* Agent Cards Grid */}
       {filteredAgents.length === 0 ? (
