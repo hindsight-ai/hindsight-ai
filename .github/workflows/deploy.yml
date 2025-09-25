@@ -282,6 +282,10 @@ jobs:
               PROFILE_FLAG="--profile prod"
             fi
 
+            # Trim unused Docker resources while services continue running
+            echo "Pruning unused Docker resources before shutdown..."
+            docker system prune -af
+
             # Pull new images and deploy
             echo "Pulling new images and deploying to ${{ env.ENV_NAME }}..."
             docker compose -f ${{ env.COMPOSE_FILE }} pull || true
