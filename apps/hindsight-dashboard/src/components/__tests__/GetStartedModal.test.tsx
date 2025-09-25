@@ -16,7 +16,8 @@ describe('GetStartedModal', () => {
     expect(screen.getByText('Select your MCP client')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Codex CLI/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Configure Codex CLI')).toBeInTheDocument();
-    expect(screen.getByText('~/.config/codex.toml')).toBeInTheDocument();
+    const codexConfigOccurrences = screen.getAllByText('~/.config/codex.toml');
+    expect(codexConfigOccurrences.length).toBeGreaterThan(0);
     expect(screen.getByText('Adjust your workflow')).toBeInTheDocument();
     expect(screen.getByText('Markdown File for Instructions')).toBeInTheDocument();
     expect(screen.getByText('AGENTS.md template')).toBeInTheDocument();

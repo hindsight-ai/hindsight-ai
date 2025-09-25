@@ -473,19 +473,22 @@ const GetStartedModal: React.FC<GetStartedModalProps> = ({ isOpen, onClose }) =>
   };
 
   const renderSnippet = (snippet: Snippet) => (
-    <div key={snippet.id} className="relative mt-4">
-      <button
-        type="button"
-        className="absolute right-3 top-3 inline-flex items-center justify-center rounded-md border border-slate-600/60 bg-slate-800/60 px-2 py-1 text-[11px] font-medium text-slate-100 hover:bg-slate-700"
-        onClick={() => copyToClipboard(snippet.content)}
-        aria-label={`Copy ${snippet.label}`}
-      >
-        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <path d="M9 9V3h12v12h-6" />
-          <path d="M9 3H3v18h12v-6" />
-        </svg>
-      </button>
-      <pre className="rounded-lg bg-slate-900 text-slate-100 text-xs sm:text-sm p-4 pr-12 overflow-x-auto whitespace-pre">
+    <div key={snippet.id} className="mt-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{snippet.label}</span>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center rounded-md border border-slate-600/60 bg-slate-800/60 px-2 py-1 text-[11px] font-medium text-slate-100 hover:bg-slate-700"
+          onClick={() => copyToClipboard(snippet.content)}
+          aria-label={`Copy ${snippet.label}`}
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M9 9V3h12v12h-6" />
+            <path d="M9 3H3v18h12v-6" />
+          </svg>
+        </button>
+      </div>
+      <pre className="mt-2 rounded-lg bg-slate-900 text-slate-100 text-xs sm:text-sm p-4 overflow-x-auto whitespace-pre">
         <code>{snippet.content}</code>
       </pre>
     </div>
