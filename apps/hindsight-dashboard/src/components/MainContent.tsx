@@ -12,10 +12,9 @@ interface MainContentProps {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   onOpenAbout?: () => void;
-  onOpenHelp?: () => void;
 }
 
-const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarCollapsed, toggleSidebar, onOpenAbout, onOpenHelp }) => {
+const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarCollapsed, toggleSidebar, onOpenAbout }) => {
   const { guest } = useAuth();
   const location = useLocation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -81,19 +80,6 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
               </div>
               <div className="flex items-center gap-2 sm:gap-3 flex-nowrap justify-end">
                 {guest && <span className="hidden sm:inline-flex px-2 py-0.5 text-[10px] sm:text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">Guest Mode · Read-only</span>}
-                {onOpenHelp && (
-                  <button
-                    type="button"
-                    onClick={onOpenHelp}
-                    className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-100 transition"
-                    aria-label="Open get started guide"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M12 6a4 4 0 00-4 4h2a2 2 0 114 0c0 2-3 1.5-3 5h2c0-2.5 3-2 3-5a4 4 0 00-4-4z" />
-                    </svg>
-                    <span className="hidden sm:inline">Get Started</span>
-                  </button>
-                )}
                 <NotificationBell />
                 <UserAccountButton />
               </div>
