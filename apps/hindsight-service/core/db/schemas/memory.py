@@ -19,6 +19,7 @@ class MemoryBlockBase(BaseModel):
     visibility_scope: Optional[VisibilityScopeEnum] = VisibilityScopeEnum.personal
     owner_user_id: Optional[uuid.UUID] = None
     organization_id: Optional[uuid.UUID] = None
+    content_embedding: Optional[List[float]] = None
 
 
 class MemoryBlockCreate(MemoryBlockBase):
