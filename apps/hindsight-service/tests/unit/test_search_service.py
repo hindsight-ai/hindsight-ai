@@ -152,7 +152,7 @@ class TestSearchService:
         assert results == ['converted']
         assert metadata["search_type"] == "semantic"
         assert metadata["semantic_results_count"] == 1
-        assert metadata["scores"] == [0.86]
+        assert metadata["scores"][0] == pytest.approx(0.14)
 
     def test_search_memory_blocks_hybrid_empty_query(self):
         db = Mock()

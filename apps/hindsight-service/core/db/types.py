@@ -15,6 +15,8 @@ except Exception:  # pragma: no cover - optional dependency
     PGVector = None  # type: ignore
 
 
+HAS_PGVECTOR = PGVector is not None or Vector is not None
+
 if PGVector is not None:  # pragma: no cover - optional dependency
     class _SafePGVector(PGVector):
         """PGVector variant resilient to psycopg returning Python sequences."""
@@ -31,6 +33,9 @@ if PGVector is not None:  # pragma: no cover - optional dependency
 
 else:  # pragma: no cover - optional dependency
     _SafePGVector = None  # type: ignore
+
+
+__all__ = ["EmbeddingVector", "HAS_PGVECTOR"]
 
 
 class EmbeddingVector(TypeDecorator[List[float]]):

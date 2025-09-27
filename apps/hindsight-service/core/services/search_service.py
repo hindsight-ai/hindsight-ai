@@ -15,6 +15,7 @@ from sqlalchemy import func, text, and_, or_, String, literal, cast, Float
 from core.utils.scopes import SCOPE_PUBLIC, SCOPE_ORGANIZATION, SCOPE_PERSONAL
 
 from core.db import models, schemas
+from core.db.types import HAS_PGVECTOR
 from core.services import get_embedding_service
 
 logger = logging.getLogger(__name__)
@@ -361,6 +362,25 @@ class SearchService:
             )
             return results, metadata
 
+        if not HAS_PGVECTOR:
+            results, metadata = self._basic_search_fallback(
+                db,
+                query,
+                agent_id,
+                conversation_id,
+                limit,
+                include_archived,
+                current_user,
+            )
+            metadata.update(
+                {
+                    "search_type": "semantic_fallback",
+                    "fallback_reason": "pgvector_unavailable",
+                    "similarity_threshold": similarity_threshold,
+                }
+            )
+            return results, metadata
+
         try:
             raw_embedding = embedding_service.embed_text(query.strip())
             if raw_embedding:
@@ -516,6 +536,25 @@ class SearchService:
                     {"semantic_raw": score, "distance": float(distance) if distance is not None else None}
                 )
             )
+
+        if not memory_blocks_with_scores:
+            fallback_results, metadata = self._basic_search_fallback(
+                db,
+                query,
+                agent_id,
+                conversation_id,
+                limit,
+                include_archived,
+                current_user,
+            )
+            metadata.update(
+                {
+                    "search_type": "semantic_fallback",
+                    "fallback_reason": "no_semantic_matches",
+                    "similarity_threshold": threshold,
+                }
+            )
+            return fallback_results, metadata
 
         search_time = (time.time() - start_time) * 1000
 
@@ -1093,7 +1132,13 @@ class SearchService:
         
         # Apply scope filters
         if current_user is None:
-            query = query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
+            # Internal callers (e.g., agent tools) may not provide a user context but do
+            # pass an agent/conversation filter. In that case we retain historical
+            # behaviour and search across the agent's entire corpus regardless of
+            # visibility. Only default to public-only results when no scope hints are
+            # supplied.
+            if not agent_id and not conversation_id:
+                query = query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
         else:
             org_ids: List[uuid.UUID] = []
             for m in (current_user.get('memberships') or []):
