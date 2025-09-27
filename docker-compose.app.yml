@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:13
+    image: pgvector/pgvector:pg16
     restart: always
     environment:
       POSTGRES_DB: hindsight_db
@@ -101,6 +101,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/hindsight_db
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL}
+      KNOWLEDGE_BASES_ROOT_DIR: ${KNOWLEDGE_BASES_ROOT_DIR}
       CONSOLIDATION_BATCH_SIZE: ${CONSOLIDATION_BATCH_SIZE}
       FALLBACK_SIMILARITY_THRESHOLD: ${FALLBACK_SIMILARITY_THRESHOLD}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL}
@@ -194,9 +198,22 @@ services:
       - "traefik.http.routers.hindsight-dashboard.service=hindsight-dashboard-svc@docker"
       - "traefik.http.services.hindsight-dashboard-svc.loadbalancer.server.port=80"
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - hindsight-ai
+
 networks:
   hindsight-ai:
     driver: bridge
 
 volumes:
   db_data:
+  ollama_data:

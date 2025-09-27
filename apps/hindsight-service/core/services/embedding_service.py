@@ -36,7 +36,7 @@ class EmbeddingConfig:
         if provider == "ollama":
             return cls(
                 provider=provider,
-                model=os.getenv("OLLAMA_EMBEDDING_MODEL", "dengcao/Qwen3-Embedding-0.6B:Q8_0"),
+                model=os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:v1.5"),
                 base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
                 dimension=dim_value,
             )
@@ -97,18 +97,67 @@ class OllamaEmbeddingProvider(BaseEmbeddingProvider):
         self.dimension = dimension
 
     def embed(self, text: str) -> List[float]:
-        payload = {"model": self.model, "prompt": text}
-        response = requests.post(
-            f"{self.base_url}/api/embeddings",
-            json=payload,
-            timeout=_DEFAULT_TIMEOUT,
-        )
-        response.raise_for_status()
-        data = response.json()
-        vector = data.get("embedding")
-        if not isinstance(vector, list):
-            raise RuntimeError("Unexpected Ollama embedding response structure")
-        return vector
+        payload = {
+            "model": self.model,
+            # Ollama has accepted both keys in different releases; send both for compatibility.
+            "prompt": text,
+            "input": text,
+        }
+        errors = []
+        for path in ("/api/embeddings", "/api/embed"):
+            try:
+                response = requests.post(
+                    f"{self.base_url}{path}",
+                    json=payload,
+                    timeout=_DEFAULT_TIMEOUT,
+                )
+            except requests.RequestException as exc:  # pragma: no cover - network failure
+                errors.append(exc)
+                continue
+
+            if response.status_code == 404:
+                errors.append(RuntimeError(f"Endpoint {path} not found"))
+                continue
+
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as exc:
+                errors.append(exc)
+                continue
+
+            data = response.json()
+            vector = self._extract_vector(data)
+            if vector is None:
+                errors.append(RuntimeError("Unexpected Ollama embedding response structure"))
+                continue
+
+            if self.dimension is None and isinstance(vector, list):
+                self.dimension = len(vector)
+            return vector
+
+        if errors:
+            raise RuntimeError("Failed to fetch embeddings from Ollama") from errors[-1]
+        raise RuntimeError("Unable to contact Ollama embedding endpoint")
+
+    @staticmethod
+    def _extract_vector(data: object) -> Optional[List[float]]:
+        if isinstance(data, dict):
+            if isinstance(data.get("embedding"), list):
+                return data["embedding"]
+
+            embeddings = data.get("embeddings")
+            if isinstance(embeddings, list):
+                if embeddings and isinstance(embeddings[0], list):
+                    return embeddings[0]
+                if all(isinstance(val, (int, float)) for val in embeddings):
+                    return embeddings  # Single vector without nesting
+
+            items = data.get("data")
+            if isinstance(items, list) and items:
+                first = items[0]
+                if isinstance(first, dict) and isinstance(first.get("embedding"), list):
+                    return first["embedding"]
+        return None
 
 
 class HuggingFaceEmbeddingProvider(BaseEmbeddingProvider):
@@ -162,7 +211,7 @@ class EmbeddingService:
         provider = self.config.provider
         if provider == "ollama":
             return OllamaEmbeddingProvider(
-                model=self.config.model or "nomic-embed-text",
+                model=self.config.model or "nomic-embed-text:v1.5",
                 base_url=self.config.base_url or "http://localhost:11434",
                 dimension=self.config.dimension,
             )

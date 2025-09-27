@@ -249,24 +249,29 @@ def test_memory_blocks_search_endpoint(db_session):
     r = client.post("/memory-blocks/", json=payload, headers=h)
     assert r.status_code == 201
     
-    # Test search with keywords
+    # Test search with keywords (legacy behaviour)
     r = client.get("/memory-blocks/search/?keywords=AI,algorithms", headers=h)
     assert r.status_code == 200
     results = r.json()
     assert isinstance(results, list)
-    
-    # Test search with agent filter
-    r = client.get(f"/memory-blocks/search/?keywords=AI&agent_id={agent_id}", headers=h)
+    assert any("AI" in item["content"] for item in results)
+
+    # Strategy overrides should be honoured
+    r = client.get(f"/memory-blocks/search/?keywords=AI&agent_id={agent_id}&strategy=basic", headers=h)
     assert r.status_code == 200
-    
-    # Test search with limit
-    r = client.get("/memory-blocks/search/?keywords=AI&limit=5", headers=h)
+
+    # Alias parameter `search_type` should work too
+    r = client.get(f"/memory-blocks/search/?query=algorithms&search_type=hybrid&agent_id={agent_id}", headers=h)
     assert r.status_code == 200
-    
+
     # Test search with no keywords (should fail)
     r = client.get("/memory-blocks/search/?keywords=", headers=h)
     assert r.status_code == 400
-    assert "At least one keyword is required" in r.json()["detail"]
+    assert "required" in r.json()["detail"].lower()
+
+    # Invalid strategy should raise 422
+    r = client.get("/memory-blocks/search/?keywords=AI&strategy=unknown", headers=h)
+    assert r.status_code == 422
 
 
 def test_memory_blocks_list_with_filters(db_session):

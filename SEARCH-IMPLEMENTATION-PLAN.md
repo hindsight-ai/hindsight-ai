@@ -1,35 +1,32 @@
-# Search Hybrid Ranking Plan
+# Search Infrastructure Foundation Plan (Updated)
 
 ## Goals
-- Blend full-text, semantic, and heuristic signals into a unified ranking aligned with RAG best practices.
-- Provide transparent score breakdowns (full-text, semantic, boosts, reranker) so clients can reason about ordering.
-- Keep results performant under per-tenant workloads; track latency and retrieval counts.
-- Maintain ≥80% overall coverage; new ranking utilities ≥90% where feasible.
+- Finish consolidating agent-facing `/memory-blocks/search/` on the shared `SearchService` pipeline so keyword/basic search behaves like enhanced strategies.
+- Preserve existing defaults for clients (keyword/basic) while allowing explicit strategy selection (`basic`, `fulltext`, `semantic`, `hybrid`).
+- Enforce scope filters, agent/conversation bounds, and validation consistently across all strategies.
+- Emit structured metadata (strategy, filters, expansion status) for observability.
+- Keep the MCP client working without interface changes.
 
 ## Implementation Tasks
-1. Scoring framework
-   - Extend `SearchService.search_memory_blocks_hybrid` to normalize full-text/semantic scores, apply configurable weights, and expose component metadata.
-   - Layer heuristic boosts (feedback score bonus, recent-memory decay, scope adjustments) behind config toggles.
-2. Reranker integration
-   - Introduce a pluggable reranker interface with a default no-op implementation and wire optional cross-encoder/LLM reranker for top-k results.
-   - Surface reranker latency and applied adjustments in response metadata.
-3. Retrieval counters + telemetry
-   - Increment `retrieval_count` when results are returned; ensure updates are transactional and safe under concurrency.
-   - Emit structured logs/metrics for hybrid blending (weights, fallback reasons, final scores).
-4. Configuration & documentation
-   - Add configs for weights, heuristic toggles, reranker provider/model, and decay windows.
-   - Update README/prod runbooks describing ranking pipeline, tuning guidance, and fallback behaviour.
-5. Client compatibility
-   - Ensure API responses continue returning `search_score`, `search_type`, and rank explanations including component breakdown.
-   - Confirm MCP/dashboard consumers handle the extra metadata gracefully.
+1. ✅ Deliver shared search helpers (`SearchService`/CRUD) through the earlier embeddings worktree.
+2. Refactor the `/memory-blocks/search/` endpoint in `core/api/memory_blocks.py` to call `crud.search_memory_blocks_enhanced`, handling strategy/limit validation and response metadata.
+3. Remove or adapt the legacy `retrieve_relevant_memories` repository helper so agent search uses the shared service path.
+4. Add structured logs/metrics describing selected strategy, filters, and expansion status.
+5. Update integration tests for `/memory-blocks/search/` plus any MCP fixtures to exercise strategy selection, scope enforcement, and validation errors.
+6. Refresh documentation (README + MCP tooling notes) describing search strategies, defaults, and new metadata.
+7. Maintain ≥80% coverage overall and ≥90% for newly refactored modules.
 
 ## Testing Strategy
-- Unit tests for weighted score math, heuristic boosts, and reranker hooks; verify monotonic behaviour under edge cases.
-- Integration tests for `/memory-blocks/search/hybrid` validating blended ordering, fallback semantics, and retrieval_count increments.
-- Reranker stub tests to confirm optional execution paths and metadata emission.
-- Run targeted performance/regression checks to ensure latency budgets met; monitor retrieval_count writes under load.
+- Unit tests around validation utilities (strategy parsing, UUID handling) and the enhanced CRUD delegation.
+- Integration tests for `/memory-blocks/search/` verifying default keyword behaviour, explicit strategies, and failure cases.
+- MCP regression test (or mocked HTTP client) ensuring the tool still works with default parameters.
+- Full pytest run with coverage check ≥80%.
+
+## Observability & Tooling
+- Ensure logs include strategy, filters, query expansion metadata, and scope context for auditability.
+- Expose recommended commands in the README for running the focused search test suite.
 
 ## Dependencies & Risks
-- Relies on semantic search branch (vector similarity + metadata) merged earlier.
-- External rerankers may require network/model access; provide mock implementations for CI.
-- Retrieval_count updates can contend under parallel requests; consider batching or deferred writes if necessary.
+- Depends on SearchService work from `search-embeddings-ingest` (already merged).
+- Regression risk for agent clients; thorough integration/regression testing required.
+- Keep default behaviour identical unless a strategy parameter is explicitly provided.

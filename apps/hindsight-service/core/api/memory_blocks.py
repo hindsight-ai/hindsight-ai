@@ -5,7 +5,7 @@ CRUD, search, archive, feedback, and related utilities for memory blocks
 with comprehensive scope and permission checks.
 """
 from typing import List, Optional
-import uuid, os, math
+import uuid, os, math, logging
 from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -20,7 +20,6 @@ from core.utils.scopes import (
     SCOPE_ORGANIZATION,
     SCOPE_PERSONAL,
 )
-from core.services.search_service import SearchService
 from core.api.deps import (
     get_current_user_context,
     get_current_user_context_or_pat,
@@ -30,6 +29,7 @@ from core.api.deps import (
 )
 
 router = APIRouter(prefix="/memory-blocks", tags=["memory-blocks"])  # normalized prefix
+logger = logging.getLogger(__name__)
 
 def parse_optional_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
     """Convert empty strings to None, otherwise parse as UUID"""
@@ -462,26 +462,71 @@ def report_memory_feedback_endpoint(
 
 @router.get("/search/", response_model=List[schemas.MemoryBlock])
 def search_memory_blocks_endpoint(
-    keywords: str,
-    agent_id: Optional[uuid.UUID] = None,
-    conversation_id: Optional[uuid.UUID] = None,
-    limit: int = 10,
-    db: Session = Depends(get_db)
+    keywords: Optional[str] = None,
+    query: Optional[str] = None,
+    strategy: Optional[str] = Query(default=None, description="Search strategy: basic|fulltext|semantic|hybrid"),
+    search_type: Optional[str] = Query(default=None, description="Alias for strategy"),
+    agent_id: Optional[str] = Query(default=None),
+    conversation_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=100),
+    include_archived: bool = False,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    # This endpoint is for agent-facing semantic search, not for the dashboard's simple search.
-    # It will remain as a keyword-based search for now as per the plan,
-    # with a note that complex logic will be implemented later.
-    keyword_list = [kw.strip() for kw in keywords.split(',') if kw.strip()]
-    if not keyword_list:
-        raise HTTPException(status_code=400, detail="At least one keyword is required for search.")
-    
-    memories = crud.retrieve_relevant_memories(
+    user, current_user, scope_ctx = scoped
+    ensure_pat_allows_read(current_user, scope_ctx.organization_id)
+
+    agent_uuid = parse_optional_uuid(agent_id)
+    conversation_uuid = parse_optional_uuid(conversation_id)
+
+    raw_keywords = [kw.strip() for kw in (keywords.split(',') if keywords else []) if kw.strip()]
+    search_query = (query or "").strip()
+    if not search_query and raw_keywords:
+        search_query = " ".join(raw_keywords)
+
+    if not search_query:
+        raise HTTPException(status_code=400, detail="At least one keyword or query string is required for search.")
+
+    selected_strategy = (strategy or search_type or "basic").lower()
+    allowed_strategies = {"basic", "fulltext", "semantic", "hybrid"}
+    if selected_strategy not in allowed_strategies:
+        raise HTTPException(status_code=422, detail=f"Invalid strategy '{selected_strategy}'. Allowed values: {sorted(allowed_strategies)}")
+
+    search_params = {
+        "current_user": current_user,
+    }
+
+    if raw_keywords:
+        search_params["keyword_list"] = raw_keywords
+        # Default keyword path historically behaved like OR across terms.
+        if selected_strategy == "basic":
+            search_params["match_any"] = True
+
+    results, metadata = crud.search_memory_blocks_enhanced(
         db=db,
-        keywords=keyword_list,
-        agent_id=agent_id,
-        conversation_id=conversation_id,
-        limit=limit
+        search_type=selected_strategy,
+        search_query=search_query,
+        agent_id=agent_uuid,
+        conversation_id=conversation_uuid,
+        limit=limit,
+        include_archived=include_archived,
+        **search_params,
     )
-    return memories
+
+    expansion_meta = metadata.get("expansion", {})
+    logger.info(
+        "memory_search strategy=%s agent=%s conversation=%s limit=%s match_any=%s expansion_applied=%s",
+        selected_strategy,
+        agent_uuid,
+        conversation_uuid,
+        limit,
+        bool(search_params.get("match_any")),
+        expansion_meta.get("expansion_applied"),
+    )
+
+    return [
+        schemas.MemoryBlock.model_validate(result.model_dump())
+        for result in results
+    ]
 
 # Slimmed scope change endpoint omitted for now (kept in main for backwards compat)

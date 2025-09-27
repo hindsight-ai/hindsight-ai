@@ -210,6 +210,10 @@ jobs:
             OAUTH2_PROXY_EMAIL_DOMAINS=${{ secrets.OAUTH2_PROXY_EMAIL_DOMAINS || '*' }}
             LLM_API_KEY=${{ secrets.LLM_API_KEY }}
             LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
+            EMBEDDING_PROVIDER=${{ secrets.EMBEDDING_PROVIDER || 'ollama' }}
+            OLLAMA_BASE_URL=${{ secrets.OLLAMA_BASE_URL || 'http://ollama:11434' }}
+            OLLAMA_EMBEDDING_MODEL=${{ secrets.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text:v1.5' }}
+            KNOWLEDGE_BASES_ROOT_DIR=${{ secrets.KNOWLEDGE_BASES_ROOT_DIR || './knowledge_bases' }}
             CONSOLIDATION_BATCH_SIZE=${{ secrets.CONSOLIDATION_BATCH_SIZE }}
             FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}
             SUPPORT_EMAIL=${{ secrets.SUPPORT_EMAIL }}

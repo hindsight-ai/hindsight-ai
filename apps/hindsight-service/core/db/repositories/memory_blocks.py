@@ -270,27 +270,6 @@ def delete_memory_block(db: Session, memory_id: uuid.UUID):
         raise RuntimeError(f"Failed to delete memory block {memory_id}: {str(e)}")
 
 
-def retrieve_relevant_memories(
-    db: Session,
-    keywords: List[str],
-    agent_id: Optional[uuid.UUID] = None,
-    conversation_id: Optional[uuid.UUID] = None,
-    limit: int = 100,
-):
-    query = db.query(models.MemoryBlock)
-    if agent_id:
-        query = query.filter(models.MemoryBlock.agent_id == agent_id)
-    if conversation_id:
-        query = query.filter(models.MemoryBlock.conversation_id == conversation_id)
-    filters = []
-    for kw in keywords:
-        filters.append(models.MemoryBlock.content.ilike(f"%{kw}%"))
-        filters.append(models.MemoryBlock.errors.ilike(f"%{kw}%"))
-        filters.append(models.MemoryBlock.lessons_learned.ilike(f"%{kw}%"))
-    if filters:
-        query = query.filter(or_(*filters))
-    return query.limit(limit).all()
-
 
 def create_feedback_log(db: Session, feedback_log: schemas.FeedbackLogCreate):
     db_feedback_log = models.FeedbackLog(

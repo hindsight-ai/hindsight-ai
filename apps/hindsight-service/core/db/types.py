@@ -69,7 +69,9 @@ class EmbeddingVector(TypeDecorator[List[float]]):
         if isinstance(value, tuple):
             value = list(value)
         if not isinstance(value, Iterable):
-            raise TypeError("EmbeddingVector expects an iterable of floats")
+            raise TypeError(
+                f"EmbeddingVector expects an iterable of floats, got {type(value)!r}"
+            )
         vector = [float(v) for v in value]
         if dialect.name == "postgresql" and Vector is not None:
             # pgvector driver expects a plain python sequence

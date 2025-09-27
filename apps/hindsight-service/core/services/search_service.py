@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, and_, or_, String, literal
+from sqlalchemy import func, text, and_, or_, String, literal, cast, Float
 from core.utils.scopes import SCOPE_PUBLIC, SCOPE_ORGANIZATION, SCOPE_PERSONAL
 
 from core.db import models, schemas
@@ -362,7 +362,19 @@ class SearchService:
             return results, metadata
 
         try:
-            query_embedding = embedding_service.embed_text(query.strip())
+            raw_embedding = embedding_service.embed_text(query.strip())
+            if raw_embedding:
+                try:
+                    query_embedding = [float(value) for value in raw_embedding]
+                except (TypeError, ValueError) as exc:
+                    self.logger.error(
+                        "Invalid embedding vector returned for semantic query '%s': %s",
+                        query,
+                        exc,
+                    )
+                    query_embedding = None
+            else:
+                query_embedding = None
         except Exception as exc:  # pragma: no cover - defensive
             self.logger.error("Failed to embed semantic query '%s': %s", query, exc)
             query_embedding = None
@@ -418,10 +430,12 @@ class SearchService:
         if max_distance < 0:
             max_distance = 0.0
 
-        distance_expr = models.MemoryBlock.content_embedding.op("<=>")(query_embedding)
-        similarity_expr = (literal(1.0) - distance_expr).label("similarity")
+        distance_expr = cast(
+            models.MemoryBlock.content_embedding.op("<=>")(query_embedding),
+            Float,
+        ).label("distance")
 
-        base_query = db.query(models.MemoryBlock, similarity_expr).filter(
+        base_query = db.query(models.MemoryBlock, distance_expr).filter(
             models.MemoryBlock.content_embedding.isnot(None)
         )
 
@@ -462,7 +476,7 @@ class SearchService:
         # Apply similarity threshold and ordering (higher similarity first)
         base_query = (
             base_query.filter(distance_expr <= max_distance)
-            .order_by(similarity_expr.desc(), models.MemoryBlock.created_at.desc())
+            .order_by(distance_expr.asc(), models.MemoryBlock.created_at.desc())
             .limit(limit)
         )
 
@@ -490,8 +504,8 @@ class SearchService:
 
         memory_blocks_with_scores: List[schemas.MemoryBlockWithScore] = []
         scores: List[float] = []
-        for memory_block, similarity in results_with_similarity:
-            score = float(similarity) if similarity is not None else 0.0
+        for memory_block, distance in results_with_similarity:
+            score = 1.0 - float(distance) if distance is not None else 0.0
             scores.append(score)
             memory_blocks_with_scores.append(
                 _create_memory_block_with_score(
@@ -499,7 +513,7 @@ class SearchService:
                     score,
                     "semantic",
                     f"Cosine similarity: {score:.4f}",
-                    {"semantic_raw": score}
+                    {"semantic_raw": score, "distance": float(distance) if distance is not None else None}
                 )
             )
 
@@ -1023,7 +1037,15 @@ class SearchService:
         else:
             # Fall back to basic search (existing ILIKE implementation)
             return self._basic_search_fallback(
-                db, search_query, agent_id, conversation_id, limit, include_archived, search_params.get('current_user')
+                db,
+                search_query,
+                agent_id,
+                conversation_id,
+                limit,
+                include_archived,
+                search_params.get('current_user'),
+                keyword_terms=search_params.get('keyword_list'),
+                match_any=bool(search_params.get('match_any')),
             )
     
     def _basic_search_fallback(
@@ -1035,6 +1057,9 @@ class SearchService:
         limit: int = 50,
         include_archived: bool = False,
         current_user: Optional[Dict[str, Any]] = None,
+        *,
+        keyword_terms: Optional[List[str]] = None,
+        match_any: bool = False,
     ) -> Tuple[List[schemas.MemoryBlockWithScore], Dict[str, Any]]:
         """
         Fallback to basic ILIKE search for backward compatibility.
@@ -1042,9 +1067,10 @@ class SearchService:
         start_time = time.time()
         
         # Build search filters using ILIKE (case-insensitive substring search)
+        explicit_terms = [term.strip() for term in (keyword_terms or []) if term and term.strip()]
+        search_terms = explicit_terms or search_query.split()
         search_filters = []
-        search_terms = search_query.split()
-        
+
         for term in search_terms:
             term_filter = or_(
                 models.MemoryBlock.content.ilike(f"%{term}%"),
@@ -1053,9 +1079,12 @@ class SearchService:
                 models.MemoryBlock.id.cast(String).ilike(f"%{term}%")
             )
             search_filters.append(term_filter)
-        
+
         # Combine all search filters with AND logic
-        combined_filter = and_(*search_filters) if search_filters else None
+        if search_filters:
+            combined_filter = or_(*search_filters) if match_any else and_(*search_filters)
+        else:
+            combined_filter = None
         
         query = db.query(models.MemoryBlock)
         
@@ -1124,7 +1153,8 @@ class SearchService:
             "total_search_time_ms": search_time,
             "basic_results_count": len(results),
             "search_type": "basic",
-            "search_terms": search_terms
+            "search_terms": search_terms,
+            "match_any": bool(match_any),
         }
         
         return results, metadata
