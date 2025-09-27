@@ -15,14 +15,14 @@
 - ✅ **Backfill entry point**: `EmbeddingService.backfill_missing_embeddings` performs batched updates; orchestration script still TBD once we wire CLI plumbing.
 - ✅ **Configuration**: `EMBEDDING_PROVIDER`, `EMBEDDING_DIMENSION`, provider-specific env vars, and dependency bumps (`pgvector>=0.4.1`).
 - ✅ **Testing**: Added focused unit coverage for `EmbeddingVector` and embedding service behaviours plus integration tests under `tests/integration/memory_blocks/test_memory_embeddings.py`.
-- 🔄 **Operational tooling**: Need to expose a CLI/management command that wraps `backfill_missing_embeddings`; track in follow-up MR alongside observability hooks.
+- ✅ **Operational tooling**: `scripts/backfill_embeddings.py` now wraps `EmbeddingService.backfill_missing_embeddings` with batch sizing and dry-run support; remaining follow-up is lightweight observability (metrics/logging) for production runs.
 - 🔄 **Hybrid ranking rollout**: Once semantic endpoints land we must evaluate vector index sizing and scheduling (tracked separately).
 
 ## Testing Strategy
 - ✅ Alembic migration exercised via integration suite (testcontainers Postgres) ensuring the vector column is available during fixture setup.
 - ✅ Unit tests cover key branches in `EmbeddingVector` (bind/result handling) and `EmbeddingService` helpers (mock provider, blank text short-circuit, metadata composition).
 - ✅ Integration tests verify memory create/update/backfill populate embeddings without blocking writes when providers are disabled.
-- 🔄 Backfill tooling will require an additional end-to-end smoke once the CLI wrapper exists.
+- 🔄 Backfill scripting smoke test: add an end-to-end exercise (e.g. seeded Postgres fixture invoking `uv run python scripts/backfill_embeddings.py`) so CI covers the management command path.
 
 ## Dependencies & Risks
 - Requires Postgres ≥14 with the pgvector extension installed; SQLite keeps using JSON storage through the type decorator.

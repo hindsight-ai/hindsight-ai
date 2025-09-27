@@ -6,8 +6,9 @@ import json
 import logging
 import os
 import threading
+import time
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 import requests
 
@@ -232,7 +233,9 @@ class EmbeddingService:
         if not self.is_enabled:
             logger.info("Embedding service disabled; skipping backfill.")
             return 0
+        run_started = time.perf_counter()
         updated = 0
+        batch_count = 0
         while True:
             batch = (
                 db_session.query(models.MemoryBlock)
@@ -243,14 +246,40 @@ class EmbeddingService:
             )
             if not batch:
                 break
+            batch_count += 1
+            batch_started = time.perf_counter()
+            batch_updated = 0
+            batch_errors: List[str] = []
             for memory_block in batch:
                 try:
                     self.attach_embedding(memory_block, save_empty=True)
                 except Exception as exc:  # pragma: no cover - defensive logging
                     logger.error("Embedding backfill error for %s: %s", memory_block.id, exc)
+                    batch_errors.append(str(memory_block.id))
                     continue
                 updated += 1
+                batch_updated += 1
             db_session.commit()
+            duration = time.perf_counter() - batch_started
+            logger.info(
+                "Embedding backfill batch committed",
+                extra={
+                    "batch_number": batch_count,
+                    "batch_size": len(batch),
+                    "updated_rows": batch_updated,
+                    "duration_seconds": round(duration, 3),
+                    "failed_ids": batch_errors,
+                },
+            )
+        total_duration = time.perf_counter() - run_started
+        logger.info(
+            "Embedding backfill completed",
+            extra={
+                "batches": batch_count,
+                "total_updated": updated,
+                "duration_seconds": round(total_duration, 3),
+            },
+        )
         return updated
 
 
