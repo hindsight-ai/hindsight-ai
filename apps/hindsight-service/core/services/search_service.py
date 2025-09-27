@@ -450,17 +450,17 @@ class SearchService:
             )
         else:
             # Fall back to basic search (existing ILIKE implementation)
-        return self._basic_search_fallback(
-            db,
-            search_query,
-            agent_id,
-            conversation_id,
-            limit,
-            include_archived,
-            search_params.get('current_user'),
-            keyword_terms=search_params.get('keyword_list'),
-            match_any=bool(search_params.get('match_any')),
-        )
+            return self._basic_search_fallback(
+                db,
+                search_query,
+                agent_id,
+                conversation_id,
+                limit,
+                include_archived,
+                search_params.get('current_user'),
+                keyword_terms=search_params.get('keyword_list'),
+                match_any=bool(search_params.get('match_any')),
+            )
     
     def _basic_search_fallback(
         self,
