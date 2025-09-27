@@ -46,6 +46,16 @@ if [ -n "$PIDS_8000" ]; then
     sleep 1
 fi
 
+# Stop standalone Ollama or embedding services on port 11434
+PIDS_11434=$(lsof -t -i:11434 || true)
+if [ -n "$PIDS_11434" ]; then
+    echo "Killing legacy processes on port 11434 (PIDs: $PIDS_11434)"
+    for PID in $PIDS_11434; do
+        kill "$PID" || true
+    done
+    sleep 1
+fi
+
 echo "All Hindsight services stopped."
 
 exit 0

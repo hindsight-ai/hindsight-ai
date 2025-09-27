@@ -5,7 +5,11 @@ CRUD, search, archive, feedback, and related utilities for memory blocks
 with comprehensive scope and permission checks.
 """
 from typing import List, Optional
-import uuid, os, math, json, logging
+import uuid
+import os
+import math
+import json
+import logging
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -20,7 +24,6 @@ from core.utils.scopes import (
     SCOPE_ORGANIZATION,
     SCOPE_PERSONAL,
 )
-from core.search import get_search_service
 from core.api.deps import (
     get_current_user_context,
     get_current_user_context_or_pat,
@@ -519,12 +522,13 @@ def report_memory_feedback_endpoint(
 
 @router.get("/search/", response_model=List[schemas.MemoryBlock])
 def search_memory_blocks_endpoint(
-    keywords: str,
     response: Response,
-    agent_id: Optional[uuid.UUID] = None,
-    conversation_id: Optional[uuid.UUID] = None,
-    limit: int = 10,
-    strategy: str = Query(default="basic", alias="search_type"),
+    keywords: Optional[str] = Query(default=None, description="Comma-separated keywords"),
+    query: Optional[str] = Query(default=None, description="Free-form search query"),
+    strategy: Optional[str] = Query(default=None, alias="search_type", description="Search strategy: basic|fulltext|semantic|hybrid"),
+    agent_id: Optional[str] = Query(default=None),
+    conversation_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=200),
     include_archived: bool = False,
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
@@ -534,19 +538,24 @@ def search_memory_blocks_endpoint(
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    """Keyword-oriented search routed through the unified SearchService."""
-    normalized_strategy = strategy.lower().strip()
-    if normalized_strategy not in ALLOWED_SEARCH_STRATEGIES:
-        raise HTTPException(status_code=400, detail=f"Unsupported search strategy '{strategy}'.")
+    """Run keyword/basic queries through the unified SearchService."""
 
-    if limit <= 0 or limit > 200:
-        raise HTTPException(status_code=400, detail="Limit must be between 1 and 200.")
+    agent_uuid = parse_optional_uuid(agent_id)
+    conversation_uuid = parse_optional_uuid(conversation_id)
 
-    keyword_list = [kw.strip() for kw in keywords.split(',') if kw.strip()]
-    if not keyword_list:
-        raise HTTPException(status_code=400, detail="At least one keyword is required for search.")
+    raw_keywords = [kw.strip() for kw in (keywords.split(',') if keywords else []) if kw.strip()]
+    search_query = (query or "").strip()
+    if not search_query and raw_keywords:
+        search_query = " ".join(raw_keywords)
 
-    search_query = " ".join(keyword_list)
+    if not search_query:
+        raise HTTPException(status_code=400, detail="At least one keyword or query string is required for search.")
+
+    selected_strategy = (strategy or "basic").strip().lower()
+    if selected_strategy not in ALLOWED_SEARCH_STRATEGIES:
+        allowed = ", ".join(sorted(ALLOWED_SEARCH_STRATEGIES))
+        raise HTTPException(status_code=422, detail=f"Invalid strategy '{selected_strategy}'. Allowed values: [{allowed}]")
+
     current_user = _resolve_search_user_context(
         db,
         authorization=authorization,
@@ -557,35 +566,44 @@ def search_memory_blocks_endpoint(
         x_forwarded_email=x_forwarded_email,
     )
 
-    search_service = get_search_service()
-    results, metadata = search_service.enhanced_search_memory_blocks(
+    search_params = {"current_user": current_user}
+    if raw_keywords:
+        search_params["keyword_list"] = raw_keywords
+        if selected_strategy == "basic":
+            search_params["match_any"] = True
+
+    results, metadata = crud.search_memory_blocks_enhanced(
         db=db,
+        search_type=selected_strategy,
         search_query=search_query,
-        search_type=normalized_strategy,
-        agent_id=agent_id,
-        conversation_id=conversation_id,
+        agent_id=agent_uuid,
+        conversation_id=conversation_uuid,
         limit=limit,
         include_archived=include_archived,
-        current_user=current_user,
+        **search_params,
     )
 
     sanitized_results = [_strip_search_fields(result) for result in results]
 
-    if metadata is not None:
+    if metadata:
         header_payload = {
-            "search_type": metadata.get("search_type", normalized_strategy),
+            "search_type": metadata.get("search_type", selected_strategy),
             "result_count": len(results),
             "total_search_time_ms": metadata.get("total_search_time_ms"),
         }
-        response.headers["X-Search-Metadata"] = json.dumps(header_payload)
+        try:
+            response.headers["X-Search-Metadata"] = json.dumps(header_payload)
+        except Exception:
+            logger.debug("Failed to serialize search metadata header", exc_info=True)
 
     logger.info(
-        "keyword_search_completed",
+        "memory_search_completed",
         extra={
-            "strategy": normalized_strategy,
-            "keywords": keyword_list,
-            "agent_id": str(agent_id) if agent_id else None,
-            "conversation_id": str(conversation_id) if conversation_id else None,
+            "strategy": selected_strategy,
+            "keywords": raw_keywords,
+            "query": search_query,
+            "agent_id": str(agent_uuid) if agent_uuid else None,
+            "conversation_id": str(conversation_uuid) if conversation_uuid else None,
             "result_count": len(results),
             "metadata": metadata,
         },

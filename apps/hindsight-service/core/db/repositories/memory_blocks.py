@@ -295,6 +295,8 @@ def retrieve_relevant_memories(
         limit=limit,
         include_archived=False,
         current_user=current_user,
+        keyword_list=normalized,
+        match_any=True,
     )
 
     sanitized: List[schemas.MemoryBlock] = []

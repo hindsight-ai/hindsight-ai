@@ -287,12 +287,6 @@ def get_all_memory_blocks(
 def update_memory_block(db: Session, memory_id: uuid.UUID, memory_block: schemas.MemoryBlockUpdate):
     return repo_memories.update_memory_block(db, memory_id, memory_block)
 
-import logging # Added to top of file
-
-logger = logging.getLogger(__name__) # Added to top of file
-
-# ... (rest of the file)
-
 def archive_memory_block(db: Session, memory_id: uuid.UUID):
     return repo_memories.archive_memory_block(db, memory_id)
 

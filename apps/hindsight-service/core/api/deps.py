@@ -4,6 +4,7 @@ API dependency helpers.
 Provides dependency-resolved user context and scope information for routes.
 """
 import uuid
+import logging
 from typing import Optional, Tuple, Dict, Any
 from fastapi import Query
 
@@ -24,7 +25,59 @@ from core.db.scope_utils import ScopeContext
 from core.db.repositories import tokens as token_repo
 from core.utils.token_crypto import parse_token, verify_secret
 from core.utils.runtime import dev_mode_active
-import logging
+from core.db.schemas.tokens import TokenCreateRequest
+
+
+logger = logging.getLogger(__name__)
+
+_DEV_MODE_PAT_CACHE: Optional[str] = None
+
+
+def _ensure_dev_mode_defaults(db: Session, user: models.User) -> Optional[str]:
+    """Ensure dev@localhost has superadmin rights, beta access, and a PAT."""
+    global _DEV_MODE_PAT_CACHE
+
+    changed = False
+    if not getattr(user, "is_superadmin", False):
+        user.is_superadmin = True
+        changed = True
+    if getattr(user, "beta_access_status", "") != "accepted":
+        user.beta_access_status = "accepted"
+        changed = True
+
+    if changed:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+        else:
+            db.refresh(user)
+
+    # Reuse cached PAT token when still valid for this user
+    token_value: Optional[str] = None
+    if _DEV_MODE_PAT_CACHE:
+        parsed = parse_token(_DEV_MODE_PAT_CACHE)
+        if parsed:
+            pat = token_repo.get_by_token_id(db, token_id=parsed.token_id)
+            if pat and pat.status == "active" and pat.user_id == user.id:
+                token_value = _DEV_MODE_PAT_CACHE
+
+    if token_value is not None:
+        return token_value
+
+    active_tokens = [pat for pat in token_repo.list_tokens(db, user_id=user.id) if pat.status == "active"]
+    full_token: Optional[str] = None
+    if active_tokens:
+        rotated = token_repo.rotate_token(db, token_db_id=active_tokens[0].id, user_id=user.id)
+        if rotated:
+            _pat, full_token = rotated
+    if not full_token:
+        payload = TokenCreateRequest(name="Dev Mode Default PAT", scopes=["read", "write"])
+        _pat, full_token = token_repo.create_token(db, user_id=user.id, payload=payload)
+
+    _DEV_MODE_PAT_CACHE = full_token
+    logger.info("DEV_MODE PAT token issued for %s: %s", user.email, full_token)
+    return full_token
 
 # Contract:
 # Returns (sqlalchemy User model, current_user_context_dict)
@@ -44,29 +97,35 @@ def get_current_user_context(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="DEV_MODE misconfigured") from exc
     
     if is_dev_mode:
-        # In dev mode, use dev@localhost user
         email = "dev@localhost"
         name = "Development User"
-    else:
-        # Normal mode: resolve from OAuth2 proxy headers
-        name, email = resolve_identity_from_headers(
-            x_auth_request_user=x_auth_request_user,
-            x_auth_request_email=x_auth_request_email,
-            x_forwarded_user=x_forwarded_user,
-            x_forwarded_email=x_forwarded_email,
-        )
-        if not email:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    user = get_or_create_user(db, email=email, display_name=name)
+        user = get_or_create_user(db, email=email, display_name=name)
+        dev_pat_token = _ensure_dev_mode_defaults(db, user)
+        memberships = get_user_memberships(db, user.id)
+        memberships_by_org = {str(m["organization_id"]): m for m in memberships}
+        current_user = {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "is_superadmin": True,
+            "beta_access_status": "accepted",
+            "memberships": memberships,
+            "memberships_by_org": memberships_by_org,
+            "is_beta_access_admin": True,
+            "dev_mode_pat": dev_pat_token,
+        }
+        return user, current_user
 
-    if is_dev_mode and getattr(user, "beta_access_status", "") != "accepted":
-        user.beta_access_status = "accepted"
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-        else:
-            db.refresh(user)
+    # Normal mode: resolve from OAuth2 proxy headers
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    user = get_or_create_user(db, email=email, display_name=name)
 
     # Normalize beta access status to reflect latest request state.
     from core.db.repositories import beta_access as beta_repo
@@ -95,13 +154,7 @@ def get_current_user_context(
             db.rollback()
         else:
             db.refresh(user)
-    
-    # Comment out automatic superadmin privileges for dev user to test non-superadmin functionality
-    # if is_dev_mode and email == "dev@localhost" and not user.is_superadmin:
-    #     user.is_superadmin = True
-    #     db.commit()
-    #     db.refresh(user)
-    
+
     memberships = get_user_memberships(db, user.id)
     # Normalize keys to string to align with permission helpers that cast org_id to str
     memberships_by_org = {str(m["organization_id"]): m for m in memberships}

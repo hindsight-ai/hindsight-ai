@@ -64,7 +64,7 @@ Important env vars (see `.env.example`):
   - Dev: `http://localhost:3000`
 - `ADMIN_EMAILS`: Comma-separated emails to elevate as superadmins on first login. Required for accessing admin-only routes such as the beta access console.
 - `BETA_ACCESS_ADMINS`: Optional comma-separated emails allowed to review beta access requests without being full superadmins.
-- `DEV_MODE`: **Local development only.** When `true` the API impersonates `dev@localhost` as a superadmin. The backend will refuse to start with `DEV_MODE=true` unless it is running on `localhost`. Always set `DEV_MODE=false` (or unset) in staging and production.
+- `DEV_MODE`: **Local development only.** When `true` the API impersonates `dev@localhost` as a superadmin, auto-accepts beta access, and issues a ready-to-use PAT (returned by `/user-info` and logged on startup). The backend will refuse to start with `DEV_MODE=true` unless it is running on `localhost`. Always set `DEV_MODE=false` (or unset) in staging and production.
 - `ALLOW_DEV_MODE`: Optional safety valve for automated tests. Leave set to `false` outside controlled test environments.
 
 ### Embedding Configuration
@@ -73,10 +73,12 @@ Semantic retrieval relies on dense vector embeddings. The service can run with e
 
 - `EMBEDDING_PROVIDER`: `disabled` (default), `mock`, `ollama`, or `huggingface`.
 - `EMBEDDING_DIMENSION`: Optional integer dimension override. Mock provider falls back to 32 when unset.
-- `OLLAMA_BASE_URL` / `OLLAMA_EMBEDDING_MODEL`: Ollama settings (defaults: `http://localhost:11434`, `dengcao/Qwen3-Embedding-0.6B:Q8_0`).
+- `OLLAMA_BASE_URL` / `OLLAMA_EMBEDDING_MODEL`: Ollama settings (defaults: `http://localhost:11434`, `nomic-embed-text:v1.5`).
 - `HUGGINGFACE_API_KEY`, `HUGGINGFACE_EMBEDDING_MODEL`, `HUGGINGFACE_API_BASE`: Hugging Face Inference API settings. Provider is disabled automatically when the key is missing.
 
 When a provider is enabled, embeddings are generated synchronously on memory create/update. The mock provider is used in CI so tests do not require network access. Use `EmbeddingService.backfill_missing_embeddings` for batched backfills once a provider is configured.
+
+Local Docker Compose profiles spin up `ollama/ollama` alongside Postgres and the API. Models are cached in the `ollama_data` volume, and the backend automatically targets `http://ollama:11434` with `nomic-embed-text:v1.5` unless overridden via environment variables. If the provider is unreachable or pgvector is unavailable, the service falls back to the Python cosine implementation and ultimately to keyword search, emitting the reason in `X-Search-Metadata`.
 
 #### Embedding Backfill Script
 
@@ -87,6 +89,21 @@ uv run python scripts/backfill_embeddings.py --batch-size 200
 ```
 
 Add `--dry-run` to inspect how many rows still need embeddings before running the job.
+
+### Hybrid Ranking Configuration
+
+Hybrid search blends full-text and semantic signals with heuristic boosts. Tuning is driven by environment variables (all optional with sensible defaults):
+
+- `HYBRID_FULLTEXT_WEIGHT`, `HYBRID_SEMANTIC_WEIGHT`: Baseline weights before normalization (defaults 0.7/0.3).
+- `HYBRID_ALLOW_WEIGHT_OVERRIDES`: When `false`, ignores request overrides and uses configured weights (default `true`).
+- `HYBRID_NORMALIZATION`: Score normalization strategy (`min_max` default, `max` supported).
+- `HYBRID_MIN_SCORE_FLOOR`: Lower bound applied after heuristics (default `0`).
+- Recency decay: `HYBRID_RECENCY_DECAY_ENABLED`, `HYBRID_RECENCY_HALF_LIFE_DAYS`, `HYBRID_RECENCY_MIN_MULTIPLIER`, `HYBRID_RECENCY_MAX_MULTIPLIER`.
+- Feedback boost: `HYBRID_FEEDBACK_BOOST_ENABLED`, `HYBRID_FEEDBACK_WEIGHT`, `HYBRID_FEEDBACK_MAX_SCORE`.
+- Scope boosts: `HYBRID_SCOPE_BOOST_ENABLED`, `HYBRID_SCOPE_PERSONAL_BONUS`, `HYBRID_SCOPE_ORG_BONUS`, `HYBRID_SCOPE_PUBLIC_BONUS`.
+- Reranker placeholders: `HYBRID_RERANKER_ENABLED`, `HYBRID_RERANKER_PROVIDER`, `HYBRID_RERANKER_TOP_K`.
+
+All knobs are cached per-process; call `refresh_hybrid_ranking_config()` in tests after mutating the environment.
 
 ## 🔐 Permissions & Scopes
 
@@ -116,6 +133,7 @@ The service exposes a RESTful API. You can find the automatically generated Open
 
 Key endpoints include:
 -   `/memory_blocks/`: For creating and retrieving memory blocks.
+-   `/memory_blocks/search/`: Agent-facing search endpoint. Accepts optional `strategy` (`basic`, `fulltext`, `semantic`, `hybrid`), `keywords`, or `query` plus filters (`agent_id`, `conversation_id`). Defaults to the legacy keyword/basic behaviour.
 -   `/feedback_logs/`: For reporting feedback on memory blocks.
 -   `/agents/`: For managing agent information.
 -   `/keywords/`: For managing keywords.
