@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from core.utils.scopes import VisibilityScopeEnum
 
 
@@ -113,6 +113,7 @@ class MemoryBlockWithScore(MemoryBlock):
     search_score: float
     search_type: str = "basic"
     rank_explanation: Optional[str] = None
+    score_components: Dict[str, float] = Field(default_factory=dict)
 
 
 class SearchMetadata(BaseModel):

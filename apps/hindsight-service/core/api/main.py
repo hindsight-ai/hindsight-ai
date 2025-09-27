@@ -1137,20 +1137,7 @@ def search_memory_blocks_semantic_endpoint(
     authorization: Optional[str] = Header(default=None),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
-    """
-    Perform semantic search on memory blocks using embeddings (placeholder implementation).
-    
-    Args:
-        query: Search query string
-        agent_id: Optional agent filter
-        conversation_id: Optional conversation filter
-        limit: Maximum number of results (default: 50)
-        similarity_threshold: Minimum similarity threshold (default: 0.7)
-        include_archived: Whether to include archived memory blocks (default: False)
-    
-    Returns:
-        List of memory blocks with similarity scores (currently empty - placeholder)
-    """
+    """Perform semantic search on memory blocks using stored embeddings."""
     if not query or query.strip() == "":
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
     
@@ -1207,7 +1194,13 @@ def search_memory_blocks_semantic_endpoint(
             current_user=current_user,
         )
         
-        logger.info(f"Semantic search for '{query}' returned {len(results)} results (placeholder)")
+        logger.info(
+            "Semantic search for '%s' returned %d results (mode=%s, fallback=%s)",
+            query,
+            len(results),
+            metadata.get("search_type"),
+            metadata.get("fallback_reason"),
+        )
         return results
         
     except Exception as e:

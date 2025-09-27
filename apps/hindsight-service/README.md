@@ -88,6 +88,21 @@ uv run python scripts/backfill_embeddings.py --batch-size 200
 
 Add `--dry-run` to inspect how many rows still need embeddings before running the job.
 
+### Hybrid Ranking Configuration
+
+Hybrid search blends full-text and semantic signals with heuristic boosts. Tuning is driven by environment variables (all optional with sensible defaults):
+
+- `HYBRID_FULLTEXT_WEIGHT`, `HYBRID_SEMANTIC_WEIGHT`: Baseline weights before normalization (defaults 0.7/0.3).
+- `HYBRID_ALLOW_WEIGHT_OVERRIDES`: When `false`, ignores request overrides and uses configured weights (default `true`).
+- `HYBRID_NORMALIZATION`: Score normalization strategy (`min_max` default, `max` supported).
+- `HYBRID_MIN_SCORE_FLOOR`: Lower bound applied after heuristics (default `0`).
+- Recency decay: `HYBRID_RECENCY_DECAY_ENABLED`, `HYBRID_RECENCY_HALF_LIFE_DAYS`, `HYBRID_RECENCY_MIN_MULTIPLIER`, `HYBRID_RECENCY_MAX_MULTIPLIER`.
+- Feedback boost: `HYBRID_FEEDBACK_BOOST_ENABLED`, `HYBRID_FEEDBACK_WEIGHT`, `HYBRID_FEEDBACK_MAX_SCORE`.
+- Scope boosts: `HYBRID_SCOPE_BOOST_ENABLED`, `HYBRID_SCOPE_PERSONAL_BONUS`, `HYBRID_SCOPE_ORG_BONUS`, `HYBRID_SCOPE_PUBLIC_BONUS`.
+- Reranker placeholders: `HYBRID_RERANKER_ENABLED`, `HYBRID_RERANKER_PROVIDER`, `HYBRID_RERANKER_TOP_K`.
+
+All knobs are cached per-process; call `refresh_hybrid_ranking_config()` in tests after mutating the environment.
+
 ## 🔐 Permissions & Scopes
 
 - See `SECURITY.md` for the security model overview (roles, scopes, and helpers).
