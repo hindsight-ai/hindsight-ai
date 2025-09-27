@@ -1106,7 +1106,7 @@ def search_memory_blocks_fulltext_endpoint(
         return results
         
     except Exception as e:
-        logger.error(f"Error in full-text search: {str(e)}")
+        logger.exception("Error in full-text search: %s", e)
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
 @router.get("/memory-blocks/search/semantic", response_model=List[schemas.MemoryBlockWithScore])
@@ -1192,7 +1192,7 @@ def search_memory_blocks_semantic_endpoint(
         return results
         
     except Exception as e:
-        logger.error(f"Error in semantic search: {str(e)}")
+        logger.exception("Error in semantic search: %s", e)
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
 @router.get("/memory-blocks/search/hybrid", response_model=List[schemas.MemoryBlockWithScore])

@@ -1,32 +1,33 @@
-# Search Infrastructure Foundation Plan (Updated)
+# Search Search-Service Convergence Plan (Updated)
 
 ## Goals
-- Finish consolidating agent-facing `/memory-blocks/search/` on the shared `SearchService` pipeline so keyword/basic search behaves like enhanced strategies.
-- Preserve existing defaults for clients (keyword/basic) while allowing explicit strategy selection (`basic`, `fulltext`, `semantic`, `hybrid`).
-- Enforce scope filters, agent/conversation bounds, and validation consistently across all strategies.
-- Emit structured metadata (strategy, filters, expansion status) for observability.
-- Keep the MCP client working without interface changes.
+- Consolidate keyword, fulltext, semantic, and hybrid searches on the shared `SearchService` pipeline so all strategies share validation, scoping, and telemetry.
+- Preserve historical defaults for keyword/basic searches while allowing explicit strategy overrides (`basic`, `fulltext`, `semantic`, `hybrid`).
+- Provide semantic retrieval via pgvector with consistent scoring metadata and graceful fallbacks when embeddings or vector support are unavailable.
+- Emit structured metadata (strategy, weights, filters, expansion status) for observability and propagate it to API clients.
+- Keep MCP and dashboard consumers working without interface breaking changes.
+- Maintain ≥80% overall coverage (≥90% on newly refactored paths).
 
 ## Implementation Tasks
-1. ✅ Deliver shared search helpers (`SearchService`/CRUD) through the earlier embeddings worktree.
-2. Refactor the `/memory-blocks/search/` endpoint in `core/api/memory_blocks.py` to call `crud.search_memory_blocks_enhanced`, handling strategy/limit validation and response metadata.
-3. Remove or adapt the legacy `retrieve_relevant_memories` repository helper so agent search uses the shared service path.
-4. Add structured logs/metrics describing selected strategy, filters, and expansion status.
-5. Update integration tests for `/memory-blocks/search/` plus any MCP fixtures to exercise strategy selection, scope enforcement, and validation errors.
-6. Refresh documentation (README + MCP tooling notes) describing search strategies, defaults, and new metadata.
-7. Maintain ≥80% coverage overall and ≥90% for newly refactored modules.
+1. ✅ Ship shared search helpers (`SearchService`, CRUD facade, repository wiring) from the embeddings ingest work.
+2. ✅ Refactor `/memory-blocks/search/` to delegate to `SearchService.enhanced_search_memory_blocks`, validate inputs, and surface metadata headers.
+3. ✅ Replace repository-level keyword search with the unified service while keeping a legacy fallback for edge cases.
+4. ✅ Harden semantic search (pgvector cosine similarity, thresholds, fallbacks) and expose rank explanations/score components.
+5. ✅ Update integration/unit coverage for strategy selection, scope enforcement, fallback behaviour, and metadata emission.
+6. 🔄 Refresh docs + MCP tooling notes to describe strategy defaults, overrides, and metadata headers.
+7. 🔄 Monitor staging metrics for latency/hit ratio regressions as hybrid weighting evolves.
 
 ## Testing Strategy
-- Unit tests around validation utilities (strategy parsing, UUID handling) and the enhanced CRUD delegation.
-- Integration tests for `/memory-blocks/search/` verifying default keyword behaviour, explicit strategies, and failure cases.
-- MCP regression test (or mocked HTTP client) ensuring the tool still works with default parameters.
-- Full pytest run with coverage check ≥80%.
+- Unit tests for validation utilities, semantic/pgvector fallbacks, hybrid weighting heuristics, and CRUD delegation.
+- Integration tests for `/memory-blocks/search/` plus dedicated endpoints (`fulltext`, `semantic`, `hybrid`) covering defaults, overrides, and errors.
+- MCP regression check ensuring default parameters continue to function.
+- Full pytest runs with coverage ≥80%.
 
 ## Observability & Tooling
-- Ensure logs include strategy, filters, query expansion metadata, and scope context for auditability.
-- Expose recommended commands in the README for running the focused search test suite.
+- Include strategy, filters, expansion, and scope context in logs; expose headers (`X-Search-Metadata`) to API consumers.
+- Document focused commands for running search-centric test suites.
 
 ## Dependencies & Risks
-- Depends on SearchService work from `search-embeddings-ingest` (already merged).
-- Regression risk for agent clients; thorough integration/regression testing required.
-- Keep default behaviour identical unless a strategy parameter is explicitly provided.
+- Relies on embeddings ingestion landing ahead of semantic/pgvector usage.
+- Requires Postgres + pgvector in production; non-Postgres environments automatically fall back to substring search.
+- Regression risk for legacy clients; thorough integration/regression testing mitigates.

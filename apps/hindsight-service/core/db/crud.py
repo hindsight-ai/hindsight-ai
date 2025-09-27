@@ -287,12 +287,6 @@ def get_all_memory_blocks(
 def update_memory_block(db: Session, memory_id: uuid.UUID, memory_block: schemas.MemoryBlockUpdate):
     return repo_memories.update_memory_block(db, memory_id, memory_block)
 
-import logging # Added to top of file
-
-logger = logging.getLogger(__name__) # Added to top of file
-
-# ... (rest of the file)
-
 def archive_memory_block(db: Session, memory_id: uuid.UUID):
     return repo_memories.archive_memory_block(db, memory_id)
 
@@ -305,25 +299,17 @@ def retrieve_relevant_memories(
     agent_id: Optional[uuid.UUID] = None,
     conversation_id: Optional[uuid.UUID] = None,
     limit: int = 100,
+    *,
+    current_user: Optional[dict] = None,
 ):
-    keyword_list = [kw.strip() for kw in keywords if kw and kw.strip()]
-    search_query = " ".join(keyword_list)
-    results, _ = search_memory_blocks_enhanced(
-        db=db,
-        search_type="basic",
-        search_query=search_query or " ",
-        agent_id=agent_id,
-        conversation_id=conversation_id,
-        limit=limit,
-        include_archived=False,
-        current_user=None,
-        keyword_list=keyword_list,
-        match_any=True,
+    return repo_memories.retrieve_relevant_memories(
+        db,
+        keywords,
+        agent_id,
+        conversation_id,
+        limit,
+        current_user=current_user,
     )
-    return [
-        schemas.MemoryBlock.model_validate(result.model_dump())
-        for result in results
-    ]
 
 def report_memory_feedback(db: Session, memory_id: uuid.UUID, feedback_type: str, feedback_details: Optional[str] = None):
     return repo_memories.report_memory_feedback(db, memory_id, feedback_type, feedback_details)
@@ -682,9 +668,7 @@ def search_memory_blocks_semantic(
     *,
     current_user: Optional[dict] = None,
 ):
-    """
-    Semantic search using embeddings (placeholder implementation).
-    """
+    """Semantic search using stored embeddings."""
     from core.search import get_search_service
     
     search_service = get_search_service()
