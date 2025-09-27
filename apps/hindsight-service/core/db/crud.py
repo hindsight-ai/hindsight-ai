@@ -665,9 +665,7 @@ def search_memory_blocks_semantic(
     *,
     current_user: Optional[dict] = None,
 ):
-    """
-    Semantic search using embeddings (placeholder implementation).
-    """
+    """Semantic search using stored embeddings."""
     from core.search import get_search_service
     
     search_service = get_search_service()

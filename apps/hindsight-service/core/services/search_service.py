@@ -1,5 +1,5 @@
 """
-Search service for memory blocks: full-text, semantic (placeholder), and hybrid.
+Search service for memory blocks: full-text, semantic, and hybrid search helpers.
 """
 
 import logging
@@ -7,10 +7,11 @@ import time
 import uuid
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, and_, or_, String
+from sqlalchemy import func, text, and_, or_, String, literal
 from core.utils.scopes import SCOPE_PUBLIC, SCOPE_ORGANIZATION
 
 from core.db import models, schemas
+from core.services import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
@@ -211,30 +212,193 @@ class SearchService:
         include_archived: bool = False,
         current_user: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[schemas.MemoryBlockWithScore], Dict[str, Any]]:
-        """
-        Placeholder for semantic search using embeddings.
-        
-        This is a stub implementation that will be enhanced when embedding infrastructure is ready.
-        For now, it returns empty results with proper structure.
-        """
+        """Run semantic search using pgvector similarity when available."""
+
         start_time = time.time()
-        
-        self.logger.info(f"Semantic search requested for query: '{query}'")
-        self.logger.info("Semantic search not yet implemented - returning empty results")
-        
+
+        if not query or not query.strip():
+            return [], {
+                "total_search_time_ms": 0.0,
+                "semantic_results_count": 0,
+                "search_type": "semantic",
+                "similarity_threshold": similarity_threshold,
+                "message": "Empty query",
+            }
+
+        embedding_service = get_embedding_service()
+        if not embedding_service.is_enabled:
+            results, metadata = self._basic_search_fallback(
+                db,
+                query,
+                agent_id,
+                conversation_id,
+                limit,
+                include_archived,
+                current_user,
+            )
+            metadata.update(
+                {
+                    "search_type": "semantic_fallback",
+                    "fallback_reason": "embedding_provider_disabled",
+                    "similarity_threshold": similarity_threshold,
+                }
+            )
+            return results, metadata
+
+        try:
+            query_embedding = embedding_service.embed_text(query.strip())
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Failed to embed semantic query '%s': %s", query, exc)
+            query_embedding = None
+
+        if not query_embedding:
+            results, metadata = self._basic_search_fallback(
+                db,
+                query,
+                agent_id,
+                conversation_id,
+                limit,
+                include_archived,
+                current_user,
+            )
+            metadata.update(
+                {
+                    "search_type": "semantic_fallback",
+                    "fallback_reason": "query_embedding_unavailable",
+                    "similarity_threshold": similarity_threshold,
+                }
+            )
+            return results, metadata
+
+        dialect_name = getattr(getattr(db, "bind", None), "dialect", None)
+        dialect_name = getattr(dialect_name, "name", "") if dialect_name else ""
+
+        if dialect_name != "postgresql":
+            results, metadata = self._basic_search_fallback(
+                db,
+                query,
+                agent_id,
+                conversation_id,
+                limit,
+                include_archived,
+                current_user,
+            )
+            metadata.update(
+                {
+                    "search_type": "semantic_fallback",
+                    "fallback_reason": f"dialect_{dialect_name}_unsupported",
+                    "similarity_threshold": similarity_threshold,
+                }
+            )
+            return results, metadata
+
+        try:
+            threshold = float(similarity_threshold)
+        except (TypeError, ValueError):
+            threshold = 0.7
+        threshold = max(min(threshold, 1.0), -1.0)
+        max_distance = 1.0 - threshold
+        if max_distance < 0:
+            max_distance = 0.0
+
+        distance_expr = models.MemoryBlock.content_embedding.op("<=>")(query_embedding)
+        similarity_expr = (literal(1.0) - distance_expr).label("similarity")
+
+        base_query = db.query(models.MemoryBlock, similarity_expr).filter(
+            models.MemoryBlock.content_embedding.isnot(None)
+        )
+
+        if current_user is None:
+            base_query = base_query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
+        else:
+            org_ids: List[uuid.UUID] = []
+            for membership in (current_user.get("memberships") or []):
+                try:
+                    org_ids.append(uuid.UUID(membership.get("organization_id")))
+                except Exception:
+                    continue
+            base_query = base_query.filter(
+                or_(
+                    models.MemoryBlock.visibility_scope == SCOPE_PUBLIC,
+                    models.MemoryBlock.owner_user_id == current_user.get("id"),
+                    and_(
+                        models.MemoryBlock.visibility_scope == SCOPE_ORGANIZATION,
+                        models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
+                    ),
+                )
+            )
+
+        if agent_id:
+            base_query = base_query.filter(models.MemoryBlock.agent_id == agent_id)
+        if conversation_id:
+            base_query = base_query.filter(models.MemoryBlock.conversation_id == conversation_id)
+
+        if not include_archived:
+            base_query = base_query.filter(
+                or_(
+                    models.MemoryBlock.archived == False,
+                    models.MemoryBlock.archived.is_(None),
+                )
+            )
+
+        base_query = (
+            base_query.filter(distance_expr <= max_distance)
+            .order_by(similarity_expr.desc(), models.MemoryBlock.created_at.desc())
+            .limit(limit)
+        )
+
+        try:
+            results_with_similarity = base_query.all()
+        except Exception as exc:  # pragma: no cover - defensive database failure
+            logger.error("Semantic search query failed: %s", exc)
+            fallback_results, metadata = self._basic_search_fallback(
+                db,
+                query,
+                agent_id,
+                conversation_id,
+                limit,
+                include_archived,
+                current_user,
+            )
+            metadata.update(
+                {
+                    "search_type": "semantic_fallback",
+                    "fallback_reason": "semantic_query_error",
+                    "similarity_threshold": threshold,
+                }
+            )
+            return fallback_results, metadata
+
+        memory_blocks_with_scores: List[schemas.MemoryBlockWithScore] = []
+        scores: List[float] = []
+        for row in results_with_similarity:
+            if row is None:
+                logger.warning("Semantic search produced a null row; skipping")
+                continue
+            memory_block, similarity = row
+            score = float(similarity) if similarity is not None else 0.0
+            scores.append(score)
+            memory_blocks_with_scores.append(
+                _create_memory_block_with_score(
+                    memory_block,
+                    score,
+                    "semantic",
+                    f"Cosine similarity: {score:.4f}",
+                )
+            )
+
         search_time = (time.time() - start_time) * 1000
-        
+
         metadata = {
             "total_search_time_ms": search_time,
-            "semantic_results_count": 0,
+            "semantic_results_count": len(memory_blocks_with_scores),
             "search_type": "semantic",
-            "similarity_threshold": similarity_threshold,
-            "implementation_status": "placeholder",
-            "scores": []
+            "similarity_threshold": threshold,
+            "scores": scores,
+            "embedding_dimension": len(query_embedding),
         }
-        
-        return [], metadata
-    
+
+        return memory_blocks_with_scores, metadata
     def search_memory_blocks_hybrid(
         self,
         db: Session,
@@ -248,11 +412,7 @@ class SearchService:
         include_archived: bool = False,
         current_user: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[schemas.MemoryBlockWithScore], Dict[str, Any]]:
-        """
-        Combine full-text and semantic search with weighted scoring.
-        
-        Currently only uses full-text search until semantic search is implemented.
-        """
+        """Combine full-text and semantic search with weighted scoring."""
         start_time = time.time()
         
         # Get results from both search methods
@@ -263,7 +423,7 @@ class SearchService:
 
         # If the fulltext path already fell back (non-Postgres dialect), treat this as a basic-only hybrid
         if fulltext_metadata.get('search_type') == 'fulltext_fallback':
-            # Return truncated fallback results with adjusted metadata; semantic still placeholder empty
+            # Return truncated fallback results with adjusted metadata; semantic path unavailable here
             final_results = fulltext_results[:limit]
             search_time = (time.time() - start_time) * 1000
             metadata = {

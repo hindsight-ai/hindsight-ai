@@ -42,6 +42,94 @@ class TestSearchService:
         assert len(result.keywords) == 1
         assert result.keywords[0].keyword_text == "test"
 
+    @patch('core.services.search_service.get_embedding_service')
+    def test_search_memory_blocks_semantic_disabled_provider_falls_back(self, mock_get_service):
+        db = Mock()
+        service = SearchService()
+
+        mock_embed_service = Mock()
+        mock_embed_service.is_enabled = False
+        mock_get_service.return_value = mock_embed_service
+
+        with patch.object(service, '_basic_search_fallback', return_value=(['fallback'], {"search_type": "basic"})) as fallback:
+            results, metadata = service.search_memory_blocks_semantic(db, "semantic query")
+
+        fallback.assert_called_once()
+        assert results == ['fallback']
+        assert metadata["search_type"] == "semantic_fallback"
+        assert metadata["fallback_reason"] == "embedding_provider_disabled"
+
+    @patch('core.services.search_service.get_embedding_service')
+    def test_search_memory_blocks_semantic_query_embedding_missing(self, mock_get_service):
+        db = Mock()
+        service = SearchService()
+
+        mock_embed_service = Mock()
+        mock_embed_service.is_enabled = True
+        mock_embed_service.embed_text.return_value = None
+        mock_get_service.return_value = mock_embed_service
+
+        with patch.object(service, '_basic_search_fallback', return_value=([], {"search_type": "basic"})) as fallback:
+            results, metadata = service.search_memory_blocks_semantic(db, "semantic query")
+
+        fallback.assert_called_once()
+        assert results == []
+        assert metadata["search_type"] == "semantic_fallback"
+        assert metadata["fallback_reason"] == "query_embedding_unavailable"
+
+    @patch('core.services.search_service.get_embedding_service')
+    def test_search_memory_blocks_semantic_non_postgres_fallback(self, mock_get_service):
+        db = Mock()
+        db.bind = Mock()
+        db.bind.dialect = Mock()
+        db.bind.dialect.name = 'sqlite'
+        service = SearchService()
+
+        mock_embed_service = Mock()
+        mock_embed_service.is_enabled = True
+        mock_embed_service.embed_text.return_value = [0.1, 0.2, 0.3]
+        mock_get_service.return_value = mock_embed_service
+
+        with patch.object(service, '_basic_search_fallback', return_value=(['fallback'], {"search_type": "basic"})) as fallback:
+            results, metadata = service.search_memory_blocks_semantic(db, "semantic query")
+
+        fallback.assert_called_once()
+        assert results == ['fallback']
+        assert metadata["search_type"] == "semantic_fallback"
+        assert metadata["fallback_reason"] == "dialect_sqlite_unsupported"
+
+    @patch('core.services.search_service.get_embedding_service')
+    def test_search_memory_blocks_semantic_success(self, mock_get_service):
+        db = MagicMock()
+        db.bind = MagicMock()
+        db.bind.dialect = MagicMock()
+        db.bind.dialect.name = 'postgresql'
+
+        query_mock = MagicMock()
+        query_mock.filter.return_value = query_mock
+        query_mock.order_by.return_value = query_mock
+        query_mock.limit.return_value = query_mock
+        query_mock.all.return_value = [(MagicMock(keywords=[]), 0.86)]
+        db.query.return_value = query_mock
+
+        mock_embed_service = Mock()
+        mock_embed_service.is_enabled = True
+        mock_embed_service.embed_text.return_value = [0.1, 0.2, 0.3]
+        mock_get_service.return_value = mock_embed_service
+
+        service = SearchService()
+
+        with patch('core.services.search_service._create_memory_block_with_score', return_value='converted') as converter, \
+             patch.object(service, '_basic_search_fallback') as fallback:
+            results, metadata = service.search_memory_blocks_semantic(db, "semantic query", limit=5)
+
+        fallback.assert_not_called()
+        converter.assert_called_once()
+        assert results == ['converted']
+        assert metadata["search_type"] == "semantic"
+        assert metadata["semantic_results_count"] == 1
+        assert metadata["scores"] == [0.86]
+
     @patch('core.services.search_service.func')
     def test_search_memory_blocks_fulltext_empty_query(self, mock_func):
         db = Mock()
@@ -63,20 +151,6 @@ class TestSearchService:
             results, meta = service.search_memory_blocks_fulltext(db, "hello")
             assert len(results) == 1
             assert meta["search_type"] == "fulltext"
-
-    @patch('core.services.search_service.time')
-    def test_search_memory_blocks_semantic_placeholder(self, mock_time):
-        db = Mock()
-        service = SearchService()
-
-        mock_time.time.return_value = 1000.0
-
-        results, metadata = service.search_memory_blocks_semantic(db, "test query")
-
-        assert results == []
-        assert metadata["semantic_results_count"] == 0
-        assert metadata["search_type"] == "semantic"
-        assert metadata["implementation_status"] == "placeholder"
 
     def test_search_memory_blocks_hybrid_empty_query(self):
         db = Mock()
