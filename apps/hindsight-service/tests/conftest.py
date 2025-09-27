@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -98,8 +100,10 @@ def _migrated_db(_test_postgres):
     if os.getenv("SKIP_ALEMBIC_FIXTURES") == "1":
         yield
         return
-    cfg = Config("alembic.ini")
+    service_root = Path(__file__).resolve().parents[1]
+    cfg = Config(str(service_root / "alembic.ini"))
     cfg.set_main_option("sqlalchemy.url", _test_postgres)
+    cfg.set_main_option("script_location", str(service_root / "migrations"))
     command.upgrade(cfg, "head")
     yield
     # Optional: command.downgrade(cfg, "base")
