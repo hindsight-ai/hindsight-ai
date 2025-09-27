@@ -254,6 +254,13 @@ def test_memory_blocks_search_endpoint(db_session):
     assert r.status_code == 200
     results = r.json()
     assert isinstance(results, list)
+    assert results and "ai" in results[0]["content"].lower()
+    assert r.headers.get("X-Search-Metadata") is not None
+
+    # Explicit strategy should exercise the unified search service path
+    r = client.get("/memory-blocks/search/?keywords=AI&search_type=fulltext", headers=h)
+    assert r.status_code == 200
+    assert r.headers.get("X-Search-Metadata") is not None
     
     # Test search with agent filter
     r = client.get(f"/memory-blocks/search/?keywords=AI&agent_id={agent_id}", headers=h)
@@ -262,6 +269,14 @@ def test_memory_blocks_search_endpoint(db_session):
     # Test search with limit
     r = client.get("/memory-blocks/search/?keywords=AI&limit=5", headers=h)
     assert r.status_code == 200
+
+    # Invalid strategy should fail
+    r = client.get("/memory-blocks/search/?keywords=AI&search_type=invalid", headers=h)
+    assert r.status_code == 400
+
+    # Limit bounds enforced
+    r = client.get("/memory-blocks/search/?keywords=AI&limit=0", headers=h)
+    assert r.status_code == 400
     
     # Test search with no keywords (should fail)
     r = client.get("/memory-blocks/search/?keywords=", headers=h)

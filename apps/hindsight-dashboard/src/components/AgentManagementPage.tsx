@@ -4,6 +4,7 @@ import AddAgentModal from './AddAgentModal';
 import AgentDetailsModal from './AgentDetailsModal';
 import RefreshIndicator from './RefreshIndicator';
 import usePageHeader from '../hooks/usePageHeader';
+import notificationService from '../services/notificationService';
 
 const AgentManagementPage = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -62,6 +63,33 @@ const AgentManagementPage = () => {
         console.error('Failed to delete agent:', err);
         setError('Failed to delete agent. Please try again.');
       }
+    }
+  };
+
+  const copyAgentId = async (agentId: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(agentId);
+      } else {
+        const fallbackInput = document.createElement('textarea');
+        fallbackInput.value = agentId;
+        fallbackInput.setAttribute('readonly', '');
+        fallbackInput.style.position = 'fixed';
+        fallbackInput.style.left = '-9999px';
+        document.body.appendChild(fallbackInput);
+        fallbackInput.focus();
+        fallbackInput.select();
+        if (typeof document.execCommand !== 'function') {
+          throw new Error('Clipboard API not available');
+        }
+        const successful = document.execCommand('copy');
+        document.body.removeChild(fallbackInput);
+        if (!successful) { throw new Error('Fallback copy command failed'); }
+      }
+      notificationService.showSuccess('Agent ID copied to clipboard');
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      notificationService.showError('Failed to copy Agent ID. Please try again.');
     }
   };
 
@@ -208,7 +236,7 @@ const AgentManagementPage = () => {
           {filteredAgents.map((agent) => (
             <div
               key={agent.agent_id}
-              className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex justify-between items-start cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200 overflow-hidden flex-wrap gap-2 sm:flex-nowrap"
+              className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex justify-between items-start cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-200 overflow-hidden flex-wrap gap-3 sm:flex-nowrap"
               onClick={() => handleAgentClick(agent)}
             >
               <div className="flex items-start gap-4 flex-1">
@@ -225,18 +253,34 @@ const AgentManagementPage = () => {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation(); // Prevent card click when clicking delete
-                  handleDeleteAgent(agent.agent_id);
-                }}
-                className="p-2 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
-                title="Delete Agent"
-              >
-                <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
+              <div className="flex flex-col items-end gap-4 flex-shrink-0 self-stretch">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyAgentId(agent.agent_id);
+                  }}
+                  className="inline-flex items-center justify-center rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+                  title="Copy Agent ID"
+                  aria-label="Copy Agent ID"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent card click when clicking delete
+                    handleDeleteAgent(agent.agent_id);
+                  }}
+                  className="mt-auto p-2 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Delete Agent"
+                  aria-label="Delete Agent"
+                >
+                  <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             </div>
           ))}
         </div>
