@@ -450,9 +450,17 @@ class SearchService:
             )
         else:
             # Fall back to basic search (existing ILIKE implementation)
-            return self._basic_search_fallback(
-                db, search_query, agent_id, conversation_id, limit, include_archived, search_params.get('current_user')
-            )
+        return self._basic_search_fallback(
+            db,
+            search_query,
+            agent_id,
+            conversation_id,
+            limit,
+            include_archived,
+            search_params.get('current_user'),
+            keyword_terms=search_params.get('keyword_list'),
+            match_any=bool(search_params.get('match_any')),
+        )
     
     def _basic_search_fallback(
         self,
@@ -463,6 +471,9 @@ class SearchService:
         limit: int = 50,
         include_archived: bool = False,
         current_user: Optional[Dict[str, Any]] = None,
+        *,
+        keyword_terms: Optional[List[str]] = None,
+        match_any: bool = False,
     ) -> Tuple[List[schemas.MemoryBlockWithScore], Dict[str, Any]]:
         """
         Fallback to basic ILIKE search for backward compatibility.
@@ -471,7 +482,8 @@ class SearchService:
         
         # Build search filters using ILIKE (case-insensitive substring search)
         search_filters = []
-        search_terms = search_query.split()
+        explicit_terms = [term.strip() for term in (keyword_terms or []) if term and term.strip()]
+        search_terms = explicit_terms or search_query.split()
         
         for term in search_terms:
             term_filter = or_(
@@ -483,7 +495,10 @@ class SearchService:
             search_filters.append(term_filter)
         
         # Combine all search filters with AND logic
-        combined_filter = and_(*search_filters) if search_filters else None
+        if search_filters:
+            combined_filter = or_(*search_filters) if match_any else and_(*search_filters)
+        else:
+            combined_filter = None
         
         query = db.query(models.MemoryBlock)
         
@@ -549,7 +564,8 @@ class SearchService:
             "total_search_time_ms": search_time,
             "basic_results_count": len(results),
             "search_type": "basic",
-            "search_terms": search_terms
+            "search_terms": search_terms,
+            "match_any": bool(match_any),
         }
         
         return results, metadata

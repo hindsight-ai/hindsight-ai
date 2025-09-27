@@ -15,6 +15,7 @@ from sqlalchemy import or_, Text
 
 from core.db import models, schemas, scope_utils
 from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
+from core.search import get_search_service
 
 logger = logging.getLogger(__name__)
 
@@ -257,20 +258,57 @@ def retrieve_relevant_memories(
     agent_id: Optional[uuid.UUID] = None,
     conversation_id: Optional[uuid.UUID] = None,
     limit: int = 100,
+    *,
+    current_user: Optional[dict] = None,
 ):
+    normalized = [kw.strip() for kw in keywords if kw and kw.strip()]
+    if not normalized:
+        return []
+
+    search_service = get_search_service()
+    search_query = " ".join(normalized)
+    results, _metadata = search_service.enhanced_search_memory_blocks(
+        db=db,
+        search_query=search_query,
+        search_type="basic",
+        agent_id=agent_id,
+        conversation_id=conversation_id,
+        limit=limit,
+        include_archived=False,
+        current_user=current_user,
+    )
+
+    sanitized: List[schemas.MemoryBlock] = []
+    for result in results:
+        payload = result.model_dump()
+        payload.pop("search_score", None)
+        payload.pop("search_type", None)
+        payload.pop("rank_explanation", None)
+        sanitized.append(schemas.MemoryBlock.model_validate(payload))
+    if sanitized:
+        return sanitized
+
+    # Legacy fallback to maintain behavior when search service filters return nothing
     query = db.query(models.MemoryBlock)
     if agent_id:
         query = query.filter(models.MemoryBlock.agent_id == agent_id)
     if conversation_id:
         query = query.filter(models.MemoryBlock.conversation_id == conversation_id)
-    filters = []
-    for kw in keywords:
-        filters.append(models.MemoryBlock.content.ilike(f"%{kw}%"))
-        filters.append(models.MemoryBlock.errors.ilike(f"%{kw}%"))
-        filters.append(models.MemoryBlock.lessons_learned.ilike(f"%{kw}%"))
-    if filters:
-        query = query.filter(or_(*filters))
-    return query.limit(limit).all()
+
+    legacy_filters = []
+    for kw in normalized:
+        pattern = f"%{kw}%"
+        legacy_filters.append(models.MemoryBlock.content.ilike(pattern))
+        legacy_filters.append(models.MemoryBlock.errors.ilike(pattern))
+        legacy_filters.append(models.MemoryBlock.lessons_learned.ilike(pattern))
+    if legacy_filters:
+        query = query.filter(or_(*legacy_filters))
+
+    legacy_results = query.limit(limit).all()
+    return [
+        schemas.MemoryBlock.model_validate(result, from_attributes=True)
+        for result in legacy_results
+    ]
 
 
 def create_feedback_log(db: Session, feedback_log: schemas.FeedbackLogCreate):
