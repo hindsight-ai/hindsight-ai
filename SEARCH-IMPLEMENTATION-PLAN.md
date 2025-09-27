@@ -1,35 +1,40 @@
-# Search Hybrid Ranking Plan
+# Search Query Expansion Plan
 
 ## Goals
-- Blend full-text, semantic, and heuristic signals into a unified ranking aligned with RAG best practices.
-- Provide transparent score breakdowns (full-text, semantic, boosts, reranker) so clients can reason about ordering.
-- Keep results performant under per-tenant workloads; track latency and retrieval counts.
-- Maintain ≥80% overall coverage; new ranking utilities ≥90% where feasible.
+- Introduce a query-understanding layer that expands user queries with synonyms, stems, and optional LLM rewrites to improve recall without harming precision.
+- Provide an evaluation harness measuring retrieval quality (precision@k, recall@k) against curated fixtures and run within CI.
+- Document configuration, operational toggles, and observability expectations for the expansion pipeline.
+- Keep overall coverage ≥80%; new modules ≥90%.
 
 ## Implementation Tasks
-1. Scoring framework
-   - Extend `SearchService.search_memory_blocks_hybrid` to normalize full-text/semantic scores, apply configurable weights, and expose component metadata.
-   - Layer heuristic boosts (feedback score bonus, recent-memory decay, scope adjustments) behind config toggles.
-2. Reranker integration
-   - Introduce a pluggable reranker interface with a default no-op implementation and wire optional cross-encoder/LLM reranker for top-k results.
-   - Surface reranker latency and applied adjustments in response metadata.
-3. Retrieval counters + telemetry
-   - Increment `retrieval_count` when results are returned; ensure updates are transactional and safe under concurrency.
-   - Emit structured logs/metrics for hybrid blending (weights, fallback reasons, final scores).
-4. Configuration & documentation
-   - Add configs for weights, heuristic toggles, reranker provider/model, and decay windows.
-   - Update README/prod runbooks describing ranking pipeline, tuning guidance, and fallback behaviour.
-5. Client compatibility
-   - Ensure API responses continue returning `search_score`, `search_type`, and rank explanations including component breakdown.
-   - Confirm MCP/dashboard consumers handle the extra metadata gracefully.
+1. Expansion engine
+   - ✅ Build a modular pipeline supporting:
+     * rule-based stemming/lemmatization,
+     * synonym lookup (WordNet/custom dictionaries),
+     * optional LLM-based reformulation hook.
+   - ✅ Allow per-tenant/agent configuration with sensible defaults and guardrails on expansion fan-out.
+2. Search integration
+   - ✅ Update query entrypoints so expanded queries feed into existing fulltext/semantic/hybrid flows without infinite loops.
+   - ✅ Record expansion metadata on responses (original query, applied transforms, expansion cost).
+3. Evaluation harness
+   - ✅ Create a fixture dataset mapping queries to relevant memory IDs.
+   - ✅ Add CLI/pytest command to compare baseline vs. expanded retrieval (precision@k / recall@k, aggregated deltas).
+   - 🔄 Monitor results in CI and adjust thresholds once real datasets are curated.
+4. Observability
+   - ✅ Emit structured logs and optional metrics capturing expansion steps, synonym sources, and LLM latency/failures.
+   - ✅ Provide toggles to disable expansion when providers unavailable.
+5. Documentation
+   - ✅ Update README/runbooks with configuration instructions, evaluation workflow, and troubleshooting tips.
 
 ## Testing Strategy
-- Unit tests for weighted score math, heuristic boosts, and reranker hooks; verify monotonic behaviour under edge cases.
-- Integration tests for `/memory-blocks/search/hybrid` validating blended ordering, fallback semantics, and retrieval_count increments.
-- Reranker stub tests to confirm optional execution paths and metadata emission.
-- Run targeted performance/regression checks to ensure latency budgets met; monitor retrieval_count writes under load.
+- ✅ Unit tests for expansion rules, ensuring deterministic output and bounded expansions.
+- ✅ Integration tests demonstrating improved recall on the fixture dataset while maintaining precision.
+- ✅ Tests covering failure paths (LLM provider disabled, synonym source missing) and verifying graceful fallback.
+- ✅ Evaluation harness tests verifying metric calculations and CLI output.
+- 🔄 Full pytest run with coverage enforcement (monitor for new datasets as they grow).
 
 ## Dependencies & Risks
-- Relies on semantic search branch (vector similarity + metadata) merged earlier.
-- External rerankers may require network/model access; provide mock implementations for CI.
-- Retrieval_count updates can contend under parallel requests; consider batching or deferred writes if necessary.
+- Builds on hybrid ranking improvements for final ordering.
+- LLM-based expansion introduces latency and potential cost; add caching and rate limiting.
+- Expansion must respect scope/visibility constraints; ensure filters applied post-expansion.
+- Synonym dictionaries require maintenance; document contribution workflow.

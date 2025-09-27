@@ -88,6 +88,38 @@ uv run python scripts/backfill_embeddings.py --batch-size 200
 
 Add `--dry-run` to inspect how many rows still need embeddings before running the job.
 
+### Hybrid Ranking Configuration
+
+Hybrid search blends full-text and semantic signals with heuristic boosts. Tune behaviour with environment variables (all optional with sensible defaults):
+
+- `HYBRID_FULLTEXT_WEIGHT`, `HYBRID_SEMANTIC_WEIGHT`: Baseline weights before normalization (defaults 0.7/0.3).
+- `HYBRID_ALLOW_WEIGHT_OVERRIDES`: When `false`, ignores request overrides and pins configured weights.
+- `HYBRID_NORMALIZATION`: Normalization strategy for component scores (`min_max` or `max`).
+- `HYBRID_MIN_SCORE_FLOOR`: Lower bound applied after heuristics.
+- Recency decay knobs: `HYBRID_RECENCY_DECAY_ENABLED`, `HYBRID_RECENCY_HALF_LIFE_DAYS`, `HYBRID_RECENCY_MIN_MULTIPLIER`, `HYBRID_RECENCY_MAX_MULTIPLIER`.
+- Feedback bonuses: `HYBRID_FEEDBACK_BOOST_ENABLED`, `HYBRID_FEEDBACK_WEIGHT`, `HYBRID_FEEDBACK_MAX_SCORE`.
+- Scope adjustments: `HYBRID_SCOPE_BOOST_ENABLED`, `HYBRID_SCOPE_PERSONAL_BONUS`, `HYBRID_SCOPE_ORG_BONUS`, `HYBRID_SCOPE_PUBLIC_BONUS`.
+- Reranker scaffolding: `HYBRID_RERANKER_ENABLED`, `HYBRID_RERANKER_PROVIDER`, `HYBRID_RERANKER_TOP_K`.
+
+Configuration is cached per process; call `refresh_hybrid_ranking_config()` in tests when mutating environment variables.
+
+### Query Expansion Configuration & Evaluation
+
+The query expansion pipeline applies stemming, synonym substitution, and optional LLM rewrites before invoking the existing search flows. Key toggles:
+
+- `QUERY_EXPANSION_ENABLED` (default `true`).
+- `QUERY_EXPANSION_STEMMING_ENABLED`, `QUERY_EXPANSION_SYNONYMS_ENABLED`.
+- `QUERY_EXPANSION_MAX_VARIANTS` (default `5`) and `QUERY_EXPANSION_SYNONYMS_PATH` (JSON dictionary of token → synonyms).
+- `QUERY_EXPANSION_LLM_PROVIDER` (`mock` yields deterministic rewrites for tests) and `QUERY_EXPANSION_LLM_MAX_VARIANTS`.
+
+An evaluation harness compares baseline vs. expanded retrieval quality. Create a JSON dataset of cases (each entry: `query`, optional `search_type`, and `relevant_ids`) and run:
+
+```bash
+uv run python apps/hindsight-service/scripts/run_query_expansion_evaluation.py --dataset path/to/dataset.json --output summary.json
+```
+
+Within tests, `core.search.evaluation.evaluate_cases` returns per-query precision/recall plus aggregate deltas so you can gate CI or surface regressions.
+
 ## 🔐 Permissions & Scopes
 
 - See `SECURITY.md` for the security model overview (roles, scopes, and helpers).

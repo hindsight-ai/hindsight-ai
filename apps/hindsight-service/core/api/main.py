@@ -1194,12 +1194,14 @@ def search_memory_blocks_semantic_endpoint(
             current_user=current_user,
         )
         
+        expansion_meta = metadata.get("expansion", {})
         logger.info(
-            "Semantic search for '%s' returned %d results (mode=%s, fallback=%s)",
+            "Semantic search for '%s' returned %d results (mode=%s, fallback=%s, expansion_applied=%s)",
             query,
             len(results),
             metadata.get("search_type"),
             metadata.get("fallback_reason"),
+            expansion_meta.get("expansion_applied"),
         )
         return results
         
@@ -1302,7 +1304,13 @@ def search_memory_blocks_hybrid_endpoint(
             current_user=current_user,
         )
         
-        logger.info(f"Hybrid search for '{query}' returned {len(results)} results")
+        expansion_meta = metadata.get("expansion", {})
+        logger.info(
+            "Hybrid search for '%s' returned %d results (expansion_applied=%s)",
+            query,
+            len(results),
+            expansion_meta.get("expansion_applied"),
+        )
         return results
         
     except Exception as e:
