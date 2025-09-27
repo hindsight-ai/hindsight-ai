@@ -120,6 +120,8 @@ uv run python apps/hindsight-service/scripts/run_query_expansion_evaluation.py -
 
 Within tests, `core.search.evaluation.evaluate_cases` returns per-query precision/recall plus aggregate deltas so you can gate CI or surface regressions.
 
+See `docs/search-retrieval-overview.md` for a consolidated overview of embedding ingestion, hybrid ranking, and query expansion internals.
+
 ## 🔐 Permissions & Scopes
 
 - See `SECURITY.md` for the security model overview (roles, scopes, and helpers).
