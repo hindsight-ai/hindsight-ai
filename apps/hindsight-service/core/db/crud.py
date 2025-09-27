@@ -304,9 +304,18 @@ def retrieve_relevant_memories(
     keywords: List[str],
     agent_id: Optional[uuid.UUID] = None,
     conversation_id: Optional[uuid.UUID] = None,
-    limit: int = 100
+    limit: int = 100,
+    *,
+    current_user: Optional[dict] = None,
 ):
-    return repo_memories.retrieve_relevant_memories(db, keywords, agent_id, conversation_id, limit)
+    return repo_memories.retrieve_relevant_memories(
+        db,
+        keywords,
+        agent_id,
+        conversation_id,
+        limit,
+        current_user=current_user,
+    )
 
 def report_memory_feedback(db: Session, memory_id: uuid.UUID, feedback_type: str, feedback_details: Optional[str] = None):
     return repo_memories.report_memory_feedback(db, memory_id, feedback_type, feedback_details)
