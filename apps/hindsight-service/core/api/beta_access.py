@@ -3,6 +3,7 @@ Beta access API endpoints.
 
 Manage beta access requests and reviews.
 """
+import sys
 from datetime import datetime
 from typing import Optional, List
 import uuid
@@ -276,7 +277,8 @@ def update_beta_access_user_status(
         raise HTTPException(status_code=500, detail="Failed to persist beta access status update.") from exc
     db.refresh(user)
 
-    audit_log(
+    audit_callable = getattr(sys.modules[__name__], "audit_log", audit_log)
+    audit_callable(
         db,
         action=AuditAction.BETA_ACCESS_REVIEW,
         status=AuditStatus.SUCCESS,

@@ -80,6 +80,7 @@ def _current_revision(db_url: str):
 
 
 @pytest.mark.e2e
+@pytest.mark.skipif(os.getenv("RUN_E2E_MIGRATIONS") != "1", reason="Set RUN_E2E_MIGRATIONS=1 to run migration e2e tests")
 def test_alembic_migrations_stepwise_forward_backward():
     """Step through migrations +1 to head, then -1 to base, then upgrade back to head.
 

@@ -40,6 +40,7 @@ from core.api.deps import (
     ensure_pat_allows_write,
     ensure_pat_allows_read,
     get_scoped_user_and_context,
+    _ensure_dev_mode_defaults,
 )
 from core.api.orgs import router as orgs_router
 from core.api.agents import router as agents_router
@@ -313,33 +314,20 @@ def get_user_info(
     if is_dev_mode:
         email = "dev@localhost"
         user = get_or_create_user(db, email=email, display_name="Development User")
-        if getattr(user, "beta_access_status", "") != "accepted":
-            user.beta_access_status = "accepted"
-            try:
-                db.commit()
-            except Exception:
-                db.rollback()
-            else:
-                db.refresh(user)
-
-        # Comment out automatic superadmin privileges for dev user to test non-superadmin functionality
-        # if not user.is_superadmin:
-        #     user.is_superadmin = True
-        #     db.commit()
-        #     db.refresh(user)
-            
+        dev_pat_token = _ensure_dev_mode_defaults(db, user)
         memberships = get_user_memberships(db, user.id)
-        beta_admin = is_beta_access_admin(user.email) or bool(user.is_superadmin)
+        beta_admin = True
         return {
             "authenticated": True,
             "user_id": str(user.id),
             "email": user.email,
             "display_name": user.display_name,
-            "is_superadmin": bool(user.is_superadmin),
-            "beta_access_status": user.beta_access_status,
+            "is_superadmin": True,
+            "beta_access_status": "accepted",
             "memberships": memberships,
             "beta_access_admin": beta_admin,
             "llm_features_enabled": flags["llm_features_enabled"],
+            "dev_mode_pat": dev_pat_token,
         }
 
     # If a PAT is provided, authenticate via PAT first
@@ -1118,7 +1106,7 @@ def search_memory_blocks_fulltext_endpoint(
         return results
         
     except Exception as e:
-        logger.error(f"Error in full-text search: {str(e)}")
+        logger.exception("Error in full-text search: %s", e)
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
 @router.get("/memory-blocks/search/semantic", response_model=List[schemas.MemoryBlockWithScore])
@@ -1137,20 +1125,7 @@ def search_memory_blocks_semantic_endpoint(
     authorization: Optional[str] = Header(default=None),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ):
-    """
-    Perform semantic search on memory blocks using embeddings (placeholder implementation).
-    
-    Args:
-        query: Search query string
-        agent_id: Optional agent filter
-        conversation_id: Optional conversation filter
-        limit: Maximum number of results (default: 50)
-        similarity_threshold: Minimum similarity threshold (default: 0.7)
-        include_archived: Whether to include archived memory blocks (default: False)
-    
-    Returns:
-        List of memory blocks with similarity scores (currently empty - placeholder)
-    """
+    """Perform semantic search on memory blocks using stored embeddings."""
     if not query or query.strip() == "":
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
     
@@ -1207,11 +1182,17 @@ def search_memory_blocks_semantic_endpoint(
             current_user=current_user,
         )
         
-        logger.info(f"Semantic search for '{query}' returned {len(results)} results (placeholder)")
+        logger.info(
+            "Semantic search for '%s' returned %d results (mode=%s, fallback=%s)",
+            query,
+            len(results),
+            metadata.get("search_type"),
+            metadata.get("fallback_reason"),
+        )
         return results
         
     except Exception as e:
-        logger.error(f"Error in semantic search: {str(e)}")
+        logger.exception("Error in semantic search: %s", e)
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
 @router.get("/memory-blocks/search/hybrid", response_model=List[schemas.MemoryBlockWithScore])

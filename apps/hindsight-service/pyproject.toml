@@ -20,6 +20,7 @@ dependencies = [
     "sendgrid>=6.11.0",
     "argon2-cffi>=23.1.0",
     "aiosmtplib>=3.0.1",
+    "pgvector>=0.4.1",
 ]
 
 [tool.setuptools.packages.find]
@@ -33,6 +34,7 @@ test = [
     "pytest-asyncio>=1.1.0",
     "testcontainers[postgres]>=4.13.0",
     "alembic>=1.13.1",
+    "pgvector>=0.4.1",
 ]
 
 [tool.pytest.ini_options]
@@ -83,6 +85,7 @@ output = "coverage.xml"
 [dependency-groups]
 dev = []
 test = [
+    "pgvector>=0.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.3.0",
     "pytest>=8.4.2",

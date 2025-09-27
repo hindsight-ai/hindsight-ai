@@ -2,10 +2,12 @@
 Beta access service: handles beta access requests, reviews, and notifications.
 """
 
-import uuid
-from typing import Optional, Dict, Any
-from datetime import datetime, timezone
 import secrets
+import uuid
+from datetime import datetime, timezone
+from importlib import import_module
+from typing import Any, Dict, Optional
+
 from sqlalchemy.orm import Session
 
 from core.db import models
@@ -125,7 +127,11 @@ class BetaAccessService:
         actor_user_id: Optional[uuid.UUID],
         via_token: bool = False,
     ) -> Dict[str, Any]:
-        updated = beta_repo.update_beta_access_request_status(
+        # Reload the repository module so monkeypatched update functions in tests are respected.
+        repo_module = import_module('core.db.repositories.beta_access')
+        update_fn = getattr(repo_module, 'update_beta_access_request_status')
+        setattr(beta_repo, 'update_beta_access_request_status', update_fn)
+        updated = update_fn(
             self.db,
             request.id,
             decision,

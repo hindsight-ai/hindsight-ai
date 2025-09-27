@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, Text
 
 from core.db import models, schemas, scope_utils
+from core.services import get_embedding_service
 from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
+from core.search import get_search_service
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,14 @@ def create_memory_block(db: Session, memory_block: schemas.MemoryBlockCreate):
             organization_id=db_memory_block.organization_id,
         )
         db.add(models.MemoryBlockKeyword(memory_id=db_memory_block.id, keyword_id=keyword.keyword_id))
+
+    # Attach embeddings when provider is enabled
+    embedding_service = get_embedding_service()
+    if embedding_service.is_enabled:
+        try:
+            embedding_service.attach_embedding(db_memory_block, save_empty=True)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Failed to compute embedding for memory %s: %s", db_memory_block.id, exc)
 
     # Initial neutral feedback
     db.add(
@@ -207,8 +217,18 @@ def update_memory_block(db: Session, memory_id: uuid.UUID, memory_block: schemas
     db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
     if db_memory_block:
         update_data = memory_block.model_dump(exclude_unset=True)
+        should_refresh_embedding = any(
+            key in update_data for key in ("content", "lessons_learned", "errors", "metadata_col")
+        )
         for key, value in update_data.items():
             setattr(db_memory_block, key, value)
+        if should_refresh_embedding:
+            embedding_service = get_embedding_service()
+            if embedding_service.is_enabled:
+                try:
+                    embedding_service.attach_embedding(db_memory_block, save_empty=True)
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.error("Failed to refresh embedding for memory %s: %s", memory_id, exc)
         db.commit()
         db.refresh(db_memory_block)
     return db_memory_block
@@ -257,20 +277,59 @@ def retrieve_relevant_memories(
     agent_id: Optional[uuid.UUID] = None,
     conversation_id: Optional[uuid.UUID] = None,
     limit: int = 100,
+    *,
+    current_user: Optional[dict] = None,
 ):
+    normalized = [kw.strip() for kw in keywords if kw and kw.strip()]
+    if not normalized:
+        return []
+
+    search_service = get_search_service()
+    search_query = " ".join(normalized)
+    results, _metadata = search_service.enhanced_search_memory_blocks(
+        db=db,
+        search_query=search_query,
+        search_type="basic",
+        agent_id=agent_id,
+        conversation_id=conversation_id,
+        limit=limit,
+        include_archived=False,
+        current_user=current_user,
+        keyword_list=normalized,
+        match_any=True,
+    )
+
+    sanitized: List[schemas.MemoryBlock] = []
+    for result in results:
+        payload = result.model_dump()
+        payload.pop("search_score", None)
+        payload.pop("search_type", None)
+        payload.pop("rank_explanation", None)
+        sanitized.append(schemas.MemoryBlock.model_validate(payload))
+    if sanitized:
+        return sanitized
+
+    # Legacy fallback to maintain behavior when search service filters return nothing
     query = db.query(models.MemoryBlock)
     if agent_id:
         query = query.filter(models.MemoryBlock.agent_id == agent_id)
     if conversation_id:
         query = query.filter(models.MemoryBlock.conversation_id == conversation_id)
-    filters = []
-    for kw in keywords:
-        filters.append(models.MemoryBlock.content.ilike(f"%{kw}%"))
-        filters.append(models.MemoryBlock.errors.ilike(f"%{kw}%"))
-        filters.append(models.MemoryBlock.lessons_learned.ilike(f"%{kw}%"))
-    if filters:
-        query = query.filter(or_(*filters))
-    return query.limit(limit).all()
+
+    legacy_filters = []
+    for kw in normalized:
+        pattern = f"%{kw}%"
+        legacy_filters.append(models.MemoryBlock.content.ilike(pattern))
+        legacy_filters.append(models.MemoryBlock.errors.ilike(pattern))
+        legacy_filters.append(models.MemoryBlock.lessons_learned.ilike(pattern))
+    if legacy_filters:
+        query = query.filter(or_(*legacy_filters))
+
+    legacy_results = query.limit(limit).all()
+    return [
+        schemas.MemoryBlock.model_validate(result, from_attributes=True)
+        for result in legacy_results
+    ]
 
 
 def create_feedback_log(db: Session, feedback_log: schemas.FeedbackLogCreate):

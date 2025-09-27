@@ -109,8 +109,20 @@ def upgrade() -> None:
                existing_nullable=False)
     op.drop_constraint(op.f('organization_memberships_user_id_fkey'), 'organization_memberships', type_='foreignkey')
     op.drop_constraint(op.f('organization_memberships_organization_id_fkey'), 'organization_memberships', type_='foreignkey')
-    op.create_foreign_key(None, 'organization_memberships', 'organizations', ['organization_id'], ['id'])
-    op.create_foreign_key(None, 'organization_memberships', 'users', ['user_id'], ['id'])
+    op.create_foreign_key(
+        op.f('organization_memberships_organization_id_fkey'),
+        'organization_memberships',
+        'organizations',
+        ['organization_id'],
+        ['id'],
+    )
+    op.create_foreign_key(
+        op.f('organization_memberships_user_id_fkey'),
+        'organization_memberships',
+        'users',
+        ['user_id'],
+        ['id'],
+    )
     op.alter_column('organizations', 'name',
                existing_type=sa.TEXT(),
                type_=sa.String(),
@@ -171,8 +183,8 @@ def downgrade() -> None:
                existing_type=sa.String(),
                type_=sa.TEXT(),
                existing_nullable=False)
-    op.drop_constraint(None, 'organization_memberships', type_='foreignkey')
-    op.drop_constraint(None, 'organization_memberships', type_='foreignkey')
+    op.drop_constraint(op.f('organization_memberships_user_id_fkey'), 'organization_memberships', type_='foreignkey')
+    op.drop_constraint(op.f('organization_memberships_organization_id_fkey'), 'organization_memberships', type_='foreignkey')
     op.create_foreign_key(op.f('organization_memberships_organization_id_fkey'), 'organization_memberships', 'organizations', ['organization_id'], ['id'], ondelete='CASCADE')
     op.create_foreign_key(op.f('organization_memberships_user_id_fkey'), 'organization_memberships', 'users', ['user_id'], ['id'], ondelete='CASCADE')
     op.alter_column('organization_memberships', 'role',

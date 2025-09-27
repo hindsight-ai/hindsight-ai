@@ -5,8 +5,12 @@ CRUD, search, archive, feedback, and related utilities for memory blocks
 with comprehensive scope and permission checks.
 """
 from typing import List, Optional
-import uuid, os, math
-from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
+import uuid
+import os
+import math
+import json
+import logging
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -20,7 +24,6 @@ from core.utils.scopes import (
     SCOPE_ORGANIZATION,
     SCOPE_PERSONAL,
 )
-from core.services.search_service import SearchService
 from core.api.deps import (
     get_current_user_context,
     get_current_user_context_or_pat,
@@ -30,6 +33,7 @@ from core.api.deps import (
 )
 
 router = APIRouter(prefix="/memory-blocks", tags=["memory-blocks"])  # normalized prefix
+logger = logging.getLogger(__name__)
 
 def parse_optional_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
     """Convert empty strings to None, otherwise parse as UUID"""
@@ -39,6 +43,62 @@ def parse_optional_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
         return uuid.UUID(value)
     except ValueError:
         raise HTTPException(status_code=422, detail=f"Invalid UUID format: {value}")
+
+
+ALLOWED_SEARCH_STRATEGIES = {"basic", "fulltext", "semantic", "hybrid"}
+
+
+def _resolve_search_user_context(
+    db: Session,
+    *,
+    authorization: Optional[str],
+    x_api_key: Optional[str],
+    x_auth_request_user: Optional[str],
+    x_auth_request_email: Optional[str],
+    x_forwarded_user: Optional[str],
+    x_forwarded_email: Optional[str],
+):
+    """Resolve user context for search endpoints (PAT first, headers fallback)."""
+    if authorization or x_api_key:
+        _, current_user = get_current_user_context_or_pat(
+            db=db,
+            authorization=authorization,
+            x_api_key=x_api_key,
+            x_auth_request_user=x_auth_request_user,
+            x_auth_request_email=x_auth_request_email,
+            x_forwarded_user=x_forwarded_user,
+            x_forwarded_email=x_forwarded_email,
+        )
+        return current_user
+
+    name, email = resolve_identity_from_headers(
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
+    )
+    if not email:
+        return None
+
+    user = get_or_create_user(db, email=email, display_name=name)
+    memberships = get_user_memberships(db, user.id)
+    memberships_by_org = {str(m["organization_id"]): m for m in memberships}
+    return {
+        "id": user.id,
+        "email": user.email,
+        "display_name": user.display_name,
+        "is_superadmin": bool(getattr(user, "is_superadmin", False)),
+        "memberships": memberships,
+        "memberships_by_org": memberships_by_org,
+    }
+
+
+def _strip_search_fields(memory: schemas.MemoryBlockWithScore) -> schemas.MemoryBlock:
+    data = memory.model_dump()
+    data.pop("search_score", None)
+    data.pop("search_type", None)
+    data.pop("rank_explanation", None)
+    return schemas.MemoryBlock.model_validate(data)
 
 
 @router.post("/", response_model=schemas.MemoryBlock, status_code=status.HTTP_201_CREATED)
@@ -462,26 +522,93 @@ def report_memory_feedback_endpoint(
 
 @router.get("/search/", response_model=List[schemas.MemoryBlock])
 def search_memory_blocks_endpoint(
-    keywords: str,
-    agent_id: Optional[uuid.UUID] = None,
-    conversation_id: Optional[uuid.UUID] = None,
-    limit: int = 10,
-    db: Session = Depends(get_db)
+    response: Response,
+    keywords: Optional[str] = Query(default=None, description="Comma-separated keywords"),
+    query: Optional[str] = Query(default=None, description="Free-form search query"),
+    strategy: Optional[str] = Query(default=None, alias="search_type", description="Search strategy: basic|fulltext|semantic|hybrid"),
+    agent_id: Optional[str] = Query(default=None),
+    conversation_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=200),
+    include_archived: bool = False,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    x_auth_request_user: Optional[str] = Header(default=None),
+    x_auth_request_email: Optional[str] = Header(default=None),
+    x_forwarded_user: Optional[str] = Header(default=None),
+    x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    # This endpoint is for agent-facing semantic search, not for the dashboard's simple search.
-    # It will remain as a keyword-based search for now as per the plan,
-    # with a note that complex logic will be implemented later.
-    keyword_list = [kw.strip() for kw in keywords.split(',') if kw.strip()]
-    if not keyword_list:
-        raise HTTPException(status_code=400, detail="At least one keyword is required for search.")
-    
-    memories = crud.retrieve_relevant_memories(
-        db=db,
-        keywords=keyword_list,
-        agent_id=agent_id,
-        conversation_id=conversation_id,
-        limit=limit
+    """Run keyword/basic queries through the unified SearchService."""
+
+    agent_uuid = parse_optional_uuid(agent_id)
+    conversation_uuid = parse_optional_uuid(conversation_id)
+
+    raw_keywords = [kw.strip() for kw in (keywords.split(',') if keywords else []) if kw.strip()]
+    search_query = (query or "").strip()
+    if not search_query and raw_keywords:
+        search_query = " ".join(raw_keywords)
+
+    if not search_query:
+        raise HTTPException(status_code=400, detail="At least one keyword or query string is required for search.")
+
+    selected_strategy = (strategy or "basic").strip().lower()
+    if selected_strategy not in ALLOWED_SEARCH_STRATEGIES:
+        allowed = ", ".join(sorted(ALLOWED_SEARCH_STRATEGIES))
+        raise HTTPException(status_code=422, detail=f"Invalid strategy '{selected_strategy}'. Allowed values: [{allowed}]")
+
+    current_user = _resolve_search_user_context(
+        db,
+        authorization=authorization,
+        x_api_key=x_api_key,
+        x_auth_request_user=x_auth_request_user,
+        x_auth_request_email=x_auth_request_email,
+        x_forwarded_user=x_forwarded_user,
+        x_forwarded_email=x_forwarded_email,
     )
-    return memories
+
+    search_params = {"current_user": current_user}
+    if raw_keywords:
+        search_params["keyword_list"] = raw_keywords
+        if selected_strategy == "basic":
+            search_params["match_any"] = True
+
+    results, metadata = crud.search_memory_blocks_enhanced(
+        db=db,
+        search_type=selected_strategy,
+        search_query=search_query,
+        agent_id=agent_uuid,
+        conversation_id=conversation_uuid,
+        limit=limit,
+        include_archived=include_archived,
+        **search_params,
+    )
+
+    sanitized_results = [_strip_search_fields(result) for result in results]
+
+    if metadata:
+        header_payload = {
+            "search_type": metadata.get("search_type", selected_strategy),
+            "result_count": len(results),
+            "total_search_time_ms": metadata.get("total_search_time_ms"),
+        }
+        try:
+            response.headers["X-Search-Metadata"] = json.dumps(header_payload)
+        except Exception:
+            logger.debug("Failed to serialize search metadata header", exc_info=True)
+
+    logger.info(
+        "memory_search_completed",
+        extra={
+            "strategy": selected_strategy,
+            "keywords": raw_keywords,
+            "query": search_query,
+            "agent_id": str(agent_uuid) if agent_uuid else None,
+            "conversation_id": str(conversation_uuid) if conversation_uuid else None,
+            "result_count": len(results),
+            "metadata": metadata,
+        },
+    )
+
+    return sanitized_results
 
 # Slimmed scope change endpoint omitted for now (kept in main for backwards compat)

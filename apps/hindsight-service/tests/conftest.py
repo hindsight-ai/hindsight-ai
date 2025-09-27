@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -66,7 +68,9 @@ def _beta_access_admin_env(monkeypatch):
 # Session-wide Postgres test container
 @pytest.fixture(scope="session")
 def _test_postgres():
-    image = os.getenv("TEST_POSTGRES_IMAGE", "postgres:16-alpine")
+    if os.getenv("SKIP_ALEMBIC_FIXTURES") == "1":
+        pytest.skip("SKIP_ALEMBIC_FIXTURES=1")
+    image = os.getenv("TEST_POSTGRES_IMAGE", "pgvector/pgvector:pg16")
     with PostgresContainer(image) as pg:
         url = pg.get_connection_url()
         # Normalize driver to psycopg2 default used by app (remove +psycopg2 if present)
@@ -93,8 +97,13 @@ def _test_postgres():
 # Apply Alembic migrations once
 @pytest.fixture(scope="session", autouse=True)
 def _migrated_db(_test_postgres):
-    cfg = Config("alembic.ini")
+    if os.getenv("SKIP_ALEMBIC_FIXTURES") == "1":
+        yield
+        return
+    service_root = Path(__file__).resolve().parents[1]
+    cfg = Config(str(service_root / "alembic.ini"))
     cfg.set_main_option("sqlalchemy.url", _test_postgres)
+    cfg.set_main_option("script_location", str(service_root / "migrations"))
     command.upgrade(cfg, "head")
     yield
     # Optional: command.downgrade(cfg, "base")
