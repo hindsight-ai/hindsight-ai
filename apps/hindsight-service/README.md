@@ -67,6 +67,27 @@ Important env vars (see `.env.example`):
 - `DEV_MODE`: **Local development only.** When `true` the API impersonates `dev@localhost` as a superadmin. The backend will refuse to start with `DEV_MODE=true` unless it is running on `localhost`. Always set `DEV_MODE=false` (or unset) in staging and production.
 - `ALLOW_DEV_MODE`: Optional safety valve for automated tests. Leave set to `false` outside controlled test environments.
 
+### Embedding Configuration
+
+Semantic retrieval relies on dense vector embeddings. The service can run with embeddings disabled (default), a mock provider for deterministic testing, or real providers:
+
+- `EMBEDDING_PROVIDER`: `disabled` (default), `mock`, `ollama`, or `huggingface`.
+- `EMBEDDING_DIMENSION`: Optional integer dimension override. Mock provider falls back to 32 when unset.
+- `OLLAMA_BASE_URL` / `OLLAMA_EMBEDDING_MODEL`: Ollama settings (defaults: `http://localhost:11434`, `dengcao/Qwen3-Embedding-0.6B:Q8_0`).
+- `HUGGINGFACE_API_KEY`, `HUGGINGFACE_EMBEDDING_MODEL`, `HUGGINGFACE_API_BASE`: Hugging Face Inference API settings. Provider is disabled automatically when the key is missing.
+
+When a provider is enabled, embeddings are generated synchronously on memory create/update. The mock provider is used in CI so tests do not require network access. Use `EmbeddingService.backfill_missing_embeddings` for batched backfills once a provider is configured.
+
+#### Embedding Backfill Script
+
+Run the utility script once a provider is configured:
+
+```bash
+uv run python scripts/backfill_embeddings.py --batch-size 200
+```
+
+Add `--dry-run` to inspect how many rows still need embeddings before running the job.
+
 ## 🔐 Permissions & Scopes
 
 - See `SECURITY.md` for the security model overview (roles, scopes, and helpers).

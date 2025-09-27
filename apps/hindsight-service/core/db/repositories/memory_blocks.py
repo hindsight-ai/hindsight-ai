@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, Text
 
 from core.db import models, schemas, scope_utils
+from core.services import get_embedding_service
 from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
 from core.search import get_search_service
 
@@ -83,6 +84,14 @@ def create_memory_block(db: Session, memory_block: schemas.MemoryBlockCreate):
             organization_id=db_memory_block.organization_id,
         )
         db.add(models.MemoryBlockKeyword(memory_id=db_memory_block.id, keyword_id=keyword.keyword_id))
+
+    # Attach embeddings when provider is enabled
+    embedding_service = get_embedding_service()
+    if embedding_service.is_enabled:
+        try:
+            embedding_service.attach_embedding(db_memory_block, save_empty=True)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Failed to compute embedding for memory %s: %s", db_memory_block.id, exc)
 
     # Initial neutral feedback
     db.add(
@@ -208,8 +217,18 @@ def update_memory_block(db: Session, memory_id: uuid.UUID, memory_block: schemas
     db_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == memory_id).first()
     if db_memory_block:
         update_data = memory_block.model_dump(exclude_unset=True)
+        should_refresh_embedding = any(
+            key in update_data for key in ("content", "lessons_learned", "errors", "metadata_col")
+        )
         for key, value in update_data.items():
             setattr(db_memory_block, key, value)
+        if should_refresh_embedding:
+            embedding_service = get_embedding_service()
+            if embedding_service.is_enabled:
+                try:
+                    embedding_service.attach_embedding(db_memory_block, save_empty=True)
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.error("Failed to refresh embedding for memory %s: %s", memory_id, exc)
         db.commit()
         db.refresh(db_memory_block)
     return db_memory_block

@@ -3,6 +3,7 @@ from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, Inde
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
+from core.db.types import EmbeddingVector
 
 
 class MemoryBlock(Base):
@@ -28,7 +29,7 @@ class MemoryBlock(Base):
 
     # Search-related fields
     search_vector = Column(TSVECTOR, nullable=True)  # For full-text search
-    content_embedding = Column(Text, nullable=True)  # For future semantic search
+    content_embedding = Column(EmbeddingVector(), nullable=True)  # For semantic search embeddings
 
     agent = relationship("Agent", back_populates="memory_blocks")
     feedback_logs = relationship("FeedbackLog", back_populates="memory_block", cascade="all, delete-orphan")
@@ -86,4 +87,3 @@ class ConsolidationSuggestion(Base):
         Index('idx_consolidation_suggestions_status', 'status'),
         Index('idx_consolidation_suggestions_group_id', 'group_id'),
     )
-
