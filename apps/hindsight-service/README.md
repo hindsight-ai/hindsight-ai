@@ -113,12 +113,20 @@ The query expansion pipeline applies stemming, synonym substitution, and optiona
 - `QUERY_EXPANSION_STEMMING_ENABLED`, `QUERY_EXPANSION_SYNONYMS_ENABLED`.
 - `QUERY_EXPANSION_MAX_VARIANTS` (default `5`) and `QUERY_EXPANSION_SYNONYMS_PATH` (JSON dictionary of token → synonyms).
 - `QUERY_EXPANSION_LLM_PROVIDER` (`mock` yields deterministic rewrites for tests) and `QUERY_EXPANSION_LLM_MAX_VARIANTS`.
+- When `QUERY_EXPANSION_LLM_PROVIDER=ollama`, configure:
+  - `QUERY_EXPANSION_LLM_MODEL` (e.g. `llama3.2:1b` for a lightweight rewrite model)
+  - `QUERY_EXPANSION_OLLAMA_BASE_URL` (defaults to `http://ollama:11434`)
+  - `QUERY_EXPANSION_LLM_TEMPERATURE` (default `0.0`) and `QUERY_EXPANSION_LLM_MAX_TOKENS` (default `64`)
+  - `QUERY_EXPANSION_LLM_TIMEOUT_SECONDS` (default `5`)
+    - Reuses the same Ollama deployment configured for embeddings; no extra container is required.
 
 An evaluation harness compares baseline vs. expanded retrieval quality. Create a JSON dataset of cases (each entry: `query`, optional `search_type`, and `relevant_ids`) and run:
 
 ```bash
 uv run python apps/hindsight-service/scripts/run_query_expansion_evaluation.py --dataset path/to/dataset.json --output summary.json
 ```
+
+Add `--seed-sample-data` to populate a lightweight dataset automatically (handy for local smoke checks or CI runs pointing at SQLite).
 
 Within tests, `core.search.evaluation.evaluate_cases` returns per-query precision/recall plus aggregate deltas so you can gate CI or surface regressions.
 

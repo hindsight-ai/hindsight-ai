@@ -37,6 +37,7 @@ Telemetry highlights:
 Query expansion broadens the user query before handing it to downstream search flows.
 
 - `QueryExpansionEngine` applies stemming, synonym swaps (default or JSON-supplied dictionaries), and optional LLM rewrites (`QUERY_EXPANSION_LLM_PROVIDER`, with `mock` providing deterministic variants for tests).
+- When `QUERY_EXPANSION_LLM_PROVIDER=ollama`, the engine calls the same Ollama instance that powers embeddings (defaults to `http://ollama:11434`) using the model named in `QUERY_EXPANSION_LLM_MODEL` (recommended: lightweight models such as `llama3.2:1b`). Guardrails—temperature defaults to `0.0`, max tokens to `64`, and results are sanitized/deduplicated—ensure rewrites fall back to rule-based variants when the LLM misbehaves.
 - Guardrails: `QUERY_EXPANSION_MAX_VARIANTS` and `QUERY_EXPANSION_LLM_MAX_VARIANTS` cap fan-out.
 - CRUD helpers invoke `_execute_with_query_expansion`, which runs the base/expanded queries, deduplicates results, aggregates metadata, and keeps variant telemetry.
 - Expansion metadata records the original query, applied steps, variant runs, and aggregate timing.

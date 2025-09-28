@@ -615,7 +615,47 @@ def search_memory_blocks_enhanced(
     from core.search import get_search_service
     
     search_service = get_search_service()
-    
+
+    current_user = search_params.get("current_user")
+
+    if search_type == "fulltext":
+        return search_memory_blocks_fulltext(
+            db=db,
+            query=search_query or "",
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            min_score=search_params.get("min_score", 0.1),
+            include_archived=include_archived,
+            current_user=current_user,
+        )
+
+    if search_type == "semantic":
+        return search_memory_blocks_semantic(
+            db=db,
+            query=search_query or "",
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            similarity_threshold=search_params.get("similarity_threshold", 0.7),
+            include_archived=include_archived,
+            current_user=current_user,
+        )
+
+    if search_type == "hybrid":
+        return search_memory_blocks_hybrid(
+            db=db,
+            query=search_query or "",
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            fulltext_weight=search_params.get("fulltext_weight", 0.7),
+            semantic_weight=search_params.get("semantic_weight", 0.3),
+            min_combined_score=search_params.get("min_combined_score", 0.1),
+            include_archived=include_archived,
+            current_user=current_user,
+        )
+
     results, metadata = search_service.enhanced_search_memory_blocks(
         db=db,
         search_type=search_type,
@@ -626,7 +666,7 @@ def search_memory_blocks_enhanced(
         include_archived=include_archived,
         **search_params
     )
-    
+
     return results, metadata
 
 
