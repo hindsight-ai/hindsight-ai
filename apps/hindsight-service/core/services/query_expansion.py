@@ -7,8 +7,9 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Any, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
+import requests
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +35,14 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
 _DEFAULT_SYNONYMS: Dict[str, List[str]] = {
     "bug": ["defect", "issue", "problem"],
     "bugs": ["defects", "issues", "problems"],
@@ -66,6 +75,11 @@ class QueryExpansionConfig:
     max_expansions: int = 5
     llm_max_expansions: int = 2
     synonyms_path: Optional[str] = None
+    llm_model: Optional[str] = None
+    llm_base_url: str = "http://ollama:11434"
+    llm_temperature: float = 0.0
+    llm_max_tokens: int = 64
+    llm_timeout_seconds: float = 5.0
 
     @classmethod
     def from_environment(cls) -> "QueryExpansionConfig":
@@ -77,6 +91,11 @@ class QueryExpansionConfig:
             max_expansions=_env_int("QUERY_EXPANSION_MAX_VARIANTS", 5),
             llm_max_expansions=_env_int("QUERY_EXPANSION_LLM_MAX_VARIANTS", 2),
             synonyms_path=os.getenv("QUERY_EXPANSION_SYNONYMS_PATH"),
+            llm_model=os.getenv("QUERY_EXPANSION_LLM_MODEL"),
+            llm_base_url=os.getenv("QUERY_EXPANSION_OLLAMA_BASE_URL", "http://ollama:11434"),
+            llm_temperature=_env_float("QUERY_EXPANSION_LLM_TEMPERATURE", 0.0),
+            llm_max_tokens=_env_int("QUERY_EXPANSION_LLM_MAX_TOKENS", 64),
+            llm_timeout_seconds=_env_float("QUERY_EXPANSION_LLM_TIMEOUT_SECONDS", 5.0),
         )
 
 
@@ -180,8 +199,10 @@ class QueryExpansionEngine:
         provider = self.config.llm_provider
         if provider is None:
             return []
+
+        provider_key = provider.lower()
         max_variants = max(self.config.llm_max_expansions, 0)
-        if provider.lower() == "mock":
+        if provider_key == "mock":
             # Lightweight deterministic rewrite for tests/local usage
             variant = f"{query} explained"
             yield variant, {"provider": "mock", "reason": "deterministic mock rewrite"}
@@ -190,9 +211,101 @@ class QueryExpansionEngine:
                 yield variant2, {"provider": "mock", "reason": "mock heuristic"}
             return
 
-        # Other providers not implemented yet.
+        if provider_key == "ollama":
+            yield from self._ollama_variants(query, context)
+            return
+
         logger.warning("Query expansion LLM provider '%s' not implemented; skipping", provider)
         return []
+
+    # ------------------------------------------------------------------
+    def _ollama_variants(
+        self,
+        query: str,
+        context: Optional[Dict[str, Any]],
+    ) -> Iterable[tuple[str, Dict[str, Any]]]:
+        model = self.config.llm_model
+        if not model:
+            logger.warning("Ollama query expansion selected but QUERY_EXPANSION_LLM_MODEL is unset; skipping")
+            return []
+
+        base_url = (self.config.llm_base_url or "http://ollama:11434").rstrip("/")
+        prompt = self._build_ollama_prompt(query, context)
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": max(self.config.llm_temperature, 0.0),
+                "top_p": 0.9,
+                "num_predict": max(self.config.llm_max_tokens, 1),
+                "repeat_penalty": 1.1,
+            },
+        }
+
+        try:
+            response = requests.post(
+                f"{base_url}/api/generate",
+                json=payload,
+                timeout=max(self.config.llm_timeout_seconds, 1.0),
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            logger.warning("Query expansion Ollama call failed: %s", exc)
+            return []
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            logger.warning("Query expansion Ollama response was not JSON: %s", exc)
+            return []
+
+        text = (data.get("response") or "").strip()
+        if not text:
+            return []
+
+        emitted = 0
+        max_variants = max(self.config.llm_max_expansions, 0)
+        for line in text.splitlines():
+            candidate = line.strip()
+            if not candidate:
+                continue
+            candidate = re.sub(r"^[\s\-\d\.#:]+", "", candidate).strip()
+            if not candidate or candidate.lower() == query.lower():
+                continue
+            if len(candidate) > 200:
+                candidate = candidate[:200].rstrip()
+            emitted += 1
+            yield candidate, {
+                "provider": "ollama",
+                "model": model,
+            }
+            if max_variants and emitted >= max_variants:
+                break
+
+    def _build_ollama_prompt(self, query: str, context: Optional[Dict[str, Any]]) -> str:
+        contextual_hint = ""
+        if context:
+            try:
+                context_json = json.dumps(context, default=str)
+            except Exception:
+                context_json = str(context)
+            contextual_hint = (
+                "\n\nContext (JSON metadata about the current search request):\n"
+                f"{context_json}"
+            )
+
+        max_variants = max(self.config.llm_max_expansions, 1)
+        return (
+            "You expand search queries for a retrieval system."
+            " Given the original query, produce up to"
+            f" {max_variants} alternative phrasings that stay on topic,"
+            " each on its own line without numbering or commentary."
+            " Focus on synonyms, concise rewordings, and related terminology."
+            " Avoid conversational fillers."
+            f"\n\nOriginal query: {query.strip()}"
+            f"{contextual_hint}\n\nExpanded queries:"
+        )
 
     # ------------------------------------------------------------------
 
