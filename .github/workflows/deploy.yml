@@ -213,6 +213,17 @@ jobs:
             EMBEDDING_PROVIDER=${{ secrets.EMBEDDING_PROVIDER || 'ollama' }}
             OLLAMA_BASE_URL=${{ secrets.OLLAMA_BASE_URL || 'http://ollama:11434' }}
             OLLAMA_EMBEDDING_MODEL=${{ secrets.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text:v1.5' }}
+            QUERY_EXPANSION_ENABLED=${{ secrets.QUERY_EXPANSION_ENABLED || 'true' }}
+            QUERY_EXPANSION_STEMMING_ENABLED=${{ secrets.QUERY_EXPANSION_STEMMING_ENABLED || 'true' }}
+            QUERY_EXPANSION_SYNONYMS_ENABLED=${{ secrets.QUERY_EXPANSION_SYNONYMS_ENABLED || 'true' }}
+            QUERY_EXPANSION_MAX_VARIANTS=${{ secrets.QUERY_EXPANSION_MAX_VARIANTS || '5' }}
+            QUERY_EXPANSION_LLM_PROVIDER=${{ secrets.QUERY_EXPANSION_LLM_PROVIDER || 'ollama' }}
+            QUERY_EXPANSION_LLM_MODEL=${{ secrets.QUERY_EXPANSION_LLM_MODEL || 'llama3.2:1b' }}
+            QUERY_EXPANSION_LLM_MAX_VARIANTS=${{ secrets.QUERY_EXPANSION_LLM_MAX_VARIANTS || '2' }}
+            QUERY_EXPANSION_OLLAMA_BASE_URL=${{ secrets.QUERY_EXPANSION_OLLAMA_BASE_URL || secrets.OLLAMA_BASE_URL || 'http://ollama:11434' }}
+            QUERY_EXPANSION_LLM_TEMPERATURE=${{ secrets.QUERY_EXPANSION_LLM_TEMPERATURE || '0.0' }}
+            QUERY_EXPANSION_LLM_MAX_TOKENS=${{ secrets.QUERY_EXPANSION_LLM_MAX_TOKENS || '64' }}
+            QUERY_EXPANSION_LLM_TIMEOUT_SECONDS=${{ secrets.QUERY_EXPANSION_LLM_TIMEOUT_SECONDS || '5' }}
             KNOWLEDGE_BASES_ROOT_DIR=${{ secrets.KNOWLEDGE_BASES_ROOT_DIR || './knowledge_bases' }}
             CONSOLIDATION_BATCH_SIZE=${{ secrets.CONSOLIDATION_BATCH_SIZE }}
             FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}
@@ -294,6 +305,117 @@ jobs:
             echo "Pulling new images and deploying to ${{ env.ENV_NAME }}..."
             docker compose -f ${{ env.COMPOSE_FILE }} pull || true
             docker compose -f ${{ env.COMPOSE_FILE }} ${PROFILE_FLAG} up -d --force-recreate
+
+            ensure_curl_command() {
+              if command -v curl >/dev/null 2>&1; then
+                CURL_CMD="host"
+                return
+              fi
+
+              local curl_image="curlimages/curl:8.10.1"
+              if ! docker image inspect "$curl_image" >/dev/null 2>&1; then
+                echo "Host curl not found; pulling $curl_image as fallback..."
+                docker pull "$curl_image"
+              fi
+              CURL_CMD="$curl_image"
+            }
+
+            ensure_curl_command
+
+            assert_json_field() {
+              local file="$1"
+              local key="$2"
+              local description="$3"
+              if command -v python3 >/dev/null 2>&1; then
+                if ! FILE="$file" KEY="$key" python3 -c 'import json, os, sys; path=os.environ["FILE"]; key=os.environ["KEY"]; data=json.load(open(path, "r", encoding="utf-8")); value=data.get(key); value=value.strip() if isinstance(value, str) else value; sys.exit(0 if value else 1)'; then
+                  echo "$description"
+                  rm -f "$file"
+                  exit 1
+                fi
+              else
+                if ! grep -q "\"$key\"" "$file"; then
+                  echo "$description"
+                  rm -f "$file"
+                  exit 1
+                fi
+              fi
+            }
+
+            # Ensure Ollama models used for embeddings/query expansion are present
+            set -a
+            source .env
+            set +a
+            OLLAMA_MODELS=""
+            if [ "${EMBEDDING_PROVIDER:-}" = "ollama" ] && [ -n "${OLLAMA_EMBEDDING_MODEL:-}" ]; then
+              OLLAMA_MODELS="$OLLAMA_MODELS ${OLLAMA_EMBEDDING_MODEL}"
+            fi
+            if [ "${QUERY_EXPANSION_LLM_PROVIDER:-}" = "ollama" ] && [ -n "${QUERY_EXPANSION_LLM_MODEL:-}" ]; then
+              OLLAMA_MODELS="$OLLAMA_MODELS ${QUERY_EXPANSION_LLM_MODEL}"
+            fi
+            OLLAMA_MODELS=$(echo "$OLLAMA_MODELS" | tr ' ' '\n' | sed '/^$/d' | awk '!seen[$0]++')
+            if [ -n "$OLLAMA_MODELS" ]; then
+              echo "Ensuring Ollama models are available..."
+              attempts=0
+              until docker compose -f ${{ env.COMPOSE_FILE }} exec -T ollama ollama --version >/dev/null 2>&1; do
+                attempts=$((attempts + 1))
+                if [ $attempts -ge 20 ]; then
+                  echo "Ollama service did not become ready in time; aborting."
+                  exit 1
+                fi
+                sleep 2
+              done
+              for model in $OLLAMA_MODELS; do
+                echo "Ensuring Ollama model '$model' is available..."
+                if ! docker compose -f ${{ env.COMPOSE_FILE }} exec -T ollama ollama pull "$model"; then
+                  echo "Ollama pull failed for '$model'. Aborting deployment."
+                  exit 1
+                fi
+              done
+            fi
+
+            # Smoke-test embedding model availability
+            if [ "${EMBEDDING_PROVIDER:-}" = "ollama" ] && [ -n "${OLLAMA_EMBEDDING_MODEL:-}" ]; then
+              echo "Validating Ollama embedding model '${OLLAMA_EMBEDDING_MODEL}'..."
+              EMBED_PAYLOAD=$(printf '{"model":"%s","input":"deployment smoke test"}' "${OLLAMA_EMBEDDING_MODEL}")
+              EMBED_TMP=$(mktemp)
+              if [ "$CURL_CMD" = "host" ]; then
+                if ! printf "%s" "$EMBED_PAYLOAD" | curl -sfS -H 'Content-Type: application/json' -X POST http://127.0.0.1:11434/api/embed -d @- >"$EMBED_TMP"; then
+                  echo "Embedding model validation request failed. Aborting deployment."
+                  rm -f "$EMBED_TMP"
+                  exit 1
+                fi
+              else
+                if ! printf "%s" "$EMBED_PAYLOAD" | docker run --rm -i --network host "$CURL_CMD" -sfS -H 'Content-Type: application/json' -X POST http://127.0.0.1:11434/api/embed -d @- >"$EMBED_TMP"; then
+                  echo "Embedding model validation request failed. Aborting deployment."
+                  rm -f "$EMBED_TMP"
+                  exit 1
+                fi
+              fi
+              assert_json_field "$EMBED_TMP" "embeddings" "Embedding model validation response missing embeddings payload. Aborting deployment."
+              rm -f "$EMBED_TMP"
+            fi
+
+            # Smoke-test query expansion LLM availability
+            if [ "${QUERY_EXPANSION_LLM_PROVIDER:-}" = "ollama" ] && [ -n "${QUERY_EXPANSION_LLM_MODEL:-}" ]; then
+              echo "Validating Ollama query-expansion model '${QUERY_EXPANSION_LLM_MODEL}'..."
+              QE_PAYLOAD=$(printf '{"model":"%s","prompt":"Return the word READY once.","stream":false}' "${QUERY_EXPANSION_LLM_MODEL}")
+              QE_TMP=$(mktemp)
+              if [ "$CURL_CMD" = "host" ]; then
+                if ! printf "%s" "$QE_PAYLOAD" | curl -sfS -H 'Content-Type: application/json' -X POST http://127.0.0.1:11434/api/generate -d @- >"$QE_TMP"; then
+                  echo "Query expansion LLM validation request failed. Aborting deployment."
+                  rm -f "$QE_TMP"
+                  exit 1
+                fi
+              else
+                if ! printf "%s" "$QE_PAYLOAD" | docker run --rm -i --network host "$CURL_CMD" -sfS -H 'Content-Type: application/json' -X POST http://127.0.0.1:11434/api/generate -d @- >"$QE_TMP"; then
+                  echo "Query expansion LLM validation request failed. Aborting deployment."
+                  rm -f "$QE_TMP"
+                  exit 1
+                fi
+              fi
+              assert_json_field "$QE_TMP" "response" "Query expansion LLM validation response missing body. Aborting deployment."
+              rm -f "$QE_TMP"
+            fi
 
             # Simple health check: wait 10 seconds and verify containers are still running
             echo "Performing simple health check - waiting 10 seconds..."

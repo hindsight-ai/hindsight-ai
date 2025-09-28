@@ -1,33 +1,40 @@
-# Search Search-Service Convergence Plan (Updated)
+# Search Query Expansion Plan
 
 ## Goals
-- Consolidate keyword, fulltext, semantic, and hybrid searches on the shared `SearchService` pipeline so all strategies share validation, scoping, and telemetry.
-- Preserve historical defaults for keyword/basic searches while allowing explicit strategy overrides (`basic`, `fulltext`, `semantic`, `hybrid`).
-- Provide semantic retrieval via pgvector with consistent scoring metadata and graceful fallbacks when embeddings or vector support are unavailable.
-- Emit structured metadata (strategy, weights, filters, expansion status) for observability and propagate it to API clients.
-- Keep MCP and dashboard consumers working without interface breaking changes.
-- Maintain ≥80% overall coverage (≥90% on newly refactored paths).
+- Introduce a query-understanding layer that expands user queries with synonyms, stems, and optional LLM rewrites to improve recall without harming precision.
+- Provide an evaluation harness measuring retrieval quality (precision@k, recall@k) against curated fixtures and run within CI.
+- Document configuration, operational toggles, and observability expectations for the expansion pipeline.
+- Keep overall coverage ≥80%; new modules ≥90%.
 
 ## Implementation Tasks
-1. ✅ Ship shared search helpers (`SearchService`, CRUD facade, repository wiring) from the embeddings ingest work.
-2. ✅ Refactor `/memory-blocks/search/` to delegate to `SearchService.enhanced_search_memory_blocks`, validate inputs, and surface metadata headers.
-3. ✅ Replace repository-level keyword search with the unified service while keeping a legacy fallback for edge cases.
-4. ✅ Harden semantic search (pgvector cosine similarity, thresholds, fallbacks) and expose rank explanations/score components.
-5. ✅ Update integration/unit coverage for strategy selection, scope enforcement, fallback behaviour, and metadata emission.
-6. 🔄 Refresh docs + MCP tooling notes to describe strategy defaults, overrides, and metadata headers.
-7. 🔄 Monitor staging metrics for latency/hit ratio regressions as hybrid weighting evolves.
+1. Expansion engine
+   - ✅ Build a modular pipeline supporting:
+     * rule-based stemming/lemmatization,
+     * synonym lookup (WordNet/custom dictionaries),
+     * optional LLM-based reformulation hook.
+   - ✅ Allow per-tenant/agent configuration with sensible defaults and guardrails on expansion fan-out.
+2. Search integration
+   - ✅ Update query entrypoints so expanded queries feed into existing fulltext/semantic/hybrid flows without infinite loops.
+   - ✅ Record expansion metadata on responses (original query, applied transforms, expansion cost).
+3. Evaluation harness
+   - ✅ Create a fixture dataset mapping queries to relevant memory IDs.
+   - ✅ Add CLI/pytest command to compare baseline vs. expanded retrieval (precision@k / recall@k, aggregated deltas).
+   - 🔄 Monitor results in CI and adjust thresholds once real datasets are curated.
+4. Observability
+   - ✅ Emit structured logs and optional metrics capturing expansion steps, synonym sources, and LLM latency/failures.
+   - ✅ Provide toggles to disable expansion when providers unavailable.
+5. Documentation
+   - ✅ Update README/runbooks with configuration instructions, evaluation workflow, and troubleshooting tips.
 
 ## Testing Strategy
-- Unit tests for validation utilities, semantic/pgvector fallbacks, hybrid weighting heuristics, and CRUD delegation.
-- Integration tests for `/memory-blocks/search/` plus dedicated endpoints (`fulltext`, `semantic`, `hybrid`) covering defaults, overrides, and errors.
-- MCP regression check ensuring default parameters continue to function.
-- Full pytest runs with coverage ≥80%.
-
-## Observability & Tooling
-- Include strategy, filters, expansion, and scope context in logs; expose headers (`X-Search-Metadata`) to API consumers.
-- Document focused commands for running search-centric test suites.
+- ✅ Unit tests for expansion rules, ensuring deterministic output and bounded expansions.
+- ✅ Integration tests demonstrating improved recall on the fixture dataset while maintaining precision.
+- ✅ Tests covering failure paths (LLM provider disabled, synonym source missing) and verifying graceful fallback.
+- ✅ Evaluation harness tests verifying metric calculations and CLI output.
+- 🔄 Full pytest run with coverage enforcement (monitor for new datasets as they grow).
 
 ## Dependencies & Risks
-- Relies on embeddings ingestion landing ahead of semantic/pgvector usage.
-- Requires Postgres + pgvector in production; non-Postgres environments automatically fall back to substring search.
-- Regression risk for legacy clients; thorough integration/regression testing mitigates.
+- Builds on hybrid ranking improvements for final ordering.
+- LLM-based expansion introduces latency and potential cost; add caching and rate limiting.
+- Expansion must respect scope/visibility constraints; ensure filters applied post-expansion.
+- Synonym dictionaries require maintenance; document contribution workflow.
