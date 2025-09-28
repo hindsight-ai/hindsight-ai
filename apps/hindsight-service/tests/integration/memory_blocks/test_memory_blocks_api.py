@@ -249,24 +249,42 @@ def test_memory_blocks_search_endpoint(db_session):
     r = client.post("/memory-blocks/", json=payload, headers=h)
     assert r.status_code == 201
     
-    # Test search with keywords
+    # Test search with keywords (legacy behaviour)
     r = client.get("/memory-blocks/search/?keywords=AI,algorithms", headers=h)
     assert r.status_code == 200
     results = r.json()
     assert isinstance(results, list)
-    
-    # Test search with agent filter
+    assert results and any("ai" in item["content"].lower() for item in results)
+    assert r.headers.get("X-Search-Metadata") is not None
+
+    # Strategy overrides via `strategy`
+    r = client.get(f"/memory-blocks/search/?keywords=AI&agent_id={agent_id}&strategy=basic", headers=h)
+    assert r.status_code == 200
+
+    # Alias parameter `search_type` should work too and emit metadata header
+    r = client.get("/memory-blocks/search/?keywords=AI&search_type=fulltext", headers=h)
+    assert r.status_code == 200
+    assert r.headers.get("X-Search-Metadata") is not None
+
+    # Explicit agent filter still succeeds
     r = client.get(f"/memory-blocks/search/?keywords=AI&agent_id={agent_id}", headers=h)
     assert r.status_code == 200
-    
-    # Test search with limit
-    r = client.get("/memory-blocks/search/?keywords=AI&limit=5", headers=h)
+
+    r = client.get(f"/memory-blocks/search/?query=algorithms&search_type=hybrid&agent_id={agent_id}", headers=h)
     assert r.status_code == 200
-    
+
+    # Invalid strategy through alias should fail
+    r = client.get("/memory-blocks/search/?keywords=AI&search_type=invalid", headers=h)
+    assert r.status_code == 422
+
+    # Limit bounds enforced by validation
+    r = client.get("/memory-blocks/search/?keywords=AI&limit=0", headers=h)
+    assert r.status_code == 422
+
     # Test search with no keywords (should fail)
     r = client.get("/memory-blocks/search/?keywords=", headers=h)
     assert r.status_code == 400
-    assert "At least one keyword is required" in r.json()["detail"]
+    assert "required" in r.json()["detail"].lower()
 
 
 def test_memory_blocks_list_with_filters(db_session):

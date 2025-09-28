@@ -2,10 +2,11 @@ import uuid
 from sqlalchemy.orm import Session
 
 from core.services.search_service import SearchService
+from core.services.embedding_service import get_embedding_service, reset_embedding_service_for_tests
 from core.db import models
 
 
-def seed_blocks(db: Session, agent_id, owner_id):
+def seed_blocks(db: Session, agent_id, owner_id, embedding_service):
     contents = [
         "First block about python testing and coverage.",
         "Second block about search ranking algorithms.",
@@ -25,10 +26,12 @@ def seed_blocks(db: Session, agent_id, owner_id):
         db.add(mb)
         blocks.append(mb)
     db.flush()
+    # Ensure embeddings exist so semantic path has vectors to query
+    embedding_service.backfill_missing_embeddings(db, batch_size=len(blocks))
     return blocks
 
 
-def test_hybrid_search_combines_scores(db_session: Session):
+def test_hybrid_search_combines_scores(db_session: Session, monkeypatch):
     agent_id = uuid.uuid4()
     # create owner and agent to satisfy personal-owner constraint
     owner = models.User(email=f"hybrid_owner_{uuid.uuid4().hex}@example.com", display_name="HybridOwner")
@@ -38,7 +41,12 @@ def test_hybrid_search_combines_scores(db_session: Session):
     db_session.add(agent)
     db_session.flush()
 
-    seed_blocks(db_session, agent_id, owner.id)
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "mock")
+    monkeypatch.setenv("EMBEDDING_DIMENSION", "8")
+    reset_embedding_service_for_tests()
+    embedding_service = get_embedding_service()
+
+    seed_blocks(db_session, agent_id, owner.id, embedding_service)
     db_session.commit()
 
     service = SearchService()
@@ -48,3 +56,4 @@ def test_hybrid_search_combines_scores(db_session: Session):
     # Fallback should yield results via basic search path elevated to hybrid output
     assert results == [] or meta["search_type"] == "hybrid"  # allow empty if filtering logic changes
     assert "combined_results_count" in meta
+    assert "component_summary" in meta

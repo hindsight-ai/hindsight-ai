@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 import uuid
+from datetime import datetime, timezone
 from core.services.search_service import SearchService, _create_memory_block_with_score
 
 
@@ -41,6 +42,29 @@ class TestSearchService:
         assert result.rank_explanation == "Test explanation"
         assert len(result.keywords) == 1
         assert result.keywords[0].keyword_text == "test"
+        assert result.score_components == {}
+
+    @patch('core.services.search_service.func')
+    def test_search_memory_blocks_fulltext_empty_query(self, mock_func):
+        db = Mock()
+        service = SearchService()
+
+        with pytest.raises(Exception):  # Should raise due to empty query
+            service.search_memory_blocks_fulltext(db, "")
+
+    def test_search_memory_blocks_fulltext_with_results(self):
+        """Smoke test: ensure method returns structure when patched at higher level (endpoint tested elsewhere)."""
+        db = Mock()
+        service = SearchService()
+        with patch.object(service, 'search_memory_blocks_fulltext') as mock_method:
+            fake_block = Mock()
+            fake_block.id = uuid.uuid4()
+            fake_block.search_score = 0.5
+            fake_block.search_type = 'fulltext'
+            mock_method.return_value = ([fake_block], {"fulltext_results_count": 1, "search_type": "fulltext", "search_time": 0.01})
+            results, meta = service.search_memory_blocks_fulltext(db, "hello")
+            assert len(results) == 1
+            assert meta["search_type"] == "fulltext"
 
     @patch('core.services.search_service.get_embedding_service')
     def test_search_memory_blocks_semantic_disabled_provider_falls_back(self, mock_get_service):
@@ -95,8 +119,8 @@ class TestSearchService:
 
         fallback.assert_called_once()
         assert results == ['fallback']
-        assert metadata["search_type"] == "semantic_fallback"
         assert metadata["fallback_reason"] == "dialect_sqlite_unsupported"
+        assert metadata["search_type"] == "semantic_fallback"
 
     @patch('core.services.search_service.get_embedding_service')
     def test_search_memory_blocks_semantic_success(self, mock_get_service):
@@ -128,29 +152,7 @@ class TestSearchService:
         assert results == ['converted']
         assert metadata["search_type"] == "semantic"
         assert metadata["semantic_results_count"] == 1
-        assert metadata["scores"] == [0.86]
-
-    @patch('core.services.search_service.func')
-    def test_search_memory_blocks_fulltext_empty_query(self, mock_func):
-        db = Mock()
-        service = SearchService()
-
-        with pytest.raises(Exception):  # Should raise due to empty query
-            service.search_memory_blocks_fulltext(db, "")
-
-    def test_search_memory_blocks_fulltext_with_results(self):
-        """Smoke test: ensure method returns structure when patched at higher level (endpoint tested elsewhere)."""
-        db = Mock()
-        service = SearchService()
-        with patch.object(service, 'search_memory_blocks_fulltext') as mock_method:
-            fake_block = Mock()
-            fake_block.id = uuid.uuid4()
-            fake_block.search_score = 0.5
-            fake_block.search_type = 'fulltext'
-            mock_method.return_value = ([fake_block], {"fulltext_results_count": 1, "search_type": "fulltext", "search_time": 0.01})
-            results, meta = service.search_memory_blocks_fulltext(db, "hello")
-            assert len(results) == 1
-            assert meta["search_type"] == "fulltext"
+        assert metadata["scores"][0] == pytest.approx(0.14)
 
     def test_search_memory_blocks_hybrid_empty_query(self):
         db = Mock()
@@ -164,74 +166,55 @@ class TestSearchService:
             results, metadata = service.search_memory_blocks_hybrid(db, "")
             assert results == []
             assert metadata["search_type"] == "hybrid"
+            assert "component_summary" in metadata
+            assert metadata["component_summary"]["candidate_counts"]["union"] == 0
 
     def test_combine_and_rerank_with_scores_empty_inputs(self):
         service = SearchService()
 
-        results = service._combine_and_rerank_with_scores([], [], 0.7, 0.3, 0.1)
+        results, stats = service._combine_and_rerank_with_scores([], [], 0.7, 0.3, 0.1)
 
         assert results == []
+        assert stats["weights"]["fulltext"] == 0.7
 
     def test_combine_and_rerank_with_scores_with_results(self):
         service = SearchService()
 
-        # Create mock results with complete model_dump data
+        # Create mock results with minimal attributes consumed by the combiner
+        now = datetime.now(timezone.utc)
+
         mock_result1 = Mock()
         mock_result1.id = uuid.uuid4()
         mock_result1.search_score = 0.8
-        mock_result1.model_dump.return_value = {
-            'id': mock_result1.id,
-            'agent_id': uuid.uuid4(),
-            'conversation_id': uuid.uuid4(),
-            'content': 'test',
-            'errors': None,
-            'lessons_learned': None,
-            'metadata_col': None,
-            'feedback_score': 1,
-            'archived': False,
-            'archived_at': None,
-            'timestamp': '2023-01-01T00:00:00Z',
-            'created_at': '2023-01-01T00:00:00Z',
-            'updated_at': '2023-01-01T00:00:00Z',
-            'keywords': [],
-            'search_score': 0.8,
-            'search_type': 'fulltext',
-            'rank_explanation': 'test'
-        }
+        mock_result1.feedback_score = 0
+        mock_result1.visibility_scope = 'public'
+        mock_result1.timestamp = now
+        hybrid_copy1 = Mock()
+        mock_result1.model_copy.return_value = hybrid_copy1
 
         mock_result2 = Mock()
         mock_result2.id = uuid.uuid4()
         mock_result2.search_score = 0.6
-        mock_result2.model_dump.return_value = {
-            'id': mock_result2.id,
-            'agent_id': uuid.uuid4(),
-            'conversation_id': uuid.uuid4(),
-            'content': 'test2',
-            'errors': None,
-            'lessons_learned': None,
-            'metadata_col': None,
-            'feedback_score': 1,
-            'archived': False,
-            'archived_at': None,
-            'timestamp': '2023-01-01T00:00:00Z',
-            'created_at': '2023-01-01T00:00:00Z',
-            'updated_at': '2023-01-01T00:00:00Z',
-            'keywords': [],
-            'search_score': 0.6,
-            'search_type': 'fulltext',
-            'rank_explanation': 'test2'
-        }
+        mock_result2.feedback_score = 0
+        mock_result2.visibility_scope = 'public'
+        mock_result2.timestamp = now
+        hybrid_copy2 = Mock()
+        mock_result2.model_copy.return_value = hybrid_copy2
 
         fulltext_results = [mock_result1]
         semantic_results = [mock_result2]
 
-        results = service._combine_and_rerank_with_scores(
+        results, stats = service._combine_and_rerank_with_scores(
             fulltext_results, semantic_results, 0.7, 0.3, 0.1
         )
 
         assert len(results) == 2
-        # First result should have higher combined score
         assert results[0].search_score >= results[1].search_score
+        assert results[0] is hybrid_copy1
+        assert results[1] is hybrid_copy2
+        assert stats["heuristics_enabled"]["scope"] is True
+        assert hasattr(results[0], "score_components")
+        assert isinstance(results[0].score_components, dict)
 
     def test_enhanced_search_memory_blocks_empty_query(self):
         db = Mock()

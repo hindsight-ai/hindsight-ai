@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import agentService, { Agent } from '../api/agentService';
 import memoryService from '../api/memoryService';
+import notificationService from '../services/notificationService';
 
 interface AgentDetailsModalProps {
   isOpen: boolean;
@@ -73,8 +74,30 @@ const AgentDetailsModal: React.FC<AgentDetailsModalProps> = ({ isOpen, onClose, 
   };
 
   const copyToClipboard = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); }
-    catch (err) { console.error('Failed to copy to clipboard:', err); }
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const fallbackInput = document.createElement('textarea');
+        fallbackInput.value = text;
+        fallbackInput.setAttribute('readonly', '');
+        fallbackInput.style.position = 'fixed';
+        fallbackInput.style.left = '-9999px';
+        document.body.appendChild(fallbackInput);
+        fallbackInput.focus();
+        fallbackInput.select();
+        if (typeof document.execCommand !== 'function') {
+          throw new Error('Clipboard API not available');
+        }
+        const successful = document.execCommand('copy');
+        document.body.removeChild(fallbackInput);
+        if (!successful) { throw new Error('Fallback copy command failed'); }
+      }
+      notificationService.showSuccess('Agent ID copied to clipboard');
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      notificationService.showError('Failed to copy Agent ID. Please try again.');
+    }
   };
 
   const formatDateTime = (dateString: string | undefined) => {

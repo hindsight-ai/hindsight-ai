@@ -112,6 +112,9 @@ if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps | grep -q "
     echo "  🌐 Frontend Dashboard: http://localhost:3000"
     echo "  🔧 Backend API: http://localhost:8000"
     echo "  🗄️  Database: localhost:5432"
+    if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps 2>/dev/null | grep -q "ollama"; then
+        echo "  🧠 Ollama Embeddings: http://localhost:11434"
+    fi
     echo ""
     # Show Copilot Assistant URL only if service is running
     if docker compose -f docker-compose.yml -f docker-compose.dev.yml ps 2>/dev/null | grep -q "hindsight-copilot-assistant"; then

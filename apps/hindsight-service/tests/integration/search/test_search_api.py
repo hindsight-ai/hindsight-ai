@@ -16,7 +16,7 @@ def enable_mock_embeddings(monkeypatch):
     reset_embedding_service_for_tests()
 
 
-def auth(email="searcher@example.com", name="Searcher"):
+def auth(email: str = "searcher@example.com", name: str = "Searcher"):
     return {"x-auth-request-email": email, "x-auth-request-user": name}
 
 
@@ -68,6 +68,8 @@ def test_fulltext_search_basic():
     assert response.status_code == 200, response.text
     results = response.json()
     assert isinstance(results, list)
+    if results:
+        assert "score_components" in results[0]
 
 
 def test_semantic_search_returns_scored_results():
@@ -80,13 +82,16 @@ def test_semantic_search_returns_scored_results():
     assert response.status_code == 200, response.text
     results = response.json()
     assert isinstance(results, list)
-    assert results, "expected results when embeddings are available"
-    search_types = {item["search_type"] for item in results}
-    assert search_types <= {"semantic", "basic"}
+    assert results, "expected semantic results when embeddings are available"
+    assert all(item["search_type"] in {"semantic", "basic"} for item in results)
     scores = [item["search_score"] for item in results]
     assert scores == sorted(scores, reverse=True)
-    if "semantic" in search_types:
-        assert any("Cosine" in (item.get("rank_explanation") or "") for item in results)
+    semantic_items = [item for item in results if item["search_type"] == "semantic"]
+    if semantic_items:
+        assert any("Cosine" in (item.get("rank_explanation") or "") for item in semantic_items)
+    else:
+        assert all((item.get("rank_explanation") or "").startswith("Basic search") for item in results)
+    assert all(isinstance(item.get("score_components"), dict) for item in results)
 
 
 def test_semantic_search_provider_disabled_fallback(monkeypatch):
@@ -104,6 +109,7 @@ def test_semantic_search_provider_disabled_fallback(monkeypatch):
     assert isinstance(results, list)
     assert results, "fallback search should still return results"
     assert all(item["search_type"] == "basic" for item in results)
+    assert all("score_components" in item for item in results)
 
 
 def test_hybrid_search():
@@ -117,3 +123,4 @@ def test_hybrid_search():
     results = response.json()
     assert isinstance(results, list)
     assert results
+    assert all("score_components" in item for item in results)

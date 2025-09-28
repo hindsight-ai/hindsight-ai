@@ -28,6 +28,24 @@ jobs:
       - name: Run tests
         run: ./run_tests.sh --no-cov
 
+      - name: Query expansion evaluation summary
+        run: |
+          docker run --rm \
+            -v "$(pwd):/app" \
+            -w /app \
+            -e DATABASE_URL=sqlite+pysqlite:///:memory: \
+            -e HINDSIGHT_TEST_DB=sqlite+pysqlite:///:memory: \
+            -e QUERY_EXPANSION_LLM_PROVIDER=mock \
+            -e PYTHONPATH=/app \
+            hindsight-service-test \
+            /bin/bash -lc "uv run python scripts/run_query_expansion_evaluation.py --seed-sample-data --output /app/query-expansion-summary.json"
+
+      - name: Upload query expansion summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: query-expansion-summary
+          path: apps/hindsight-service/query-expansion-summary.json
+
   dashboard-tests:
     name: Dashboard (Jest)
     runs-on: ubuntu-latest
@@ -210,6 +228,10 @@ jobs:
             OAUTH2_PROXY_EMAIL_DOMAINS=${{ secrets.OAUTH2_PROXY_EMAIL_DOMAINS || '*' }}
             LLM_API_KEY=${{ secrets.LLM_API_KEY }}
             LLM_MODEL_NAME=${{ secrets.LLM_MODEL_NAME }}
+            EMBEDDING_PROVIDER=${{ secrets.EMBEDDING_PROVIDER || 'ollama' }}
+            OLLAMA_BASE_URL=${{ secrets.OLLAMA_BASE_URL || 'http://ollama:11434' }}
+            OLLAMA_EMBEDDING_MODEL=${{ secrets.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text:v1.5' }}
+            KNOWLEDGE_BASES_ROOT_DIR=${{ secrets.KNOWLEDGE_BASES_ROOT_DIR || './knowledge_bases' }}
             CONSOLIDATION_BATCH_SIZE=${{ secrets.CONSOLIDATION_BATCH_SIZE }}
             FALLBACK_SIMILARITY_THRESHOLD=${{ secrets.FALLBACK_SIMILARITY_THRESHOLD }}
             SUPPORT_EMAIL=${{ secrets.SUPPORT_EMAIL }}
@@ -281,6 +303,10 @@ jobs:
             if [ "${{ env.ENV_NAME }}" = "production" ]; then
               PROFILE_FLAG="--profile prod"
             fi
+
+            # Trim unused Docker resources while services continue running
+            echo "Pruning unused Docker resources before shutdown..."
+            docker system prune -af
 
             # Pull new images and deploy
             echo "Pulling new images and deploying to ${{ env.ENV_NAME }}..."

@@ -19,6 +19,10 @@ services:
       VERSION: ${BACKEND_VERSION}
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL}
+      KNOWLEDGE_BASES_ROOT_DIR: ${KNOWLEDGE_BASES_ROOT_DIR}
       CONSOLIDATION_BATCH_SIZE: ${CONSOLIDATION_BATCH_SIZE}
       FALLBACK_SIMILARITY_THRESHOLD: ${FALLBACK_SIMILARITY_THRESHOLD}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL}
@@ -74,3 +78,15 @@ services:
       watch:
         - path: ./apps/hindsight-copilot-assistant
           action: rebuild
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - hindsight-ai

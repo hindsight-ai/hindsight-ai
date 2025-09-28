@@ -1,3 +1,4 @@
+import os
 import subprocess
 import time
 import uuid
@@ -22,8 +23,12 @@ def wait_for_postgres(host: str, port: int, user: str, password: str, db: str, t
 
 
 @contextmanager
-def postgres_container(image: str = "postgres:13"):
+def postgres_container(image: str = "pgvector/pgvector:pg16"):
     """Spin up an isolated Postgres container on a random high port and tear it down."""
+    # Allow explicit skip to avoid failing when docker isn't accessible
+    if os.getenv("SKIP_DOCKER_TESTS") == "1":
+        pytest.skip("SKIP_DOCKER_TESTS=1")
+
     # Skip if Docker CLI is not available in this environment
     if not shutil.which("docker"):
         pytest.skip("Docker CLI is not available; skipping e2e tests that require containers")
