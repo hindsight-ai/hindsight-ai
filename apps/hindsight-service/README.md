@@ -105,6 +105,24 @@ Hybrid search blends full-text and semantic signals with heuristic boosts. Tunin
 
 All knobs are cached per-process; call `refresh_hybrid_ranking_config()` in tests after mutating the environment.
 
+### Query Expansion Configuration
+
+The query expansion pipeline applies stemming, synonym substitution, and optional LLM rewrites before invoking the existing search flows. Key toggles:
+
+- `QUERY_EXPANSION_ENABLED` (default `true`).
+- `QUERY_EXPANSION_STEMMING_ENABLED`, `QUERY_EXPANSION_SYNONYMS_ENABLED`.
+- `QUERY_EXPANSION_MAX_VARIANTS` (default `5`) and `QUERY_EXPANSION_SYNONYMS_PATH` (JSON dictionary of token → synonyms).
+- `QUERY_EXPANSION_LLM_PROVIDER` (`mock` yields deterministic rewrites for tests) and `QUERY_EXPANSION_LLM_MAX_VARIANTS`.
+- When `QUERY_EXPANSION_LLM_PROVIDER=ollama` (default in the Docker Compose dev/staging stacks), the service reuses the same Ollama deployment configured for embeddings. Provide `QUERY_EXPANSION_LLM_MODEL` (defaults to `llama3.2:1b` locally) and adjust `QUERY_EXPANSION_OLLAMA_BASE_URL`, `QUERY_EXPANSION_LLM_TEMPERATURE`, `QUERY_EXPANSION_LLM_MAX_TOKENS`, and `QUERY_EXPANSION_LLM_TIMEOUT_SECONDS` as needed.
+
+The evaluation harness compares baseline vs. expanded retrieval quality. Create a dataset and run:
+
+```bash
+uv run python apps/hindsight-service/scripts/run_query_expansion_evaluation.py --dataset path/to/dataset.json --output summary.json
+```
+
+Add `--seed-sample-data` to generate a lightweight fixture automatically (useful for local smoke checks or CI runs hitting SQLite). Within tests, `core.search.evaluation.evaluate_cases` returns per-query precision/recall plus aggregate deltas so you can gate regressions.
+
 ## 🔐 Permissions & Scopes
 
 - See `SECURITY.md` for the security model overview (roles, scopes, and helpers).
