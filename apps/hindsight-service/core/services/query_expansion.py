@@ -7,10 +7,9 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Any, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 import requests
-
 logger = logging.getLogger(__name__)
 
 
@@ -44,8 +43,6 @@ def _env_float(name: str, default: float) -> float:
         return float(raw)
     except ValueError:
         return default
-
-
 _DEFAULT_SYNONYMS: Dict[str, List[str]] = {
     "bug": ["defect", "issue", "problem"],
     "bugs": ["defects", "issues", "problems"],
@@ -202,6 +199,7 @@ class QueryExpansionEngine:
         provider = self.config.llm_provider
         if provider is None:
             return []
+
         provider_key = provider.lower()
         max_variants = max(self.config.llm_max_expansions, 0)
         if provider_key == "mock":

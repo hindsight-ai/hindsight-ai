@@ -32,7 +32,7 @@ jobs:
         run: |
           docker run --rm \
             -v "$(pwd):/app" \
-            -w /app/apps/hindsight-service \
+            -w /app \
             -e DATABASE_URL=sqlite+pysqlite:///:memory: \
             -e HINDSIGHT_TEST_DB=sqlite+pysqlite:///:memory: \
             -e QUERY_EXPANSION_LLM_PROVIDER=mock \
