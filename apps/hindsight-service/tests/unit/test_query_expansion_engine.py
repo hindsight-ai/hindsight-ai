@@ -76,3 +76,54 @@ def test_custom_synonyms_file_used(tmp_path: Path):
     result = engine.expand("latency investigation")
 
     assert "response time investigation" in result.expanded_queries
+
+
+def test_query_expansion_llm_mock(monkeypatch):
+    engine = _make_engine(
+        llm_provider="mock",
+        max_expansions=4,
+        synonyms_enabled=False,
+        stemming_enabled=False,
+    )
+
+    result = engine.expand("reduce errors", context={"case": "llm"})
+
+    assert any("explained" in variant for variant in result.expanded_queries)
+    assert any(step["step"] == "llm_rewrite" for step in result.applied_steps)
+
+
+def test_query_expansion_llm_ollama(monkeypatch):
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    captured = {}
+
+    def fake_post(url, json=None, timeout=None):  # noqa: A002 - shadowing by design
+        captured["url"] = url
+        captured["payload"] = json
+        captured["timeout"] = timeout
+        return FakeResponse({"response": "synonym for reliability\nrobust query handling"})
+
+    monkeypatch.setattr("core.services.query_expansion.requests.post", fake_post)
+
+    engine = _make_engine(
+        llm_provider="ollama",
+        llm_model="llama3.2:1b",
+        max_expansions=3,
+        synonyms_enabled=False,
+        stemming_enabled=False,
+    )
+
+    result = engine.expand("reliable search")
+
+    assert captured["url"].endswith("/api/generate")
+    assert captured["payload"]["model"] == "llama3.2:1b"
+    assert len(result.expanded_queries) == 2
+    assert all(step["step"] == "llm_rewrite" for step in result.applied_steps)

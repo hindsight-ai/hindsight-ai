@@ -43,6 +43,8 @@ def _env_float(name: str, default: float) -> float:
         return float(raw)
     except ValueError:
         return default
+
+
 _DEFAULT_SYNONYMS: Dict[str, List[str]] = {
     "bug": ["defect", "issue", "problem"],
     "bugs": ["defects", "issues", "problems"],
