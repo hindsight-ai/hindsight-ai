@@ -14,7 +14,7 @@ Operational notes:
 
 - Generate embeddings synchronously on memory create/update when a provider is enabled.
 - Keep the mock provider as default in CI; monitor latency/cost for real providers.
-- After enabling a real provider, run the backfill script to hydrate historical memories.
+- After enabling a real provider, run the backfill script to hydrate historical memories. On deployed servers run `docker compose -f docker-compose.app.yml exec -w /app hindsight-service env PYTHONPATH=/app python scripts/backfill_embeddings.py --batch-size 200` (add `--dry-run` first if you only want a count).
 
 ## Hybrid Ranking
 

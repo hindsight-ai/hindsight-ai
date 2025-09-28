@@ -84,11 +84,20 @@ Local Docker Compose profiles spin up `ollama/ollama` alongside Postgres and the
 
 Run the utility script once a provider is configured:
 
-```bash
-uv run python scripts/backfill_embeddings.py --batch-size 200
-```
+- **Staging/production servers:**
 
-Add `--dry-run` to inspect how many rows still need embeddings before running the job.
+  ```bash
+  docker compose -f docker-compose.app.yml exec -w /app hindsight-service \
+    env PYTHONPATH=/app python scripts/backfill_embeddings.py --batch-size 200
+  ```
+
+- **Local development:**
+
+  ```bash
+  uv run python scripts/backfill_embeddings.py --batch-size 200
+  ```
+
+Add `--dry-run` in either environment to inspect how many rows still need embeddings before running the job.
 
 ### Hybrid Ranking Configuration
 
