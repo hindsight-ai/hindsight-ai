@@ -51,6 +51,12 @@ cd /absolute/path/to/hindsight-ai/mcp-servers/hindsight-mcp
 npm install && npm run build && npm link
 ```
 
+Verify the binary resolves on your `PATH` and report its version:
+
+```bash
+hindsight-mcp --version
+```
+
 ## Available Tools
 
 | Tool | Description |
