@@ -11,6 +11,24 @@ import {
 import axios, { AxiosError } from 'axios';
 import { MemoryServiceClient, MemoryServiceClientConfig, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload, AdvancedSearchPayload } from './client/MemoryServiceClient';
 
+import { getCaptureChecklist } from './checklists/captureChecklist';
+
+// --- CLI Utilities ---
+const maybeHandleCliCommand = () => {
+  const args = process.argv.slice(2);
+  if (args.length === 0) {
+    return;
+  }
+
+  const [firstArg] = args;
+  if (firstArg === 'checklist') {
+    console.log(getCaptureChecklist());
+    process.exit(0);
+  }
+};
+
+maybeHandleCliCommand();
+
 // --- Configuration ---
 const API_BASE_URL = process.env.HINDSIGHT_API_BASE_URL || 'https://api.hindsight-ai.com'; // Default to hosted API
 const DEFAULT_AGENT_ID = process.env.DEFAULT_AGENT_ID;

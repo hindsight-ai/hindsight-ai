@@ -51,6 +51,16 @@ cd /absolute/path/to/hindsight-ai/mcp-servers/hindsight-mcp
 npm install && npm run build && npm link
 ```
 
+### Utility commands
+
+Use the binary directly for quick helpers. For example, run:
+
+```bash
+hindsight-mcp checklist
+```
+
+This prints the capture checklist so you can align with the Plan -> Search -> Act -> Capture -> Review -> Resurface loop before capturing memories.
+
 ## Available Tools
 
 | Tool | Description |
