@@ -51,16 +51,6 @@ cd /absolute/path/to/hindsight-ai/mcp-servers/hindsight-mcp
 npm install && npm run build && npm link
 ```
 
-### Utility commands
-
-Use the binary directly for quick helpers. For example, run:
-
-```bash
-hindsight-mcp checklist
-```
-
-This prints the capture checklist so you can align with the Plan -> Search -> Act -> Capture -> Review -> Resurface loop before capturing memories.
-
 ## Available Tools
 
 | Tool | Description |
@@ -73,6 +63,7 @@ This prints the capture checklist so you can align with the Plan -> Search -> Ac
 | `report_memory_feedback` | Record positive/negative/neutral feedback on a memory block. Optional `feedback_details`. |
 | `get_memory_details` | Return metadata and content for one memory block by ID. |
 | `search_agents` | Search agent names via a query string. |
+| `show_capture_checklist` | Return the capture checklist so an MCP client can surface the operating loop guidance on demand. |
 | `advanced_search_memories` | Run full-text, semantic, or hybrid search. Accepts optional `agent_id` / `conversation_id` arguments and falls back to the environment. Requires a valid agent context¹. Tuning knobs: `limit`, `min_score`, `similarity_threshold`, `fulltext_weight`, `semantic_weight`, `min_combined_score`, `include_archived`. |
 | `whoami` | Return the authenticated user and memberships as seen by the Hindsight service. |
 

@@ -13,22 +13,6 @@ import { MemoryServiceClient, MemoryServiceClientConfig, CreateMemoryBlockPayloa
 
 import { getCaptureChecklist } from './checklists/captureChecklist';
 
-// --- CLI Utilities ---
-const maybeHandleCliCommand = () => {
-  const args = process.argv.slice(2);
-  if (args.length === 0) {
-    return;
-  }
-
-  const [firstArg] = args;
-  if (firstArg === 'checklist') {
-    console.log(getCaptureChecklist());
-    process.exit(0);
-  }
-};
-
-maybeHandleCliCommand();
-
 // --- Configuration ---
 const API_BASE_URL = process.env.HINDSIGHT_API_BASE_URL || 'https://api.hindsight-ai.com'; // Default to hosted API
 const DEFAULT_AGENT_ID = process.env.DEFAULT_AGENT_ID;
@@ -318,6 +302,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["query"],
         },
+      },
+      {
+        name: "show_capture_checklist",
+        description: "Return the capture checklist so the agent can align with the operating loop before logging memories.",
+        inputSchema: { type: "object", properties: {}, required: [] },
       },
       {
         name: "advanced_search_memories",
@@ -681,6 +670,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ],
       };
     }
+
+      // --- show_capture_checklist ---
+      else if (toolName === "show_capture_checklist") {
+        return {
+          content: [{ type: "text", text: getCaptureChecklist() }]
+        };
+      }
 
       // --- whoami ---
       else if (toolName === "whoami") {
