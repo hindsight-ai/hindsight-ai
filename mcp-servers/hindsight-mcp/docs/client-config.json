@@ -60,7 +60,7 @@
       "codeSamples": [
         {
           "language": "json",
-          "code": "{\n  \"mcpServers\": {\n    \"hindsight-mcp\": {\n      \"command\": \"hindsight-mcp\",\n      \"transportType\": \"stdio\",\n      \"timeout\": 60,\n      \"env\": {\n        \"DEFAULT_AGENT_ID\": \"00000000-0000-0000-0000-000000000000\",\n        \"DEFAULT_CONVERSATION_ID\": \"00000000-0000-0000-0000-000000000000\",\n        \"HINDSIGHT_API_TOKEN\": \"hs_pat_xxx\"\n      }\n    }\n  }\n}"
+          "code": "{\n  \"mcpServers\": {\n    \"hindsight-mcp\": {\n      \"command\": \"hindsight-mcp\",\n      \"transportType\": \"stdio\",\n      \"timeout\": 60,\n      \"env\": {\n        \"DEFAULT_AGENT_ID\": \"00000000-0000-0000-0000-000000000000\",\n        \"HINDSIGHT_API_TOKEN\": \"hs_pat_xxx\"\n      }\n    }\n  }\n}"
         }
       ],
       "notes": [
@@ -79,7 +79,7 @@
       "codeSamples": [
         {
           "language": "json",
-          "code": "{\n  \"DEFAULT_AGENT_ID\": \"00000000-0000-0000-0000-000000000000\",\n  \"DEFAULT_CONVERSATION_ID\": \"00000000-0000-0000-0000-000000000000\",\n  \"HINDSIGHT_API_TOKEN\": \"hs_pat_xxx\"\n}"
+          "code": "{\n  \"DEFAULT_AGENT_ID\": \"00000000-0000-0000-0000-000000000000\",\n  \"HINDSIGHT_API_TOKEN\": \"hs_pat_xxx\"\n}"
         }
       ],
       "notes": [
@@ -97,7 +97,7 @@
       "codeSamples": [
         {
           "language": "json",
-          "code": "\"claudeCode.mcpServers\": [\n  {\n    \"name\": \"hindsight-mcp\",\n    \"command\": \"hindsight-mcp\",\n    \"transport\": \"stdio\",\n    \"env\": {\n      \"DEFAULT_AGENT_ID\": \"00000000-0000-0000-0000-000000000000\",\n      \"DEFAULT_CONVERSATION_ID\": \"00000000-0000-0000-0000-000000000000\",\n      \"HINDSIGHT_API_TOKEN\": \"hs_pat_xxx\"\n    }\n  }\n]"
+          "code": "\"claudeCode.mcpServers\": [\n  {\n    \"name\": \"hindsight-mcp\",\n    \"command\": \"hindsight-mcp\",\n    \"transport\": \"stdio\",\n    \"env\": {\n      \"DEFAULT_AGENT_ID\": \"00000000-0000-0000-0000-000000000000\",\n      \"HINDSIGHT_API_TOKEN\": \"hs_pat_xxx\"\n    }\n  }\n]"
         }
       ]
     },
@@ -112,7 +112,7 @@
       "codeSamples": [
         {
           "language": "toml",
-          "code": "[mcp_servers.hindsight-mcp]\ncommand = \"hindsight-mcp\"\nargs = []\nenv = {\n  DEFAULT_AGENT_ID = \"00000000-0000-0000-0000-000000000000\",\n  DEFAULT_CONVERSATION_ID = \"00000000-0000-0000-0000-000000000000\",\n  HINDSIGHT_API_TOKEN = \"hs_pat_your_token_here\"\n}"
+          "code": "[mcp_servers.hindsight-mcp]\ncommand = \"hindsight-mcp\"\nargs = []\nenv = {\n  DEFAULT_AGENT_ID = \"00000000-0000-0000-0000-000000000000\",\n  HINDSIGHT_API_TOKEN = \"hs_pat_your_token_here\"\n}"
         }
       ],
       "notes": [

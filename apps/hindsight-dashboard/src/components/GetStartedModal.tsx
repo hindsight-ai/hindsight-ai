@@ -54,7 +54,7 @@ interface WorkflowGroup {
 
 const codexConfigSnippet = `[mcp_servers.hindsight-mcp]
 command = "hindsight-mcp"
-env = { "HINDSIGHT_API_TOKEN" = "<yourtoken>", "DEFAULT_AGENT_ID" = "<youragentid>", "DEFAULT_CONVERSATION_ID" = "f47ac10b-58cc-4372-a567-0123456789ab" }`;
+env = { "HINDSIGHT_API_TOKEN" = "<yourtoken>", "DEFAULT_AGENT_ID" = "<youragentid>" }`;
 
 const workflowExample = `# Workflow Guidance
 
@@ -70,8 +70,7 @@ const geminiConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       }
     }
   }
@@ -82,8 +81,7 @@ const claudeConfigSnippet = `claude mcp add-json hindsight-mcp '{
   "command": "hindsight-mcp",
   "env": {
     "HINDSIGHT_API_TOKEN": "<yourtoken>",
-    "DEFAULT_AGENT_ID": "<youragentid>",
-    "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+    "DEFAULT_AGENT_ID": "<youragentid>"
   }
 }'`;
 
@@ -93,8 +91,7 @@ const clineConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       },
       "disabled": false
     }
@@ -109,8 +106,7 @@ const roocodeConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       }
     }
   ]
@@ -123,8 +119,7 @@ const copilotConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       }
     }
   }
@@ -136,8 +131,7 @@ const forgecodeConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       }
     }
   }
@@ -145,7 +139,7 @@ const forgecodeConfigSnippet = `{
 
 const openhandsConfigSnippet = `[mcp]
 stdio_servers = [
-  {name = "hindsight-mcp", command = "hindsight-mcp", env = { HINDSIGHT_API_TOKEN = "<yourtoken>", DEFAULT_AGENT_ID = "<youragentid>", DEFAULT_CONVERSATION_ID = "f47ac10b-58cc-4372-a567-0123456789ab" }}
+  {name = "hindsight-mcp", command = "hindsight-mcp", env = { HINDSIGHT_API_TOKEN = "<yourtoken>", DEFAULT_AGENT_ID = "<youragentid>" }}
 ]`;
 
 const sharedMarkdownDetail = 'Document retrieval-first and reflection-last workflow rules using the template below so teammates stay in parity.';
