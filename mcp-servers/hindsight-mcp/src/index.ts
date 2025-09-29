@@ -13,6 +13,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import axios, { AxiosError } from 'axios';
 import { MemoryServiceClient, MemoryServiceClientConfig, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload, AdvancedSearchPayload } from './client/MemoryServiceClient';
+import { getCaptureChecklist } from './checklists/captureChecklist';
 
 const resolvePackageVersion = (): string => {
   try {
@@ -334,6 +335,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["query"],
         },
+      },
+      {
+        name: "show_capture_checklist",
+        description: "Call before capturing a new memory to recall the capture gates and operating loop guidance.",
+        inputSchema: { type: "object", properties: {}, required: [] },
       },
       {
         name: "advanced_search_memories",
@@ -703,6 +709,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
+      // --- show_capture_checklist ---
+      else if (toolName === "show_capture_checklist") {
+        return {
+          content: [{ type: "text", text: getCaptureChecklist() }]
+        };
+      }
+
       // --- whoami ---
       else if (toolName === "whoami") {
         const info = await memoryServiceClient.whoAmI();
@@ -757,7 +770,10 @@ async function main() {
   console.error(`Memory MCP server running. Waiting for requests...`); // Log to stderr
 }
 
-main().catch((error) => {
-  console.error("Server failed to start:", error); // Log to stderr
-  process.exit(1);
-});
+const args = process.argv.slice(2);
+if (!args.includes("--version") && !args.includes("-v")) {
+  main().catch((error) => {
+    console.error("Server failed to start:", error); // Log to stderr
+    process.exit(1);
+  });
+}
