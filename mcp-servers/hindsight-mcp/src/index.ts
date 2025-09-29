@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import fs from "fs";
+import path from "path";
+import { randomUUID } from "crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -10,13 +13,43 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import axios, { AxiosError } from 'axios';
 import { MemoryServiceClient, MemoryServiceClientConfig, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload, AdvancedSearchPayload } from './client/MemoryServiceClient';
-
 import { getCaptureChecklist } from './checklists/captureChecklist';
 
+const resolvePackageVersion = (): string => {
+  try {
+    const pkgPath = path.resolve(__dirname, "../package.json");
+    const pkgRaw = fs.readFileSync(pkgPath, "utf-8");
+    const pkg = JSON.parse(pkgRaw) as { version?: string };
+    return typeof pkg.version === "string" ? pkg.version : "unknown";
+  } catch (error) {
+    console.warn("[hindsight-mcp] Unable to determine package version:", error);
+    return "unknown";
+  }
+};
+
+const maybeHandleCliVersion = () => {
+  const args = process.argv.slice(2);
+  if (args.includes("--version") || args.includes("-v")) {
+    const version = resolvePackageVersion();
+    console.log(`hindsight-mcp ${version}`);
+    process.exit(0);
+  }
+};
+
+maybeHandleCliVersion();
+
 // --- Configuration ---
+const normalizeUuid = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
 const API_BASE_URL = process.env.HINDSIGHT_API_BASE_URL || 'https://api.hindsight-ai.com'; // Default to hosted API
-const DEFAULT_AGENT_ID = process.env.DEFAULT_AGENT_ID;
-const DEFAULT_CONVERSATION_ID = process.env.DEFAULT_CONVERSATION_ID;
+const DEFAULT_AGENT_ID = normalizeUuid(process.env.DEFAULT_AGENT_ID);
+const DEFAULT_CONVERSATION_ID = normalizeUuid(process.env.DEFAULT_CONVERSATION_ID);
 const API_TOKEN = process.env.HINDSIGHT_API_TOKEN || process.env.HINDSIGHT_API_KEY;
 const API_HEADER: 'Authorization' | 'X-API-Key' = process.env.HINDSIGHT_API_KEY ? 'X-API-Key' : 'Authorization';
 const ACTIVE_SCOPE_ENV = process.env.HINDSIGHT_ACTIVE_SCOPE as ('personal' | 'organization' | 'public' | undefined);
@@ -132,7 +165,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "create_memory_block",
-        description: "Create a new memory block in the AI agent memory service. Requires agent_id, a valid UUID for conversation_id, and content/lessons_learned.",
+        description: "Create a new memory block in the AI agent memory service. conversation_id is optional; one is generated when omitted.",
         inputSchema: {
           type: "object",
           properties: {
@@ -142,7 +175,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             conversation_id: {
               type: "string",
-              description: "UUID of the conversation (this value should not be provided, it will be filled automatically by env variables).",
+              description: "Optional UUID of the conversation. If omitted, a new conversation_id is generated and returned in the response.",
             },
             content: {
               type: "string",
@@ -198,7 +231,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             conversation_id: {
               type: "string",
-              description: "UUID of the conversation (this value should not be provided, it will be filled automatically by env variables).",
+              description: "Optional conversation UUID to narrow context when desired.",
             },
             limit: {
               type: "number",
@@ -234,7 +267,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             conversation_id: {
               "type": "string",
-              "description": "UUID of the conversation to retrieve memories for (this value should not be provided, it will be filled automatically by env variables).",
+              "description": "UUID of the conversation to retrieve memories for (provide the value returned from create_memory_block or a configured default).",
             },
             agent_id: {
               "type": "string",
@@ -329,7 +362,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             conversation_id: {
               type: "string",
-              description: "Optional conversation UUID. Falls back to DEFAULT_CONVERSATION_ID when omitted.",
+              description: "Optional conversation UUID filter.",
             },
             limit: {
               type: "number",
@@ -382,14 +415,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     // --- create_memory_block ---
     if (toolName === "create_memory_block") {
-      const agent_id = (typedArgs?.agent_id as string | undefined) || DEFAULT_AGENT_ID;
-      const conversation_id = (typedArgs?.conversation_id as string | undefined) || DEFAULT_CONVERSATION_ID;
+      const agent_id = normalizeUuid(typedArgs?.agent_id) || DEFAULT_AGENT_ID;
+      const providedConversationId = normalizeUuid(typedArgs?.conversation_id);
+      const fallbackConversationId = DEFAULT_CONVERSATION_ID;
+      const conversation_id = providedConversationId || fallbackConversationId || randomUUID();
+      const generatedConversationId = !providedConversationId && !fallbackConversationId;
 
       if (!agent_id) {
         throw new McpError(ErrorCode.InvalidParams, "Agent ID is required for create_memory_block and not provided via arguments or DEFAULT_AGENT_ID environment variable.");
-      }
-      if (!conversation_id) {
-        throw new McpError(ErrorCode.InvalidParams, "Conversation ID is required for create_memory_block and not provided via arguments or DEFAULT_CONVERSATION_ID environment variable.");
       }
 
       const payload: CreateMemoryBlockPayload = {
@@ -412,8 +445,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
       }
       const result = await memoryServiceClient.createMemoryBlock(payload);
+      let responseText = `Successfully created memory block with ID: ${result.id}. Conversation ID: ${conversation_id}.`;
+      if (generatedConversationId) {
+        responseText += ' Use this conversation_id for future MCP tool calls to continue the discussion context.';
+      }
       return {
-        content: [{ type: "text", text: `Successfully created memory block with ID: ${result.id}` }]
+        content: [{ type: "text", text: responseText }]
       };
     }
 
@@ -441,7 +478,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // --- retrieve_all_memory_blocks ---
     else if (toolName === "retrieve_all_memory_blocks") {
-      const agent_id = (typedArgs?.agent_id as string | undefined) || DEFAULT_AGENT_ID;
+      const agent_id = normalizeUuid(typedArgs?.agent_id) || DEFAULT_AGENT_ID;
       const limit = typedArgs?.limit as number | undefined;
 
       if (!agent_id) {
@@ -467,12 +504,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // --- retrieve_memory_blocks_by_conversation_id ---
     else if (toolName === "retrieve_memory_blocks_by_conversation_id") {
-      const conversation_id = (typedArgs?.conversation_id as string | undefined) || DEFAULT_CONVERSATION_ID;
-      const agent_id = (typedArgs?.agent_id as string | undefined) || DEFAULT_AGENT_ID;
+      const conversation_id = normalizeUuid(typedArgs?.conversation_id) || DEFAULT_CONVERSATION_ID;
+      const agent_id = normalizeUuid(typedArgs?.agent_id) || DEFAULT_AGENT_ID;
       const limit = typedArgs?.limit as number | undefined;
 
       if (!conversation_id) {
-        throw new McpError(ErrorCode.InvalidParams, "Conversation ID is required for retrieve_memory_blocks_by_conversation_id and not provided via arguments or DEFAULT_CONVERSATION_ID environment variable.");
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          "Conversation ID is required for retrieve_memory_blocks_by_conversation_id. Use the conversation_id returned from create_memory_block or configure DEFAULT_CONVERSATION_ID."
+        );
       }
 
       const result = await memoryServiceClient.getMemoryBlocksByConversationId(
@@ -493,8 +533,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // --- retrieve_relevant_memories ---
     else if (toolName === "retrieve_relevant_memories") {
-      const agent_id = (typedArgs?.agent_id as string | undefined) || DEFAULT_AGENT_ID;
-      const conversation_id = (typedArgs?.conversation_id as string | undefined) || DEFAULT_CONVERSATION_ID;
+      const agent_id = normalizeUuid(typedArgs?.agent_id) || DEFAULT_AGENT_ID;
+      const conversation_id = normalizeUuid(typedArgs?.conversation_id);
 
       if (!typedArgs.keywords) {
         throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for retrieve_relevant_memories. 'keywords' is required as a comma-separated string or array of strings.");
@@ -524,9 +564,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const payload: RetrieveMemoriesPayload = {
         keywords: keywordCsv,
         agent_id: agent_id,
-        conversation_id: conversation_id,
         limit: typedArgs.limit,
       };
+      if (conversation_id) {
+        payload.conversation_id = conversation_id;
+      }
 
       if (!isValidRetrieveMemoriesPayload(payload)) {
         throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for retrieve_relevant_memories. Keywords must resolve to a non-empty string.");
@@ -605,12 +647,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for advanced_search_memories. Requires 'search_query' (string).");
       }
 
-      const agent_id: string | undefined = (typeof typedArgs.agent_id === 'string' && typedArgs.agent_id.trim().length > 0)
-        ? typedArgs.agent_id.trim()
-        : DEFAULT_AGENT_ID;
-      const conversation_id: string | undefined = (typeof typedArgs.conversation_id === 'string' && typedArgs.conversation_id.trim().length > 0)
-        ? typedArgs.conversation_id.trim()
-        : DEFAULT_CONVERSATION_ID;
+      const agent_id: string | undefined = normalizeUuid(typedArgs?.agent_id) || DEFAULT_AGENT_ID;
+      const conversation_id: string | undefined = normalizeUuid(typedArgs?.conversation_id);
 
       const st: string = typedArgs.search_type || 'fulltext';
       const q: string = typedArgs.search_query;
