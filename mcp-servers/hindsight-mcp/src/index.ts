@@ -305,7 +305,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "show_capture_checklist",
-        description: "Return the capture checklist so the agent can align with the operating loop before logging memories.",
+        description: "Call before capturing a new memory to recall the capture gates and operating loop guidance.",
         inputSchema: { type: "object", properties: {}, required: [] },
       },
       {
