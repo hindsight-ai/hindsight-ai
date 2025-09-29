@@ -770,7 +770,10 @@ async function main() {
   console.error(`Memory MCP server running. Waiting for requests...`); // Log to stderr
 }
 
-main().catch((error) => {
-  console.error("Server failed to start:", error); // Log to stderr
-  process.exit(1);
-});
+const args = process.argv.slice(2);
+if (!args.includes("--version") && !args.includes("-v")) {
+  main().catch((error) => {
+    console.error("Server failed to start:", error); // Log to stderr
+    process.exit(1);
+  });
+}
