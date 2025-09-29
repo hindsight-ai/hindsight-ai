@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import fs from "fs";
+import path from "path";
 import { randomUUID } from "crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -11,6 +13,29 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import axios, { AxiosError } from 'axios';
 import { MemoryServiceClient, MemoryServiceClientConfig, CreateMemoryBlockPayload, RetrieveMemoriesPayload, ReportFeedbackPayload, MemoryBlock, Agent, CreateAgentPayload, AdvancedSearchPayload } from './client/MemoryServiceClient';
+
+const resolvePackageVersion = (): string => {
+  try {
+    const pkgPath = path.resolve(__dirname, "../package.json");
+    const pkgRaw = fs.readFileSync(pkgPath, "utf-8");
+    const pkg = JSON.parse(pkgRaw) as { version?: string };
+    return typeof pkg.version === "string" ? pkg.version : "unknown";
+  } catch (error) {
+    console.warn("[hindsight-mcp] Unable to determine package version:", error);
+    return "unknown";
+  }
+};
+
+const maybeHandleCliVersion = () => {
+  const args = process.argv.slice(2);
+  if (args.includes("--version") || args.includes("-v")) {
+    const version = resolvePackageVersion();
+    console.log(`hindsight-mcp ${version}`);
+    process.exit(0);
+  }
+};
+
+maybeHandleCliVersion();
 
 // --- Configuration ---
 const normalizeUuid = (value: unknown): string | undefined => {
