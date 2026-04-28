@@ -314,36 +314,27 @@ def test_A_consolidation_validate_minted_under_first_id_owner(db_session):
 # ---------------------------------------------------------------------------
 
 
-def test_B_bulk_move_executor_does_not_update_visibility_scope(db_session):
+def test_B_bulk_move_executor_now_updates_visibility_scope(db_session):
     """
-    `core/async_bulk_operations.py:_move_memory_blocks` (lines 207-227) sets
-    `organization_id = dest_org_id` and `owner_user_id = dest_owner_id` but
-    *does not* update `visibility_scope`. For org→personal moves this produces
-    a row with `visibility_scope='organization'` AND `organization_id=NULL`,
-    which violates the `ck_memory_blocks_org_has_org` check constraint.
-
-    The DB constraint is therefore the *only* thing preventing this code path
-    from silently dropping organization data into a non-member's personal scope.
-    If the constraint is ever relaxed or the executor is patched without also
-    fixing the dest_owner validation, the leak becomes real.
-
-    To avoid SQLAlchemy session-state issues with the conftest's transactional
-    rollback, we exercise the executor's two write statements via a fresh
-    short-lived session. This isolates the IntegrityError to its own session
-    while the suite's outer rollback still cleans up.
+    Regression guard for B (executor half): `_move_memory_blocks` must set
+    `visibility_scope` to a value consistent with the new (organization_id,
+    owner_user_id). Without that update, org→personal moves produced rows
+    that violated `ck_memory_blocks_org_has_org`, and the DB constraint was
+    the only line of defense.
     """
-    from sqlalchemy.exc import IntegrityError
+    import asyncio
     from sqlalchemy.orm import sessionmaker
 
-    h_admin = _h("orgadmin-b", scope="personal")
-    h_carol = _h("carol-b", scope="personal")
+    from core.async_bulk_operations import BulkOperationTask
+
+    h_admin = _h("orgadmin-bx", scope="personal")
     client = _client()
-    carol_info = client.get("/user-info", headers=h_carol).json()
-    carol_id = uuid.UUID(carol_info["user_id"])
+    admin_info = client.get("/user-info", headers=h_admin).json()
+    admin_id = uuid.UUID(admin_info["user_id"])
 
     r_org = client.post(
         "/organizations/",
-        json={"name": "Org B", "slug": f"org-b-{uuid.uuid4().hex[:8]}"},
+        json={"name": "Org Bx", "slug": f"org-bx-{uuid.uuid4().hex[:8]}"},
         headers=h_admin,
     )
     assert r_org.status_code == 201, r_org.text
@@ -356,13 +347,12 @@ def test_B_bulk_move_executor_does_not_update_visibility_scope(db_session):
         headers=h_admin_org,
     )
     agent_id = r_agent.json()["agent_id"]
-
     r_mb = client.post(
         "/memory-blocks/",
         json={
             "agent_id": agent_id,
             "conversation_id": str(uuid.uuid4()),
-            "content": f"ORG_DATA_LEAK_{uuid.uuid4().hex}",
+            "content": f"ORG_BX_{uuid.uuid4().hex}",
             "visibility_scope": "organization",
             "organization_id": str(org_id),
         },
@@ -371,48 +361,57 @@ def test_B_bulk_move_executor_does_not_update_visibility_scope(db_session):
     assert r_mb.status_code == 201, r_mb.text
     mb_id = uuid.UUID(r_mb.json()["id"])
 
-    # Reproduce the executor's exact write logic in a fresh session to avoid
-    # poisoning the conftest session.
+    # Run the executor in a fresh session to avoid the conftest's transactional
+    # session getting in the way of asyncio commits.
     bind = db_session.get_bind()
     LocalSession = sessionmaker(bind=bind, autoflush=False, autocommit=False)
     s2 = LocalSession()
     try:
-        mb = s2.query(models.MemoryBlock).filter(models.MemoryBlock.id == mb_id).first()
-        assert mb is not None, "Memory block should be visible from the fresh session."
-        # NOTE: the executor does NOT touch visibility_scope. Mirror that.
-        mb.organization_id = None
-        mb.owner_user_id = carol_id
-        leaked_silently = False
-        try:
-            s2.commit()
-            leaked_silently = True
-        except IntegrityError as e:
-            s2.rollback()
-            assert "ck_memory_blocks_org_has_org" in str(e), (
-                f"Expected the org-has-org check constraint to fire; got: {e}"
-            )
-        assert not leaked_silently, (
-            "REGRESSION: the executor's UPDATE was accepted by the DB. The "
-            "ck_memory_blocks_org_has_org constraint that currently saves us "
-            "has been weakened/removed, and `_move_memory_blocks` is missing "
-            "both (a) destination_owner_user_id validation and (b) a "
-            "visibility_scope update. This is now an exploitable silent leak."
+        task = BulkOperationTask(
+            operation_id=uuid.uuid4(),
+            task_type="bulk_move",
+            actor_user_id=admin_id,
+            organization_id=org_id,
+            payload={},
         )
+        errors: list = []
+        moved = asyncio.run(
+            task._move_memory_blocks(
+                db=s2,
+                org_id=org_id,
+                dest_org_id=None,
+                dest_owner_id=admin_id,  # admin moves the org's data to their own personal scope
+                errors=errors,
+            )
+        )
+        assert errors == [], f"Move errors: {errors}"
+        assert moved == 1
     finally:
         s2.close()
 
+    db_session.expire_all()
+    mb = db_session.query(models.MemoryBlock).filter(models.MemoryBlock.id == mb_id).first()
+    assert mb is not None
+    assert mb.visibility_scope == "personal", (
+        f"Executor must update visibility_scope to 'personal' on org→personal moves; got {mb.visibility_scope}"
+    )
+    assert str(mb.owner_user_id) == str(admin_id)
+    assert mb.organization_id is None
 
-def test_B_bulk_move_api_accepts_arbitrary_destination_owner_dry_run(db_session):
+
+def test_B_bulk_move_api_rejects_destination_owner_other_than_actor(db_session):
     """
-    Independent reproduction at the API layer: the bulk-move dry-run path runs
-    synchronously and is allowed even when destination_owner_user_id is a
-    user the actor has no relationship with. This proves the *authorisation*
-    half of the bug — the recipient's identity is never validated.
+    Regression guard for B (auth half): a non-superadmin must not be able to
+    set destination_owner_user_id to anyone but themselves. This blocks the
+    "org admin dumps org data into a stranger's personal scope" path.
+    Moving to the actor's own personal scope is still allowed.
     """
     h_admin = _h("orgadmin-b2", scope="personal")
     h_carol = _h("carol-b2", scope="personal")
     client = _client()
+    admin_info = client.get("/user-info", headers=h_admin).json()
     carol_info = client.get("/user-info", headers=h_carol).json()
+    admin_id = admin_info["user_id"]
     carol_id = carol_info["user_id"]
 
     r_org = client.post(
@@ -423,7 +422,7 @@ def test_B_bulk_move_api_accepts_arbitrary_destination_owner_dry_run(db_session)
     assert r_org.status_code == 201, r_org.text
     org_id = r_org.json()["id"]
 
-    # Dry-run accepts arbitrary recipient with no relationship to actor or org.
+    # Negative case: arbitrary recipient (carol) is rejected.
     r = client.post(
         f"/bulk-operations/organizations/{org_id}/bulk-move",
         json={
@@ -433,10 +432,22 @@ def test_B_bulk_move_api_accepts_arbitrary_destination_owner_dry_run(db_session)
         },
         headers=h_admin,
     )
-    assert r.status_code == 200, (
-        f"BUG NOT REPRODUCED: bulk-move dry-run with arbitrary destination_owner_user_id "
-        f"was rejected (status={r.status_code}): {r.text}"
+    assert r.status_code == 403, (
+        f"REGRESSION (B): non-superadmin admin was permitted to set "
+        f"destination_owner_user_id to a third-party user. Status={r.status_code}: {r.text}"
     )
+
+    # Positive case: actor moves to their own personal scope.
+    r2 = client.post(
+        f"/bulk-operations/organizations/{org_id}/bulk-move",
+        json={
+            "destination_owner_user_id": admin_id,
+            "resource_types": ["memory_blocks"],
+            "dry_run": True,
+        },
+        headers=h_admin,
+    )
+    assert r2.status_code == 200, r2.text
 
 
 # ---------------------------------------------------------------------------

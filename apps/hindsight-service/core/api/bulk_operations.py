@@ -68,6 +68,24 @@ async def bulk_move(
     if destination_organization_id and destination_owner_user_id:
         raise HTTPException(status_code=422, detail="Cannot specify both destination_organization_id and destination_owner_user_id")
 
+    # Recipient consent: a non-superadmin actor may only move data to *their own*
+    # personal scope. Otherwise the bulk-move endpoint can be used to dump org
+    # data into an unrelated user's personal scope without that user's knowledge.
+    if destination_owner_user_id:
+        try:
+            dest_user_uuid = (
+                destination_owner_user_id if isinstance(destination_owner_user_id, uuid.UUID)
+                else uuid.UUID(str(destination_owner_user_id))
+            )
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid destination_owner_user_id")
+        if not current_user.get("is_superadmin"):
+            if dest_user_uuid != getattr(user, "id", None):
+                raise HTTPException(
+                    status_code=403,
+                    detail="destination_owner_user_id must match the requesting user (only superadmins may move to a different user's personal scope)",
+                )
+
     # Helper: robust membership check that tolerates different shapes and definitively verifies via DB.
     def _has_membership(_org_id) -> bool:
         try:

@@ -182,17 +182,26 @@ class BulkOperationTask:
             return await self._delete_keywords(db, org_id, errors)
         return 0
 
+    @staticmethod
+    def _destination_visibility_scope(dest_org_id, dest_owner_id) -> str:
+        # Org→org: stays organization. Org→personal (no dest_org): becomes personal.
+        # Without this, rows produce visibility_scope='organization' AND
+        # organization_id=NULL, which violates the ck_*_org_has_org constraints.
+        return "organization" if dest_org_id is not None else "personal"
+
     async def _move_agents(self, db: Session, org_id: uuid.UUID,
                           dest_org_id: Optional[uuid.UUID], dest_owner_id: Optional[uuid.UUID],
                           errors: list) -> int:
         """Move agents with proper error handling."""
         agents = db.query(models.Agent).filter(models.Agent.organization_id == org_id).all()
         moved_count = 0
+        new_scope = self._destination_visibility_scope(dest_org_id, dest_owner_id)
 
         for agent in agents:
             try:
                 agent.organization_id = dest_org_id
                 agent.owner_user_id = dest_owner_id
+                agent.visibility_scope = new_scope
                 db.commit()
                 moved_count += 1
             except (StaleDataError, ObjectDeletedError) as e:
@@ -201,7 +210,7 @@ class BulkOperationTask:
             except Exception as e:
                 db.rollback()
                 errors.append(f"Failed to move agent {agent.agent_id}: {e}")
-        
+
         return moved_count
 
     async def _move_memory_blocks(self, db: Session, org_id: uuid.UUID,
@@ -210,11 +219,13 @@ class BulkOperationTask:
         """Move memory blocks with proper error handling."""
         memory_blocks = db.query(models.MemoryBlock).filter(models.MemoryBlock.organization_id == org_id).all()
         moved_count = 0
+        new_scope = self._destination_visibility_scope(dest_org_id, dest_owner_id)
 
         for mb in memory_blocks:
             try:
                 mb.organization_id = dest_org_id
                 mb.owner_user_id = dest_owner_id
+                mb.visibility_scope = new_scope
                 db.commit()
                 moved_count += 1
             except (StaleDataError, ObjectDeletedError) as e:
@@ -223,7 +234,7 @@ class BulkOperationTask:
             except Exception as e:
                 db.rollback()
                 errors.append(f"Failed to move memory block {mb.id}: {e}")
-        
+
         return moved_count
 
     async def _move_keywords(self, db: Session, org_id: uuid.UUID,
@@ -232,11 +243,13 @@ class BulkOperationTask:
         """Move keywords with proper error handling."""
         keywords = db.query(models.Keyword).filter(models.Keyword.organization_id == org_id).all()
         moved_count = 0
+        new_scope = self._destination_visibility_scope(dest_org_id, dest_owner_id)
 
         for keyword in keywords:
             try:
                 keyword.organization_id = dest_org_id
                 keyword.owner_user_id = dest_owner_id
+                keyword.visibility_scope = new_scope
                 db.commit()
                 moved_count += 1
             except (StaleDataError, ObjectDeletedError) as e:
@@ -245,7 +258,7 @@ class BulkOperationTask:
             except Exception as e:
                 db.rollback()
                 errors.append(f"Failed to move keyword {keyword.keyword_id}: {e}")
-        
+
         return moved_count
 
     async def _delete_agents(self, db: Session, org_id: uuid.UUID, errors: list) -> int:
