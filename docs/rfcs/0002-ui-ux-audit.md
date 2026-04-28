@@ -1,6 +1,6 @@
 # RFC 0002: UI/UX audit — bugs, polish, and responsive fixes
 
-- Status: Proposed (rev 2 after multi-agent review)
+- Status: In progress (rev 2 after multi-agent review)
 - Date: 2026-04-28
 - Branch: `feature/about-window`
 - Method: Playwright drive of `localhost:3010` (DEV_MODE) at three viewports
@@ -10,6 +10,34 @@
   for desktop. Re-running after fixes lets us diff frame-for-frame —
   but only after the script's noise mitigations land (see "Audit-script
   fixes" below).
+
+## Implementation status
+
+Updated as PRs land. **Open** = PR up, awaiting review/merge. **Pending** =
+no PR yet.
+
+| Finding | Severity | Status | PR | Notes |
+|---|---|---|---|---|
+| L4 — VITE build args | low | Open | [#51](https://github.com/hindsight-ai/hindsight-ai/pull/51) | Bundled with audit infra (this RFC + skill + RFC 0001 About dialog). |
+| H3 — page-title route map | high | Open | [#52](https://github.com/hindsight-ai/hindsight-ai/pull/52) | 3-line fix; adds `/tokens` and `/memory-optimization-center`. |
+| M6 — Button primitive (token) | medium | Open | [#53](https://github.com/hindsight-ai/hindsight-ai/pull/53) | New `<Button variant="primary">` + migrates `/agents` CTAs. Prerequisite for H1/H2. |
+| H4 — GetStarted seen-flag | high | Open | [#54](https://github.com/hindsight-ai/hindsight-ai/pull/54) | Co-landed with M5. |
+| M5 — Esc + backdrop dismiss | medium | Open | [#54](https://github.com/hindsight-ai/hindsight-ai/pull/54) | Co-landed with H4. |
+| H1 — Legacy classes (6+ files) | high | Pending | — | Consumes M6's `<Button>`. RFC suggests possibly splitting into pages-vs-modals PRs. |
+| H2 — Empty Tailwind layer | high | Pending | — | Pair with H1 (same file group). |
+| M1 — Scroll model rewrite | medium | Pending | — | Touches `MainContent.tsx`; manual smoke-test of every header-anchored popover required. |
+| M2 — OrgSwitcher truncate | medium | Pending | — | Lands after M1. |
+| M3 — Tokens table overflow | medium | Pending | — | Lands after M1. |
+| M4 — Sidebar drawer width | medium | Pending | — | Lands after M1. |
+| L1 — Console error triage | low | Pending | — | Needs full-capture audit run first to decide promotion. |
+| L2 — Stat card icon style | low | Pending | — | Polish. |
+| L3a — Refresh aria-label | low | Pending | — | Polish. |
+| L3b — Notification icon | low | Deferred | — | Punted: needs product input. |
+
+**Audit infrastructure** (lands in #51): the `.claude/skills/ui-ux-audit/`
+skill, screenshot baseline at `docs/rfcs/0002-audit-screenshots/`, the
+GetStarted aria-label contract test. Re-run the audit script after each
+finding lands; `findings.json` should shrink by the named entries.
 
 ## Executive summary
 
