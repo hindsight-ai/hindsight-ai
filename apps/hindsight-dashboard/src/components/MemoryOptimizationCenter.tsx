@@ -560,7 +560,7 @@ const MemoryOptimizationCenter: FC = () => {
 
     return (
       <Portal>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm overflow-y-auto h-full w-full z-50">
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm overflow-y-auto overscroll-contain h-full w-full z-50">
         <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
           <div className="mt-3">
             {/* Header */}
@@ -597,7 +597,7 @@ const MemoryOptimizationCenter: FC = () => {
               <h4 className="text-lg font-medium text-gray-900 mb-3">
                 Affected Memory Blocks ({suggestion.affected_blocks?.length || 0})
               </h4>
-              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+              <div className="max-h-64 overflow-y-auto overscroll-contain border border-gray-200 rounded-lg">
                 {(suggestion.affected_blocks || []).length === 0 ? (
                   <div className="p-4 text-center text-gray-500">
                     No memory blocks specified for this suggestion.

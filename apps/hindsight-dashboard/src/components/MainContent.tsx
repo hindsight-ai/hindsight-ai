@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import UserAccountButton from './UserAccountButton';
 import OrganizationSwitcher from './OrganizationSwitcher';
 import NotificationBell from './NotificationBell';
@@ -9,22 +9,21 @@ import PageHeaderContext, { PageHeaderConfig } from '../context/PageHeaderContex
 interface MainContentProps {
   children: React.ReactNode;
   title: string;
-  sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   onOpenAbout?: () => void;
   onOpenHelp?: () => void;
 }
 
-const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarCollapsed, toggleSidebar, onOpenAbout, onOpenHelp }) => {
+const MainContent: React.FC<MainContentProps> = ({ children, title, toggleSidebar, onOpenAbout, onOpenHelp }) => {
   const { guest } = useAuth();
   const location = useLocation();
-  const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  // Document is the scroller post-M1, so route changes scroll the window.
   useEffect(() => {
-    if (scrollRef.current) {
-      try { scrollRef.current.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch { scrollRef.current.scrollTop = 0; }
-    } else {
-      try { window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); } catch {}
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    } catch {
+      window.scrollTo(0, 0);
     }
   }, [location.pathname, location.search]);
 
@@ -67,8 +66,16 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
 
   return (
     <PageHeaderContext.Provider value={headerContextValue}>
-      <main className={`flex-1 flex flex-col overflow-hidden bg-gray-50 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'lg:p-4' : 'lg:p-4'}`}>
-        <header className="p-4">
+      <main className="bg-gray-50 min-h-[100dvh]">
+        {/*
+          Sticky header: z-10 creates a stacking context that sits above
+          page content (which is at z-auto) but below the sidebar drawer
+          (z-50) and modal Portals (z-50/z-[9999]). Header-anchored
+          dropdowns (OrgSwitcher z-20, NotificationDropdown z-50,
+          UserAccountButton z-20) stack within this header context, so
+          they paint above page content as expected.
+        */}
+        <header className="sticky top-0 z-10 bg-gray-50 p-4 border-b border-gray-200">
           <div className={containerClasses}>
             {/* Row 1: organization left, actions right (single row across sizes) */}
             <div className="flex items-center justify-between gap-2">
@@ -117,7 +124,7 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
           </div>
           </div>
         </header>
-        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4">
+        <div className="p-4">
           <div className={containerClasses}>
             {children}
           </div>

@@ -20,20 +20,21 @@ const Layout: React.FC<LayoutProps> = ({ children, title, onOpenAbout, onToggleD
   const handleSidebarCollapse = (collapsed: boolean) => setSidebarCollapsed(collapsed);
 
   return (
-    <div className="flex min-h-[100dvh] bg-gray-100 overflow-hidden">
-      <div className="fixed left-0 top-0 h-full z-10">
-        <Sidebar 
-          isOpen={sidebarOpen} 
-          onClose={closeSidebar} 
-          onCollapseChange={handleSidebarCollapse} 
-          onToggleDebugPanel={VITE_DEV_MODE ? onToggleDebugPanel : undefined} 
-        />
-      </div>
-      <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${sidebarCollapsed ? 'lg:ml-16 ml-0' : 'lg:ml-64 ml-0'}`}>
+    // No outer overflow-hidden / flex-column wrap: the document is now the
+    // scroller (RFC 0002 M1). Mobile address-bar tap, browser scroll
+    // restoration, and overscroll bounce all need the body to be the
+    // scrolling element. Sidebar stays fixed; main flows naturally.
+    <div className="min-h-[100dvh] bg-gray-100">
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={closeSidebar}
+        onCollapseChange={handleSidebarCollapse}
+        onToggleDebugPanel={VITE_DEV_MODE ? onToggleDebugPanel : undefined}
+      />
+      <div className={sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}>
         <MainContent
           title={title}
           toggleSidebar={toggleSidebar}
-          sidebarCollapsed={sidebarCollapsed}
           onOpenAbout={onOpenAbout}
           onOpenHelp={onOpenGetStarted}
         >

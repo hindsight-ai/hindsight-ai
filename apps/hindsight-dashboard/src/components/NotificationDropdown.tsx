@@ -176,7 +176,7 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onClose, on
         </div>
 
         {/* Notification List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overscroll-contain">
           {loading && notifications.length === 0 ? (
             <div className="p-4 text-center">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto"></div>

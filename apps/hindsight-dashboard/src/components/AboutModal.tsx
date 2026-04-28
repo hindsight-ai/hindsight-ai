@@ -235,7 +235,7 @@ const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           role="dialog"
           aria-modal="true"
           aria-labelledby="about-modal-title"
-          className="bg-white rounded-lg shadow-xl w-full mx-4 max-h-[90vh] overflow-y-auto max-w-2xl md:max-w-3xl"
+          className="bg-white rounded-lg shadow-xl w-full mx-4 max-h-[90vh] overflow-y-auto overscroll-contain max-w-2xl md:max-w-3xl"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between p-6 border-b border-gray-200">

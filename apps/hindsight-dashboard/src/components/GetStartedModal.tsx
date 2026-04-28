@@ -605,7 +605,7 @@ const GetStartedModal: React.FC<GetStartedModalProps> = ({ isOpen, onClose, onAc
             </button>
           </header>
 
-          <div className="px-6 py-6 space-y-8 overflow-y-auto max-h-[80vh]">
+          <div className="px-6 py-6 space-y-8 overflow-y-auto overscroll-contain max-h-[80vh]">
             <section>
               <h3 className="text-lg font-semibold text-gray-900">Prepare your Hindsight workspace</h3>
               <ol className="mt-4 space-y-4 text-sm text-gray-700 list-decimal list-inside">
