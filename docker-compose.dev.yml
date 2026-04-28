@@ -46,6 +46,14 @@ services:
   # Override the hindsight-dashboard to expose port 3000 directly
   hindsight-dashboard:
     restart: unless-stopped
+    build:
+      context: ./apps/hindsight-dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_VERSION: ${VITE_VERSION:-${FRONTEND_VERSION:-dev}}
+        VITE_BUILD_SHA: ${VITE_BUILD_SHA:-${FRONTEND_BUILD_SHA:-unknown}}
+        VITE_BUILD_TIMESTAMP: ${VITE_BUILD_TIMESTAMP:-${BUILD_TIMESTAMP:-unknown}}
+        VITE_DASHBOARD_IMAGE_TAG: ${VITE_DASHBOARD_IMAGE_TAG:-hindsight-dashboard:local}
     ports:
       - "3000:80"
     environment:
