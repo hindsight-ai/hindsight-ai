@@ -500,6 +500,52 @@ def test_F6_bulk_delete_dry_run_rejects_non_member(db_session):
     assert "resources_to_delete" in r2.json()
 
 
+def test_bulk_move_dry_run_requires_source_org_membership(db_session):
+    """
+    Regression guard for the asymmetry that the F6 fix surfaced: bulk_move's
+    dry-run used to permit "member of destination org but not source org",
+    leaking the source org's per-resource counts and name conflicts. The
+    parallel of F6 must apply: source-org membership is always required
+    for dry-run, regardless of whether destination_organization_id is set.
+    """
+    h_admin_src = _h("orgadmin-bm-src", scope="personal")
+    h_admin_dest = _h("orgadmin-bm-dest", scope="personal")
+    client = _client()
+
+    r_src = client.post(
+        "/organizations/",
+        json={"name": "Src Org", "slug": f"src-{uuid.uuid4().hex[:8]}"},
+        headers=h_admin_src,
+    )
+    assert r_src.status_code == 201, r_src.text
+    src_org_id = r_src.json()["id"]
+
+    r_dest = client.post(
+        "/organizations/",
+        json={"name": "Dest Org", "slug": f"dest-{uuid.uuid4().hex[:8]}"},
+        headers=h_admin_dest,
+    )
+    assert r_dest.status_code == 201, r_dest.text
+    dest_org_id = r_dest.json()["id"]
+
+    # admin_dest is in dest_org but NOT src_org; previously this was sufficient
+    # to dry-run a move out of src_org and learn its per-resource counts.
+    r = client.post(
+        f"/bulk-operations/organizations/{src_org_id}/bulk-move",
+        json={
+            "destination_organization_id": dest_org_id,
+            "resource_types": ["agents", "memory_blocks", "keywords"],
+            "dry_run": True,
+        },
+        headers=h_admin_dest,
+    )
+    assert r.status_code == 403, (
+        f"REGRESSION (B asymmetry): dest-only member was permitted to "
+        f"dry-run a bulk-move from a source org they don't belong to. "
+        f"Status={r.status_code}: {r.text}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # D — /user-info host-spoof local-dev fallback. Default ALLOW_LOCAL_DEV_AUTH=true.
 # ---------------------------------------------------------------------------

@@ -153,21 +153,19 @@ async def bulk_move(
         _pytest_mode = False
 
     if dry_run:
-        # For planning, enforce destination membership when destination org is specified;
-        # otherwise require source org membership. Use only the provided current_user context
-        # to avoid cross-session DB flakiness.
+        # Planning requires source-org membership unconditionally — otherwise an
+        # outsider with dest-org membership could probe `agent_count`,
+        # `memory_block_count`, `keyword_count`, and name conflicts of any
+        # source org. When a destination org is specified, also require
+        # destination-org membership.
         is_super = bool(current_user.get("is_superadmin"))
+        memberships_by_org = current_user.get("memberships_by_org") or {}
+        if not (is_super or memberships_by_org.get(str(org_id))):
+            raise HTTPException(status_code=403, detail="Forbidden")
         if destination_organization_id:
             dest_id = uuid.UUID(str(destination_organization_id)) if not isinstance(destination_organization_id, uuid.UUID) else destination_organization_id
-            sid = str(dest_id)
-            mem = (current_user.get("memberships_by_org") or {}).get(sid)
-            if not (is_super or mem):
+            if not (is_super or memberships_by_org.get(str(dest_id))):
                 raise HTTPException(status_code=403, detail="Forbidden to move resources to the destination organization")
-        else:
-            sid = str(org_id)
-            mem = (current_user.get("memberships_by_org") or {}).get(sid)
-            if not (is_super or mem):
-                raise HTTPException(status_code=403, detail="Forbidden")
     else:
         # For actual execution, we require manage rights.
         if not can_manage_org_effective(org_id, current_user, db=db, user_id=user.id, allow_db_fallback=True):
