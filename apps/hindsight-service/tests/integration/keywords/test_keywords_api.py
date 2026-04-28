@@ -6,10 +6,14 @@ client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 # Helper to build auth headers
 
-def auth(email="user@example.com", name="User"):
+def auth(email="user@example.com", name=None):
+    # Use the email as the X-Auth-Request-User default so different emails
+    # imply different external_subjects. Real OIDC subs are unique per
+    # account; the previous shared-name default was a test-only quirk that
+    # collided with the new partial-unique index on users.external_subject.
     return {
         "x-auth-request-email": email,
-        "x-auth-request-user": name,
+        "x-auth-request-user": name or email,
     }
 
 def test_create_personal_keyword():
