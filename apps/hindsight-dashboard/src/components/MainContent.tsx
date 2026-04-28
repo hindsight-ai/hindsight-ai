@@ -56,6 +56,7 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
     Support: 'Find help resources and reach out for assistance with Hindsight AI.',
     Profile: 'Update your personal details and notification preferences.',
     Tokens: 'Create and manage API tokens for integrations and automations.',
+    'AI Optimization': 'Review AI-generated suggestions to compact, merge, or archive memory blocks.',
     'Memory Block Detail': 'Inspect the full contents and metadata for a specific memory block.',
     'Consolidation Detail': 'Inspect a consolidation suggestion in depth before making changes.'
   }), []);

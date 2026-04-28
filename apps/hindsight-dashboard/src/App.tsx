@@ -287,6 +287,7 @@ function AppContent() {
     const routeMap: Record<string, string> = {
       '/dashboard': 'Dashboard',
       '/profile': 'Profile',
+      '/tokens': 'Tokens',
       '/memory-blocks': 'Memory Blocks',
       '/keywords': 'Keywords',
       '/agents': 'Agents',
@@ -294,6 +295,7 @@ function AppContent() {
       '/consolidation-suggestions': 'Consolidation',
       '/archived-memory-blocks': 'Archived',
       '/pruning-suggestions': 'Pruning',
+      '/memory-optimization-center': 'AI Optimization',
       '/support': 'Support'
     };
     if (pathname.startsWith('/memory-blocks/')) return 'Memory Block Detail';
