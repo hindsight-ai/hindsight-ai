@@ -1,0 +1,16 @@
+[
+  {
+    "severity": "medium",
+    "route": "/dashboard",
+    "viewport": "desktop",
+    "title": "GetStarted modal does not dismiss on backdrop click",
+    "detail": "The Portal overlay swallows the click but the close handler is only on the X button."
+  },
+  {
+    "severity": "medium",
+    "route": "/dashboard",
+    "viewport": "desktop",
+    "title": "GetStarted modal does not close on Escape",
+    "detail": "No keydown handler bound to Escape; user must hit X or scroll to \"Got it\"."
+  }
+]
