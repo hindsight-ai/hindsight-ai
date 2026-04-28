@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getConsolidationSuggestionById, validateConsolidationSuggestion, rejectConsolidationSuggestion } from '../api/memoryService';
-import memoryService from '../api/memoryService'; // To fetch original memory blocks
+import memoryService from '../api/memoryService';
 import { UIMemoryBlock } from '../types/domain';
+import Button from './Button';
 
 interface ConsolidationSuggestion {
   suggestion_id: string;
@@ -36,7 +37,7 @@ const ConsolidationSuggestionDetail: React.FC = () => {
         const fetchedOriginalMemories: UIMemoryBlock[] = await Promise.all(
           suggestionData.original_memory_ids.map((memoryId: string) => memoryService.getMemoryBlockById(memoryId))
         );
-        setOriginalMemories(fetchedOriginalMemories.filter(Boolean)); // Filter out any null/undefined results
+        setOriginalMemories(fetchedOriginalMemories.filter(Boolean));
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -53,11 +54,10 @@ const ConsolidationSuggestionDetail: React.FC = () => {
 
   const handleValidate = async (): Promise<void> => {
     if (!id) return;
-
     try {
       await validateConsolidationSuggestion(id);
       alert('Suggestion validated successfully.');
-      navigate('/consolidation-suggestions'); // Go back to list after action
+      navigate('/consolidation-suggestions');
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       alert(`Failed to validate suggestion. Error: ${errorMessage}`);
@@ -67,11 +67,10 @@ const ConsolidationSuggestionDetail: React.FC = () => {
 
   const handleReject = async (): Promise<void> => {
     if (!id) return;
-
     try {
       await rejectConsolidationSuggestion(id);
       alert('Suggestion rejected successfully.');
-      navigate('/consolidation-suggestions'); // Go back to list after action
+      navigate('/consolidation-suggestions');
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       alert(`Failed to reject suggestion. Error: ${errorMessage}`);
@@ -79,51 +78,100 @@ const ConsolidationSuggestionDetail: React.FC = () => {
     }
   };
 
-  if (loading) return <p className="loading-message">Loading suggestion details...</p>;
-  if (error) return <p className="error-message">Error: {error}</p>;
-  if (!suggestion) return <p className="empty-state-message">Suggestion not found.</p>;
+  if (loading) {
+    return (
+      <p className="px-6 py-4 text-sm text-gray-500" data-testid="loading-message">
+        Loading suggestion details...
+      </p>
+    );
+  }
+  if (error) {
+    return (
+      <p
+        className="mx-6 my-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        data-testid="error-message"
+      >
+        Error: {error}
+      </p>
+    );
+  }
+  if (!suggestion) {
+    return (
+      <p className="px-6 py-4 text-sm text-gray-500" data-testid="empty-state-message">
+        Suggestion not found.
+      </p>
+    );
+  }
 
   return (
-    <div className="memory-block-list-container"> {/* Reusing container style */}
-      <div className="data-table-container"> {/* Reusing card style */}
-        <h2>Consolidation Suggestion Details</h2>
-        <div className="detail-section">
-          <h3>Suggested Content</h3>
-          <p>{suggestion.suggested_content}</p>
-        </div>
+    <div className="flex flex-col gap-4 p-4 sm:p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
+        <h2 className="text-xl font-semibold text-gray-900">Consolidation Suggestion Details</h2>
 
-        <div className="detail-section">
-          <h3>Original Memories ({originalMemories.length})</h3>
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium text-gray-700">Suggested Content</h3>
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{suggestion.suggested_content}</p>
+        </section>
+
+        <section className="space-y-3">
+          <h3 className="text-sm font-medium text-gray-700">
+            Original Memories ({originalMemories.length})
+          </h3>
           {originalMemories.length > 0 ? (
-            <div className="original-memories-list">
+            <div className="space-y-3">
               {originalMemories.map((memory, index) => (
-                <div key={memory.id} className="memory-block-item">
-                  <h4>Memory Block {index + 1}: {memory.id.slice(0, 8)}...</h4>
-                  <p><strong>Lessons Learned:</strong> {memory.lessons_learned}</p>
-                  <p><strong>Content:</strong> {memory.content}</p>
-                  <p><strong>Keywords:</strong> {memory.keywords ? memory.keywords.map((k: any) => k.keyword_text || k.keyword).join(', ') : 'None'}</p>
-                  <p><strong>Created At:</strong> {memory.created_at ? new Date(memory.created_at).toLocaleString() : 'Unknown'}</p>
-                  {/* Add more details as needed */}
-                  <button onClick={() => navigate(`/memory-blocks/${memory.id}`)} className="action-icon-button view-edit-button" title="View Original Memory Block">
-                    👁️ View Original
-                  </button>
+                <div
+                  key={memory.id}
+                  className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2"
+                >
+                  <h4 className="text-sm font-semibold text-gray-800">
+                    Memory Block {index + 1}: {memory.id.slice(0, 8)}…
+                  </h4>
+                  <p className="text-sm text-gray-700">
+                    <strong className="font-medium text-gray-900">Lessons Learned:</strong>{' '}
+                    {memory.lessons_learned}
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <strong className="font-medium text-gray-900">Content:</strong> {memory.content}
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <strong className="font-medium text-gray-900">Keywords:</strong>{' '}
+                    {memory.keywords ? memory.keywords.map((k: any) => k.keyword_text || k.keyword).join(', ') : 'None'}
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <strong className="font-medium text-gray-900">Created At:</strong>{' '}
+                    {memory.created_at ? new Date(memory.created_at).toLocaleString() : 'Unknown'}
+                  </p>
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate(`/memory-blocks/${memory.id}`)}
+                    title="View Original Memory Block"
+                  >
+                    View Original
+                  </Button>
                 </div>
               ))}
             </div>
           ) : (
-            <p>No original memories found for this suggestion.</p>
+            <p className="text-sm text-gray-500">No original memories found for this suggestion.</p>
           )}
-        </div>
+        </section>
 
-        <div className="detail-actions">
+        <footer className="flex flex-wrap gap-3 pt-4 border-t border-gray-200">
           {suggestion.status === 'pending' && (
             <>
-              <button onClick={handleValidate} className="add-button">Validate Suggestion</button>
-              <button onClick={handleReject} className="remove-button">Reject Suggestion</button>
+              <Button onClick={handleValidate}>Validate Suggestion</Button>
+              <Button variant="secondary" onClick={handleReject}>Reject Suggestion</Button>
             </>
           )}
-          <button onClick={() => navigate('/consolidation-suggestions')} className="secondary-button">Back to Suggestions</button>
-        </div>
+          <Button
+            variant="secondary"
+            onClick={() => navigate('/consolidation-suggestions')}
+            className="ml-auto"
+          >
+            Back to Suggestions
+          </Button>
+        </footer>
       </div>
     </div>
   );
