@@ -13,18 +13,18 @@
 
 ## Implementation status
 
-Updated as PRs land. **Open** = PR up, awaiting review/merge. **Pending** =
-no PR yet.
+Updated as PRs land. **Merged** = on `integration/rfc-0002-batch-1` (or
+`staging`); **Open** = PR up, awaiting review/merge; **Pending** = no PR yet.
 
 | Finding | Severity | Status | PR | Notes |
 |---|---|---|---|---|
-| L4 — VITE build args | low | Open | [#51](https://github.com/hindsight-ai/hindsight-ai/pull/51) | Bundled with audit infra (this RFC + skill + RFC 0001 About dialog). |
-| H3 — page-title route map | high | Open | [#52](https://github.com/hindsight-ai/hindsight-ai/pull/52) | 3-line fix; adds `/tokens` and `/memory-optimization-center`. |
-| M6 — Button primitive (token) | medium | Open | [#53](https://github.com/hindsight-ai/hindsight-ai/pull/53) | New `<Button variant="primary">` + migrates `/agents` CTAs. Prerequisite for H1/H2. |
-| H4 — GetStarted seen-flag | high | Open | [#54](https://github.com/hindsight-ai/hindsight-ai/pull/54) | Co-landed with M5. |
-| M5 — Esc + backdrop dismiss | medium | Open | [#54](https://github.com/hindsight-ai/hindsight-ai/pull/54) | Co-landed with H4. |
-| H1 — Legacy classes (6+ files) | high | Pending | — | Consumes M6's `<Button>`. RFC suggests possibly splitting into pages-vs-modals PRs. |
-| H2 — Empty Tailwind layer | high | Pending | — | Pair with H1 (same file group). |
+| L4 — VITE build args | low | Merged (integration) | [#51](https://github.com/hindsight-ai/hindsight-ai/pull/51) | Bundled with audit infra (this RFC + skill + RFC 0001 About dialog). |
+| H3 — page-title route map | high | Merged (staging — slipped) | [#52](https://github.com/hindsight-ai/hindsight-ai/pull/52) | Targeted integration but `gh pr edit --base` failed silently; CI was cancelled. |
+| M6 — Button primitive (token) | medium | Merged (integration) | [#53](https://github.com/hindsight-ai/hindsight-ai/pull/53) | New `<Button variant="primary">` + migrates `/agents` CTAs. |
+| H4 — GetStarted seen-flag | high | Merged (integration) | [#54](https://github.com/hindsight-ai/hindsight-ai/pull/54) | Co-landed with M5. |
+| M5 — Esc + backdrop dismiss | medium | Merged (integration) | [#54](https://github.com/hindsight-ai/hindsight-ai/pull/54) | Co-landed with H4. |
+| H1+H2 — modals half | high | Merged (integration) | [#55](https://github.com/hindsight-ai/hindsight-ai/pull/55) | `Add{Keyword,MemoryBlock}Modal` rewritten with Tailwind; `<Button>` gains `secondary` variant. |
+| H1+H2 — pages half | high | Pending | — | `MemoryBlockList`, `Consolidation*`, `Pruning*`. Has dead-code complications (duplicate empty-state markup) requiring design decisions. |
 | M1 — Scroll model rewrite | medium | Pending | — | Touches `MainContent.tsx`; manual smoke-test of every header-anchored popover required. |
 | M2 — OrgSwitcher truncate | medium | Pending | — | Lands after M1. |
 | M3 — Tokens table overflow | medium | Pending | — | Lands after M1. |
@@ -38,6 +38,13 @@ no PR yet.
 skill, screenshot baseline at `docs/rfcs/0002-audit-screenshots/`, the
 GetStarted aria-label contract test. Re-run the audit script after each
 finding lands; `findings.json` should shrink by the named entries.
+
+### Promotion path to staging
+
+Integration branch `integration/rfc-0002-batch-1` accumulates all the
+above. When ready, a single merge `integration → staging` ships the
+whole batch with one CI run. `#52` is already on staging out-of-band;
+the merge will detect that commit and auto-skip it.
 
 ## Executive summary
 
