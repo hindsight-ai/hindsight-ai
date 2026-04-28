@@ -156,12 +156,13 @@ def test_F2_email_collision_grants_account_takeover(db_session):
 # ---------------------------------------------------------------------------
 
 
-def test_F1_guest_basic_search_with_agent_id_returns_personal_data(db_session):
+def test_F1_guest_basic_search_with_agent_id_does_not_leak_personal_data(db_session):
     """
-    Per `core/services/search_service.py:1133-1141`, when current_user is None
-    AND agent_id (or conversation_id) is supplied, no visibility filter is
-    applied. A guest hitting /memory-blocks/search/?search_type=basic with a
-    known agent_id therefore receives personal memory blocks.
+    Regression guard for F1: `_basic_search_fallback` must apply the public-only
+    filter for guest callers regardless of whether `agent_id` or
+    `conversation_id` is supplied. The previous carve-out treated those as a
+    permission grant, which let any anonymous caller read personal memory
+    blocks for a known agent.
     """
     secret_content = f"PERSONAL_LEAK_TARGET_{uuid.uuid4().hex}"
     h_alice = _h("alice-leak-target")
@@ -182,14 +183,12 @@ def test_F1_guest_basic_search_with_agent_id_returns_personal_data(db_session):
     )
     assert r.status_code == 200, r.text
     contents = [item["content"] for item in r.json()]
-    assert secret_content in contents, (
-        "BUG NOT REPRODUCED: guest with agent_id should have received the personal "
-        "memory block, but did not. Either the carve-out at search_service.py:1133-1141 "
-        "is gone or the call path no longer reaches it."
+    assert secret_content not in contents, (
+        "REGRESSION (F1): guest with agent_id received a personal memory block. "
+        "_basic_search_fallback must not honor agent_id as a permission grant."
     )
 
-    # Sanity: same call WITHOUT agent_id should fall back to the public-only
-    # branch and return nothing for this personal block.
+    # Same call without agent_id was the previously-correct branch and must stay safe.
     r2 = guest.get(
         "/memory-blocks/search/",
         params={
@@ -199,9 +198,22 @@ def test_F1_guest_basic_search_with_agent_id_returns_personal_data(db_session):
         },
     )
     assert r2.status_code == 200, r2.text
-    contents2 = [item["content"] for item in r2.json()]
-    assert secret_content not in contents2, (
-        "Sanity check failed: the no-agent_id guest branch should be public-only."
+    assert secret_content not in [item["content"] for item in r2.json()]
+
+    # Authenticated user reading their own data through the same path still works.
+    r3 = client_authed.get(
+        "/memory-blocks/search/",
+        params={
+            "keywords": "PERSONAL_LEAK_TARGET",
+            "agent_id": agent_id,
+            "search_type": "basic",
+            "limit": 50,
+        },
+        headers=h_alice,
+    )
+    assert r3.status_code == 200, r3.text
+    assert secret_content in [item["content"] for item in r3.json()], (
+        "Owner should still be able to find their own memory block."
     )
 
 

@@ -1132,13 +1132,8 @@ class SearchService:
         
         # Apply scope filters
         if current_user is None:
-            # Internal callers (e.g., agent tools) may not provide a user context but do
-            # pass an agent/conversation filter. In that case we retain historical
-            # behaviour and search across the agent's entire corpus regardless of
-            # visibility. Only default to public-only results when no scope hints are
-            # supplied.
-            if not agent_id and not conversation_id:
-                query = query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
+            # Guests see public data only, regardless of agent_id/conversation_id hints.
+            query = query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
         else:
             org_ids: List[uuid.UUID] = []
             for m in (current_user.get('memberships') or []):
