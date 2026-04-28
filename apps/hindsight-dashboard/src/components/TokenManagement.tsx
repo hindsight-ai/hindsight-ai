@@ -135,7 +135,7 @@ const TokenManagement: React.FC = () => {
         </div>
       </form>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
         <table className="min-w-full border">
           <thead className="bg-gray-100 text-sm">
             <tr>
