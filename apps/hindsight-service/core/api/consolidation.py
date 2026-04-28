@@ -182,6 +182,15 @@ def validate_consolidation_suggestion_endpoint(
         raise HTTPException(status_code=400, detail="Suggestion is not in pending status")
     if not _user_can_view_suggestion(db, suggestion, current_user):
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+    # Validating a consolidation archives every original and mints a new merged
+    # block. The previous "any one original readable" check let a user trigger
+    # archive of memory blocks they had no write access to. Require write on
+    # every original.
+    if not _user_can_write_suggestion(db, suggestion, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot validate: you must have write access to every original memory block.",
+        )
     # PAT enforcement for write in org context (derive org if applicable)
     try:
         org_id = None
@@ -196,6 +205,13 @@ def validate_consolidation_suggestion_endpoint(
 
     try:
         crud.apply_consolidation(db, suggestion_id=suggestion_id)
+    except crud.ConsolidationOriginalMismatchError as exc:
+        logger.warning("Refused cross-owner consolidation %s: %s", suggestion_id, exc)
+        raise HTTPException(
+            status_code=409,
+            detail="Suggestion bundles originals with different scope/owner/org; cannot consolidate.",
+        )
+    try:
         updated = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
         if not updated:
             raise HTTPException(status_code=404, detail="Updated consolidation suggestion not found")

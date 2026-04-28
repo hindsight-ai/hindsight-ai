@@ -518,6 +518,13 @@ def delete_consolidation_suggestion(db: Session, suggestion_id: uuid.UUID):
         return True
     return False
 
+class ConsolidationOriginalMismatchError(ValueError):
+    """Raised when a consolidation suggestion's originals do not share the
+    same (visibility_scope, owner_user_id, organization_id) tuple. Mixed
+    originals previously caused the new merged block to be minted under
+    `original_memory_ids[0].owner_user_id`, regardless of who validated."""
+
+
 def apply_consolidation(db: Session, suggestion_id: uuid.UUID):
     db_suggestion = db.query(models.ConsolidationSuggestion).filter(models.ConsolidationSuggestion.suggestion_id == suggestion_id).first()
     if db_suggestion and db_suggestion.status == 'pending':
@@ -537,7 +544,30 @@ def apply_consolidation(db: Session, suggestion_id: uuid.UUID):
                         continue
             if not norm_ids:
                 return None
-            first_memory_block = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == norm_ids[0]).first()
+            originals = (
+                db.query(models.MemoryBlock)
+                .filter(models.MemoryBlock.id.in_(norm_ids))
+                .all()
+            )
+            if not originals:
+                return None
+            scope_keys = {
+                (
+                    getattr(o, 'visibility_scope', None),
+                    getattr(o, 'owner_user_id', None),
+                    getattr(o, 'organization_id', None),
+                )
+                for o in originals
+            }
+            if len(scope_keys) > 1:
+                raise ConsolidationOriginalMismatchError(
+                    f"Consolidation suggestion {suggestion_id} bundles memory blocks "
+                    f"with different (scope, owner, org) tuples: {scope_keys}."
+                )
+            first_memory_block = next(
+                (o for o in originals if o.id == norm_ids[0]),
+                originals[0],
+            )
             if first_memory_block:
                 new_memory_block = models.MemoryBlock(
                     agent_id=first_memory_block.agent_id,

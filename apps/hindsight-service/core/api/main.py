@@ -29,6 +29,7 @@ from core.db.database import engine, get_db
 from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
 from core.api.auth import (
+    IdentityMismatchError,
     resolve_identity_from_headers,
     get_or_create_user,
     get_user_memberships,
@@ -37,6 +38,7 @@ from core.api.auth import (
 from core.api.deps import (
     get_current_user_context,
     get_current_user_context_or_pat,
+    get_or_create_user_for_request,
     ensure_pat_allows_write,
     ensure_pat_allows_read,
     get_scoped_user_and_context,
@@ -93,6 +95,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Translate IdentityMismatchError (raised by core.api.auth.get_or_create_user
+# when a request's external_subject does not match the existing User row's
+# bound subject) into a clean 401, regardless of which handler was running.
+# Without this, the exception escaped through ~5 call sites as a 500 with the
+# mismatch detail in the response body.
+@app.exception_handler(IdentityMismatchError)
+async def _identity_mismatch_handler(_request: Request, _exc: IdentityMismatchError):
+    return JSONResponse(
+        {"authenticated": False, "detail": "Authentication denied."},
+        status_code=status.HTTP_401_UNAUTHORIZED,
+    )
 
 # Middleware: enforce read-only for unauthenticated requests
 @app.middleware("http")
@@ -358,18 +373,21 @@ def get_user_info(
         except HTTPException as e:
             return JSONResponse({"authenticated": False, "detail": e.detail}, status_code=e.status_code)
 
-    # Local dev fallback (no oauth, no PAT) when running on localhost
+    # Local dev fallback (no oauth, no PAT). Defaults to OFF; the previous
+    # default-on + Host: localhost* check was spoofable via the Host header
+    # whenever the backend was reachable without Traefik in front of it.
+    # Now we require: explicit opt-in via ALLOW_LOCAL_DEV_AUTH=true AND a
+    # loopback client_ip. The Host header is no longer consulted.
     try:
-        allow_local = os.getenv("ALLOW_LOCAL_DEV_AUTH", "true").lower() == "true"
+        allow_local = os.getenv("ALLOW_LOCAL_DEV_AUTH", "false").lower() == "true"
     except Exception:
-        allow_local = True
-    host = (request.headers.get('host') or '').lower()
+        allow_local = False
     client_ip = None
     try:
         client_ip = request.client.host if request.client else None
     except Exception:
         client_ip = None
-    is_local = allow_local and (host.startswith('localhost') or host.startswith('127.0.0.1') or client_ip in ('127.0.0.1', '::1', None))
+    is_local = allow_local and client_ip in ("127.0.0.1", "::1")
     if is_local and not any([x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email]):
         email = os.getenv('DEV_LOCAL_EMAIL', 'dev@localhost')
         name = os.getenv('DEV_LOCAL_NAME', 'Development User')
@@ -399,7 +417,9 @@ def get_user_info(
     if not email:
         return {"authenticated": True, "user": name or None, "email": None}
 
-    user = get_or_create_user(db, email=email, display_name=name)
+    # IdentityMismatchError is translated to 401 by the global exception
+    # handler at the top of this module.
+    user = get_or_create_user_for_request(db, email=email, name=name)
     memberships = get_user_memberships(db, user.id)
     beta_admin = is_beta_access_admin(user.email) or bool(user.is_superadmin)
     return {
@@ -1071,7 +1091,7 @@ def search_memory_blocks_fulltext_endpoint(
                 x_forwarded_email=x_forwarded_email,
             )
             if email:
-                u = get_or_create_user(db, email=email, display_name=name)
+                u = get_or_create_user_for_request(db, email=email, name=name)
                 memberships = get_user_memberships(db, u.id)
                 current_user = {
                     "id": u.id,
@@ -1153,7 +1173,7 @@ def search_memory_blocks_semantic_endpoint(
             )
             current_user = None
             if email:
-                u = get_or_create_user(db, email=email, display_name=name)
+                u = get_or_create_user_for_request(db, email=email, name=name)
                 memberships = get_user_memberships(db, u.id)
                 current_user = {
                     "id": u.id,
@@ -1261,7 +1281,7 @@ def search_memory_blocks_hybrid_endpoint(
                 x_forwarded_email=x_forwarded_email,
             )
             if email:
-                u = get_or_create_user(db, email=email, display_name=name)
+                u = get_or_create_user_for_request(db, email=email, name=name)
                 memberships = get_user_memberships(db, u.id)
                 current_user = {
                     "id": u.id,

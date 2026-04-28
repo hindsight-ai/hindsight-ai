@@ -56,6 +56,9 @@ def test_memory_block_filters_and_archive(db_session):
     )
     assert kw_blocks
 
-    # Retrieval by keywords simple function
-    retrieved = crud.retrieve_relevant_memories(db, ["alpha"], agent_id=agent_p.agent_id)
+    # Retrieval by keywords simple function — pass current_user so the
+    # search service applies the correct scope filter for the owner.
+    retrieved = crud.retrieve_relevant_memories(
+        db, ["alpha"], agent_id=agent_p.agent_id, current_user=ctx
+    )
     assert any("alpha".lower() in (r.content.lower()) for r in retrieved)

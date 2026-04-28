@@ -21,6 +21,7 @@ from core.utils.scopes import (
 from core.api.deps import (
     get_current_user_context,
     get_current_user_context_or_pat,
+    get_or_create_user_for_request,
     ensure_pat_allows_write,
     ensure_pat_allows_read,
     get_scoped_user_and_context,
@@ -149,7 +150,7 @@ def get_agent_endpoint(
             x_forwarded_email=x_forwarded_email,
         )
         if email:
-            u = get_or_create_user(db, email=email, display_name=name)
+            u = get_or_create_user_for_request(db, email=email, name=name)
             memberships = get_user_memberships(db, u.id)
             current_user = {
                 "id": u.id,
@@ -198,7 +199,7 @@ def search_agents_endpoint(
             x_forwarded_email=x_forwarded_email,
         )
         if email:
-            u = get_or_create_user(db, email=email, display_name=name)
+            u = get_or_create_user_for_request(db, email=email, name=name)
             memberships = get_user_memberships(db, u.id)
             current_user = {
                 "id": u.id,

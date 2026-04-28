@@ -62,6 +62,12 @@ services:
       OAUTH2_PROXY_SET_XAUTHREQUEST: true
       OAUTH2_PROXY_PASS_ACCESS_TOKEN: true
       OAUTH2_PROXY_SET_AUTHORIZATION_HEADER: true
+      # Pin X-Auth-Request-User to the OIDC `sub` claim. Backend uses this
+      # value as `external_subject` to detect email-reuse / IdP collision
+      # (core.api.auth.get_or_create_user). With the default
+      # `preferred_username`, this header would equal the email for Google
+      # and the binding would silently no-op.
+      OAUTH2_PROXY_USER_ID_CLAIM: sub
       OAUTH2_PROXY_EMAIL_DOMAINS: ${OAUTH2_PROXY_EMAIL_DOMAINS:-*}
       # Allow unauthenticated access to trivial assets to avoid noisy 401s
       OAUTH2_PROXY_SKIP_AUTH_ROUTES: /manifest.json$,/favicon.ico$,^/guest-api/.*

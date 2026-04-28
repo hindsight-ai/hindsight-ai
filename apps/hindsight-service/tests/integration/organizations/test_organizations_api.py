@@ -5,8 +5,11 @@ import uuid
 client = TestClient(app, headers={"X-Active-Scope": "personal"})
 
 
-def auth(email="orguser@example.com", name="OrgUser"):
-    return {"x-auth-request-email": email, "x-auth-request-user": name}
+def auth(email="orguser@example.com", name=None):
+    # Default X-Auth-Request-User to the email so distinct emails imply
+    # distinct external_subjects (matches OIDC sub uniqueness; avoids
+    # collision with the partial-unique index on users.external_subject).
+    return {"x-auth-request-email": email, "x-auth-request-user": name or email}
 
 
 def test_create_org_no_email():

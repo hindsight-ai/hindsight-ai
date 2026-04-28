@@ -27,6 +27,7 @@ from core.utils.scopes import (
 from core.api.deps import (
     get_current_user_context,
     get_current_user_context_or_pat,
+    get_or_create_user_for_request,
     ensure_pat_allows_write,
     ensure_pat_allows_read,
     get_scoped_user_and_context,
@@ -80,7 +81,7 @@ def _resolve_search_user_context(
     if not email:
         return None
 
-    user = get_or_create_user(db, email=email, display_name=name)
+    user = get_or_create_user_for_request(db, email=email, name=name)
     memberships = get_user_memberships(db, user.id)
     memberships_by_org = {str(m["organization_id"]): m for m in memberships}
     return {

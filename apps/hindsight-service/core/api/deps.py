@@ -15,11 +15,37 @@ from sqlalchemy.orm import Session
 
 from core.db.database import get_db
 from core.api.auth import (
+    IdentityMismatchError,
     resolve_identity_from_headers,
     get_or_create_user,
     get_user_memberships,
     is_beta_access_admin,
 )
+
+
+_OAUTH2_PROXY_PROVIDER = "oauth2_proxy"
+
+
+def get_or_create_user_for_request(
+    db: Session,
+    *,
+    email: str,
+    name: Optional[str],
+):
+    """Single entry point used by every FastAPI handler that resolves a user
+    from oauth2-proxy headers. Threads `external_subject=name` through to
+    `get_or_create_user`; IdentityMismatchError is translated to 401 by the
+    global FastAPI exception handler in `core.api.main`. Centralising this
+    means callers can never silently skip the identity-binding check by
+    forgetting a kwarg.
+    """
+    return get_or_create_user(
+        db,
+        email=email,
+        display_name=name,
+        external_subject=name,
+        auth_provider=_OAUTH2_PROXY_PROVIDER,
+    )
 from core.db import models
 from core.db.scope_utils import ScopeContext
 from core.db.repositories import tokens as token_repo
@@ -125,7 +151,7 @@ def get_current_user_context(
     )
     if not email:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    user = get_or_create_user(db, email=email, display_name=name)
+    user = get_or_create_user_for_request(db, email=email, name=name)
 
     # Normalize beta access status to reflect latest request state.
     from core.db.repositories import beta_access as beta_repo

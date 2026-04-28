@@ -56,7 +56,21 @@ def resolve_identity_from_headers(
     return user, email
 
 
-def get_or_create_user(db: Session, email: str, display_name: Optional[str] = None) -> models.User:
+class IdentityMismatchError(Exception):
+    """Raised when an authenticated request's external_subject does not
+    match the existing User row's bound external_subject. Defense against
+    email reassignment / IDP collisions: a recycled email cannot silently
+    inherit the previous owner's data."""
+
+
+def get_or_create_user(
+    db: Session,
+    email: str,
+    display_name: Optional[str] = None,
+    *,
+    external_subject: Optional[str] = None,
+    auth_provider: Optional[str] = None,
+) -> models.User:
     user = db.query(models.User).filter(models.User.email == email).first()
     was_new = False
     if not user:
@@ -64,9 +78,67 @@ def get_or_create_user(db: Session, email: str, display_name: Optional[str] = No
             email=email,
             display_name=display_name or email.split("@")[0],
             beta_access_status='not_requested',
+            external_subject=external_subject,
+            auth_provider=auth_provider,
         )
         db.add(user)
         was_new = True
+    elif external_subject is not None:
+        # If the IdP's user-id claim is set to the email itself (oauth2-proxy
+        # default `preferred_username` for Google), every external_subject
+        # equals the email and the binding can never distinguish two humans
+        # sharing an email. Warn loudly so the operator notices the config is
+        # not providing the protection it should.
+        if external_subject == email:
+            logger.warning(
+                "auth_subject_is_email: external_subject==email for %s — "
+                "set OAUTH2_PROXY_USER_ID_CLAIM=sub (or equivalent) so the "
+                "external_subject binding can actually catch email-reuse.",
+                email,
+            )
+        # Identity binding for existing rows:
+        #   - row has no bound subject -> bind it (TOFU; covers legacy users)
+        #   - row's subject matches    -> ok
+        #   - row's subject differs    -> refuse (account inheritance attempt)
+        # Race protection: re-fetch the row with FOR UPDATE inside the bind
+        # branch so two concurrent first-time logins serialise; the loser
+        # observes the winner's bound external_subject and either matches
+        # (same identity) or raises IdentityMismatchError. The DB also has a
+        # partial unique index on users.external_subject as a final guard.
+        existing_sub = getattr(user, "external_subject", None)
+        if not existing_sub:
+            try:
+                locked = (
+                    db.query(models.User)
+                    .filter(models.User.id == user.id)
+                    .with_for_update()
+                    .first()
+                )
+            except Exception:
+                # SQLite (test-only) and other dialects without row locking;
+                # fall back to the un-locked path.
+                locked = user
+            if locked is not None:
+                user = locked
+                existing_sub = getattr(user, "external_subject", None)
+        if not existing_sub:
+            user.external_subject = external_subject
+            if auth_provider is not None and not getattr(user, "auth_provider", None):
+                user.auth_provider = auth_provider
+            try:
+                db.commit()
+                db.refresh(user)
+            except Exception:
+                db.rollback()
+        elif existing_sub != external_subject:
+            logger.warning(
+                "identity_mismatch: email=%s existing_subject=%s incoming_subject=%s",
+                email, existing_sub, external_subject,
+            )
+            raise IdentityMismatchError(
+                "Account exists for this email but was first registered by a "
+                "different identity. Contact an administrator."
+            )
 
     # Elevate to superadmin based on ADMIN_EMAILS only at creation time to avoid test-order flakiness
     admins = _admin_emails()
