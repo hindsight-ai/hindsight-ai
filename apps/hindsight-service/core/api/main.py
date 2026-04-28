@@ -38,6 +38,7 @@ from core.api.auth import (
 from core.api.deps import (
     get_current_user_context,
     get_current_user_context_or_pat,
+    get_or_create_user_for_request,
     ensure_pat_allows_write,
     ensure_pat_allows_read,
     get_scoped_user_and_context,
@@ -94,6 +95,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Translate IdentityMismatchError (raised by core.api.auth.get_or_create_user
+# when a request's external_subject does not match the existing User row's
+# bound subject) into a clean 401, regardless of which handler was running.
+# Without this, the exception escaped through ~5 call sites as a 500 with the
+# mismatch detail in the response body.
+@app.exception_handler(IdentityMismatchError)
+async def _identity_mismatch_handler(_request: Request, _exc: IdentityMismatchError):
+    return JSONResponse(
+        {"authenticated": False, "detail": "Authentication denied."},
+        status_code=status.HTTP_401_UNAUTHORIZED,
+    )
 
 # Middleware: enforce read-only for unauthenticated requests
 @app.middleware("http")
@@ -403,16 +417,9 @@ def get_user_info(
     if not email:
         return {"authenticated": True, "user": name or None, "email": None}
 
-    try:
-        user = get_or_create_user(
-            db, email=email, display_name=name,
-            external_subject=name, auth_provider="oauth2_proxy",
-        )
-    except IdentityMismatchError as exc:
-        return JSONResponse(
-            {"authenticated": False, "detail": str(exc)},
-            status_code=status.HTTP_401_UNAUTHORIZED,
-        )
+    # IdentityMismatchError is translated to 401 by the global exception
+    # handler at the top of this module.
+    user = get_or_create_user_for_request(db, email=email, name=name)
     memberships = get_user_memberships(db, user.id)
     beta_admin = is_beta_access_admin(user.email) or bool(user.is_superadmin)
     return {
@@ -1084,10 +1091,7 @@ def search_memory_blocks_fulltext_endpoint(
                 x_forwarded_email=x_forwarded_email,
             )
             if email:
-                u = get_or_create_user(
-                    db, email=email, display_name=name,
-                    external_subject=name, auth_provider="oauth2_proxy",
-                )
+                u = get_or_create_user_for_request(db, email=email, name=name)
                 memberships = get_user_memberships(db, u.id)
                 current_user = {
                     "id": u.id,
@@ -1169,10 +1173,7 @@ def search_memory_blocks_semantic_endpoint(
             )
             current_user = None
             if email:
-                u = get_or_create_user(
-                    db, email=email, display_name=name,
-                    external_subject=name, auth_provider="oauth2_proxy",
-                )
+                u = get_or_create_user_for_request(db, email=email, name=name)
                 memberships = get_user_memberships(db, u.id)
                 current_user = {
                     "id": u.id,
@@ -1280,10 +1281,7 @@ def search_memory_blocks_hybrid_endpoint(
                 x_forwarded_email=x_forwarded_email,
             )
             if email:
-                u = get_or_create_user(
-                    db, email=email, display_name=name,
-                    external_subject=name, auth_provider="oauth2_proxy",
-                )
+                u = get_or_create_user_for_request(db, email=email, name=name)
                 memberships = get_user_memberships(db, u.id)
                 current_user = {
                     "id": u.id,
