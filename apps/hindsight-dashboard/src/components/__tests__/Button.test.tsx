@@ -37,4 +37,15 @@ describe('Button (primitive)', () => {
     expect(btn).toHaveClass('bg-blue-600');
     expect(btn).toHaveClass('ml-auto');
   });
+
+  it('renders the secondary variant with the outlined token', () => {
+    render(<Button variant="secondary">Cancel</Button>);
+    const btn = screen.getByRole('button', { name: 'Cancel' });
+    expect(btn).toHaveClass('border');
+    expect(btn).toHaveClass('border-gray-300');
+    expect(btn).toHaveClass('bg-white');
+    expect(btn).toHaveClass('text-gray-700');
+    // Secondary must NOT carry the primary's filled-blue styling.
+    expect(btn).not.toHaveClass('bg-blue-600');
+  });
 });
