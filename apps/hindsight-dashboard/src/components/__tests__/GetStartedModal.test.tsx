@@ -40,4 +40,17 @@ describe('GetStartedModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /close get started guide/i }));
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
+
+  // Contract: the UI/UX audit skill (.claude/skills/ui-ux-audit/audit.mjs)
+  // suppresses this modal between probes by clicking
+  // `button[aria-label="Close get started guide"]`. Renaming the label
+  // silently breaks every screenshot taken after that route. If the
+  // label genuinely needs to change, update the suppressor in audit.mjs
+  // in the same PR.
+  it('exposes the exact aria-label the audit script depends on', () => {
+    render(<GetStartedModal isOpen onClose={jest.fn()} />);
+    const btn = screen.getByLabelText('Close get started guide');
+    expect(btn).toBeInTheDocument();
+    expect(btn.tagName).toBe('BUTTON');
+  });
 });
