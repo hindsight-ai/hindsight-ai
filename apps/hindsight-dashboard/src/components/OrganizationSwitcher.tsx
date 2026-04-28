@@ -58,7 +58,7 @@ const OrganizationSwitcher: React.FC = () => {
             className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
           ></div>
-          <div className="absolute top-full left-0 right-0 md:right-auto mt-1 w-full md:w-[320px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-80 overflow-y-auto">
+          <div className="absolute top-full left-0 right-0 md:right-auto mt-1 w-full md:w-[320px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-80 overflow-y-auto overscroll-contain">
             {error && (
               <div className="px-3 py-2 text-sm text-red-600 bg-red-50 border-b border-gray-200">
                 {error}

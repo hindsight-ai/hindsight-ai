@@ -880,7 +880,7 @@ const AuditLogs: React.FC<{invitationId: string; orgId: string}> = ({ invitation
   if (!logs.length) return <div className="text-sm text-gray-600">No audit events for this invitation.</div>;
 
   return (
-    <div className="max-h-80 overflow-y-auto">
+    <div className="max-h-80 overflow-y-auto overscroll-contain">
       <table className="w-full border-collapse border border-gray-200 text-sm">
         <thead className="bg-gray-50">
           <tr>

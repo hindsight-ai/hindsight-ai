@@ -597,7 +597,7 @@ const MemoryOptimizationCenter: FC = () => {
               <h4 className="text-lg font-medium text-gray-900 mb-3">
                 Affected Memory Blocks ({suggestion.affected_blocks?.length || 0})
               </h4>
-              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+              <div className="max-h-64 overflow-y-auto overscroll-contain border border-gray-200 rounded-lg">
                 {(suggestion.affected_blocks || []).length === 0 ? (
                   <div className="p-4 text-center text-gray-500">
                     No memory blocks specified for this suggestion.

@@ -157,7 +157,7 @@ const MemoryBlockDetailModal: React.FC<MemoryBlockDetailModalProps> = ({ blockId
           </div>
 
           {/* Content */}
-          <div className="max-h-[70vh] overflow-y-auto"
+          <div className="max-h-[70vh] overflow-y-auto overscroll-contain"
                style={{ maxHeight: 'calc(90vh - 200px)' }}
           >
             {loading ? (
@@ -231,7 +231,7 @@ const MemoryBlockDetailModal: React.FC<MemoryBlockDetailModalProps> = ({ blockId
                       
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Keywords</label>
-                        <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2">
+                        <div className="space-y-2 max-h-32 overflow-y-auto overscroll-contain border border-gray-200 rounded-md p-2">
                           {availableKeywords.map(keyword => (
                             <label key={keyword.id} className="flex items-center">
                               <input
