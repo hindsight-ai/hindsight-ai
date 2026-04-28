@@ -100,7 +100,27 @@ def get_or_create_user(
         #   - row has no bound subject -> bind it (TOFU; covers legacy users)
         #   - row's subject matches    -> ok
         #   - row's subject differs    -> refuse (account inheritance attempt)
+        # Race protection: re-fetch the row with FOR UPDATE inside the bind
+        # branch so two concurrent first-time logins serialise; the loser
+        # observes the winner's bound external_subject and either matches
+        # (same identity) or raises IdentityMismatchError. The DB also has a
+        # partial unique index on users.external_subject as a final guard.
         existing_sub = getattr(user, "external_subject", None)
+        if not existing_sub:
+            try:
+                locked = (
+                    db.query(models.User)
+                    .filter(models.User.id == user.id)
+                    .with_for_update()
+                    .first()
+                )
+            except Exception:
+                # SQLite (test-only) and other dialects without row locking;
+                # fall back to the un-locked path.
+                locked = user
+            if locked is not None:
+                user = locked
+                existing_sub = getattr(user, "external_subject", None)
         if not existing_sub:
             user.external_subject = external_subject
             if auth_provider is not None and not getattr(user, "auth_provider", None):
