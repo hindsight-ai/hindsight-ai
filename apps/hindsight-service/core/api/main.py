@@ -29,6 +29,7 @@ from core.db.database import engine, get_db
 from core.pruning.pruning_service import get_pruning_service
 from core.pruning.compression_service import get_compression_service
 from core.api.auth import (
+    IdentityMismatchError,
     resolve_identity_from_headers,
     get_or_create_user,
     get_user_memberships,
@@ -402,7 +403,16 @@ def get_user_info(
     if not email:
         return {"authenticated": True, "user": name or None, "email": None}
 
-    user = get_or_create_user(db, email=email, display_name=name)
+    try:
+        user = get_or_create_user(
+            db, email=email, display_name=name,
+            external_subject=name, auth_provider="oauth2_proxy",
+        )
+    except IdentityMismatchError as exc:
+        return JSONResponse(
+            {"authenticated": False, "detail": str(exc)},
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
     memberships = get_user_memberships(db, user.id)
     beta_admin = is_beta_access_admin(user.email) or bool(user.is_superadmin)
     return {
@@ -1074,7 +1084,10 @@ def search_memory_blocks_fulltext_endpoint(
                 x_forwarded_email=x_forwarded_email,
             )
             if email:
-                u = get_or_create_user(db, email=email, display_name=name)
+                u = get_or_create_user(
+                    db, email=email, display_name=name,
+                    external_subject=name, auth_provider="oauth2_proxy",
+                )
                 memberships = get_user_memberships(db, u.id)
                 current_user = {
                     "id": u.id,
@@ -1156,7 +1169,10 @@ def search_memory_blocks_semantic_endpoint(
             )
             current_user = None
             if email:
-                u = get_or_create_user(db, email=email, display_name=name)
+                u = get_or_create_user(
+                    db, email=email, display_name=name,
+                    external_subject=name, auth_provider="oauth2_proxy",
+                )
                 memberships = get_user_memberships(db, u.id)
                 current_user = {
                     "id": u.id,
@@ -1264,7 +1280,10 @@ def search_memory_blocks_hybrid_endpoint(
                 x_forwarded_email=x_forwarded_email,
             )
             if email:
-                u = get_or_create_user(db, email=email, display_name=name)
+                u = get_or_create_user(
+                    db, email=email, display_name=name,
+                    external_subject=name, auth_provider="oauth2_proxy",
+                )
                 memberships = get_user_memberships(db, u.id)
                 current_user = {
                     "id": u.id,

@@ -80,7 +80,10 @@ def _resolve_search_user_context(
     if not email:
         return None
 
-    user = get_or_create_user(db, email=email, display_name=name)
+    user = get_or_create_user(
+        db, email=email, display_name=name,
+        external_subject=name, auth_provider="oauth2_proxy",
+    )
     memberships = get_user_memberships(db, user.id)
     memberships_by_org = {str(m["organization_id"]): m for m in memberships}
     return {

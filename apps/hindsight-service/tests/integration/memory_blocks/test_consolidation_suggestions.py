@@ -3,20 +3,25 @@ from datetime import datetime, timezone
 from core.db import models, crud, schemas
 
 
-def _seed_memory_block(db, content="Base Content"):
-    user = models.User(email=f"cuser_{uuid.uuid4().hex}@ex.com", display_name="CU", is_superadmin=False)
-    db.add(user); db.commit(); db.refresh(user)
-    agent = models.Agent(agent_name=f"CAgent {uuid.uuid4().hex[:5]}", visibility_scope="personal", owner_user_id=user.id)
-    db.add(agent); db.commit(); db.refresh(agent)
-    mb = models.MemoryBlock(agent_id=agent.agent_id, conversation_id=uuid.uuid4(), content=content, lessons_learned="LL", visibility_scope="personal", owner_user_id=user.id)
+def _seed_memory_block(db, content="Base Content", *, owner=None, agent=None):
+    """Create a memory block. If `owner`/`agent` are provided reuse them so the
+    caller can group originals under a single (owner, agent) tuple — required
+    by apply_consolidation's same-owner invariant."""
+    if owner is None:
+        owner = models.User(email=f"cuser_{uuid.uuid4().hex}@ex.com", display_name="CU", is_superadmin=False)
+        db.add(owner); db.commit(); db.refresh(owner)
+    if agent is None:
+        agent = models.Agent(agent_name=f"CAgent {uuid.uuid4().hex[:5]}", visibility_scope="personal", owner_user_id=owner.id)
+        db.add(agent); db.commit(); db.refresh(agent)
+    mb = models.MemoryBlock(agent_id=agent.agent_id, conversation_id=uuid.uuid4(), content=content, lessons_learned="LL", visibility_scope="personal", owner_user_id=owner.id)
     db.add(mb); db.commit(); db.refresh(mb)
-    return mb, agent
+    return mb, agent, owner
 
 
 def test_consolidation_full_flow(db_session):
     db = db_session
-    mb1, agent = _seed_memory_block(db, "First piece")
-    mb2, _ = _seed_memory_block(db, "Second piece")
+    mb1, agent, owner = _seed_memory_block(db, "First piece")
+    mb2, _, _ = _seed_memory_block(db, "Second piece", owner=owner, agent=agent)
 
     group_id = uuid.uuid4()
     create_payload = schemas.ConsolidationSuggestionCreate(

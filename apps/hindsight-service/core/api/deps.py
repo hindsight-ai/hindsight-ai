@@ -15,11 +15,36 @@ from sqlalchemy.orm import Session
 
 from core.db.database import get_db
 from core.api.auth import (
+    IdentityMismatchError,
     resolve_identity_from_headers,
     get_or_create_user,
     get_user_memberships,
     is_beta_access_admin,
 )
+
+
+def _get_or_create_user_for_request(
+    db: Session,
+    *,
+    email: str,
+    name: Optional[str],
+):
+    """Wrapper used by FastAPI handlers; passes the X-Auth-Request-User
+    value as external_subject and translates IdentityMismatchError to 401.
+    """
+    try:
+        return get_or_create_user(
+            db,
+            email=email,
+            display_name=name,
+            external_subject=name,
+            auth_provider="oauth2_proxy",
+        )
+    except IdentityMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
 from core.db import models
 from core.db.scope_utils import ScopeContext
 from core.db.repositories import tokens as token_repo
@@ -125,7 +150,7 @@ def get_current_user_context(
     )
     if not email:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    user = get_or_create_user(db, email=email, display_name=name)
+    user = _get_or_create_user_for_request(db, email=email, name=name)
 
     # Normalize beta access status to reflect latest request state.
     from core.db.repositories import beta_access as beta_repo

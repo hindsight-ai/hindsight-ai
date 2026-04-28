@@ -92,15 +92,12 @@ def _create_personal_memory(client: TestClient, headers: dict, content: str, age
 # ---------------------------------------------------------------------------
 
 
-def test_F2_email_collision_grants_account_takeover(db_session):
+def test_F2_email_recycle_attempt_is_rejected(db_session):
     """
-    Two sign-ins with the same email but different display names ("Alice First"
-    vs "Alice Second") MUST resolve to one User row today, since the auth path
-    only filters on `User.email`. The second person's `/user-info` reflects
-    the same user_id and the same personal memory blocks.
-
-    This reproduces the user's reported symptom of "legit data appears in my
-    account" via legitimate (non-malicious) email reassignment.
+    Regression guard for F2: when an existing User row was first registered
+    with one external_subject (X-Auth-Request-User), a later sign-in using
+    the same email but a *different* external_subject MUST be rejected. This
+    blocks the silent account-inheritance path described in the audit RFC.
     """
     email = "alice-recycled@example.com"
 
@@ -112,14 +109,22 @@ def test_F2_email_collision_grants_account_takeover(db_session):
     }
     client_first = _client()
     secret_content = f"ALICE_FIRST_SECRET_{uuid.uuid4().hex}"
-    mb_first = _create_personal_memory(client_first, h_first, secret_content)
+    _create_personal_memory(client_first, h_first, secret_content)
 
     r_info_first = client_first.get("/user-info", headers=h_first)
     assert r_info_first.status_code == 200, r_info_first.text
-    user_id_first = r_info_first.json()["user_id"]
 
-    # Second human is given the same email later (e.g. corporate alias reuse)
-    # and signs in with a different display name.
+    # Confirm the User row was bound to the first subject.
+    db_session.expire_all()
+    user_row = db_session.query(models.User).filter(models.User.email == email).one()
+    assert user_row.external_subject == "Alice First", (
+        f"User row should have external_subject bound to the first sign-in's "
+        f"X-Auth-Request-User, got {user_row.external_subject!r}."
+    )
+
+    # Second human attempts to sign in with the same email but a different
+    # X-Auth-Request-User. /user-info must refuse with 401, NOT mint or
+    # reuse the existing row.
     h_second = {
         "x-auth-request-user": "Alice Second",
         "x-auth-request-email": email,
@@ -127,27 +132,32 @@ def test_F2_email_collision_grants_account_takeover(db_session):
     }
     client_second = _client()
     r_info_second = client_second.get("/user-info", headers=h_second)
-    assert r_info_second.status_code == 200, r_info_second.text
-    user_id_second = r_info_second.json()["user_id"]
-
-    # BUG: same email -> same user_id -> account takeover.
-    assert user_id_second == user_id_first, (
-        "Email-only identity bug: a second sign-in with the same email got a different "
-        "user_id, which would mean the bug is fixed."
+    assert r_info_second.status_code == 401, (
+        f"REGRESSION (F2): second sign-in with mismatched external_subject "
+        f"returned {r_info_second.status_code}. Body: {r_info_second.text}"
     )
 
-    # The second human's personal memory listing now contains the first person's secret.
+    # The unauthenticated second human cannot list /memory-blocks/ either.
+    # (write paths are blocked by the read-only middleware; reads via
+    # /memory-blocks/ require auth too because there's no PAT and no valid
+    # oauth header pair.)
     r_list = client_second.get("/memory-blocks/", headers=h_second)
-    assert r_list.status_code == 200, r_list.text
-    items = r_list.json()["items"]
-    contents = [it["content"] for it in items]
-    assert secret_content in contents, (
-        "Expected the first user's personal memory block to leak into the second user's listing."
-    )
+    if r_list.status_code == 200:
+        # If the endpoint accepts the second client at all, it must NOT have
+        # surfaced the first user's secret. With the F2 guard, reaching the
+        # full memory-blocks listing requires a separate auth path; we only
+        # care that the leak is gone.
+        contents = [it["content"] for it in r_list.json().get("items", [])]
+        assert secret_content not in contents, (
+            "REGRESSION (F2): first user's personal memory block was visible "
+            "to the second sign-in attempt."
+        )
 
-    # Confirm at the DB layer that exactly one User row exists for this email.
+    # Exactly one User row for this email — no second was created.
+    db_session.expire_all()
     rows = db_session.query(models.User).filter(models.User.email == email).all()
     assert len(rows) == 1, f"Expected 1 User row for {email}, found {len(rows)}"
+    assert rows[0].external_subject == "Alice First"
 
 
 # ---------------------------------------------------------------------------

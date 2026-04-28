@@ -149,7 +149,10 @@ def get_agent_endpoint(
             x_forwarded_email=x_forwarded_email,
         )
         if email:
-            u = get_or_create_user(db, email=email, display_name=name)
+            u = get_or_create_user(
+                db, email=email, display_name=name,
+                external_subject=name, auth_provider="oauth2_proxy",
+            )
             memberships = get_user_memberships(db, u.id)
             current_user = {
                 "id": u.id,
@@ -198,7 +201,10 @@ def search_agents_endpoint(
             x_forwarded_email=x_forwarded_email,
         )
         if email:
-            u = get_or_create_user(db, email=email, display_name=name)
+            u = get_or_create_user(
+                db, email=email, display_name=name,
+                external_subject=name, auth_provider="oauth2_proxy",
+            )
             memberships = get_user_memberships(db, u.id)
             current_user = {
                 "id": u.id,
