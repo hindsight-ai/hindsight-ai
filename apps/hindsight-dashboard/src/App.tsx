@@ -78,6 +78,13 @@ function AppContent() {
   }, []);
 
   const handleCloseGetStarted = useCallback(() => {
+    // Transient close (X button, Escape, backdrop) — do NOT mark seen.
+    // An accidental Esc on first load shouldn't permanently silence the
+    // guide for that user.
+    setShowGetStarted(false);
+  }, []);
+
+  const handleAcknowledgeGetStarted = useCallback(() => {
     markGetStartedSeen();
     setShowGetStarted(false);
   }, [markGetStartedSeen]);
@@ -331,7 +338,11 @@ function AppContent() {
         </Routes>
       </Layout>
       <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} />
-      <GetStartedModal isOpen={showGetStarted} onClose={handleCloseGetStarted} />
+      <GetStartedModal
+        isOpen={showGetStarted}
+        onClose={handleCloseGetStarted}
+        onAcknowledge={handleAcknowledgeGetStarted}
+      />
     </div>
   );
 }
