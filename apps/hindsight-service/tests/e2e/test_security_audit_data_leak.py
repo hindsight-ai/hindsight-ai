@@ -444,11 +444,11 @@ def test_B_bulk_move_api_accepts_arbitrary_destination_owner_dry_run(db_session)
 # ---------------------------------------------------------------------------
 
 
-def test_F6_bulk_delete_dry_run_leaks_counts_to_non_member(db_session):
+def test_F6_bulk_delete_dry_run_rejects_non_member(db_session):
     """
-    `bulk_operations.py:262-298` lets any authenticated user submit a delete
-    plan against any organization and learn agent_count / memory_block_count /
-    keyword_count. A small information disclosure, included for completeness.
+    Regression guard for F6: bulk-delete dry-run must require source-org
+    membership, matching bulk-move dry-run. Otherwise it discloses
+    per-resource counts (agents / memory_blocks / keywords) to outsiders.
     """
     h_admin = _h("orgadmin-f6", scope="personal")
     h_outsider = _h("outsider-f6", scope="personal")
@@ -462,21 +462,25 @@ def test_F6_bulk_delete_dry_run_leaks_counts_to_non_member(db_session):
     assert r_org.status_code == 201, r_org.text
     org_id = r_org.json()["id"]
 
-    # Outsider (not a member) requests dry-run delete plan and gets a 200 with counts.
+    # Outsider (not a member) is rejected.
     r = client.post(
         f"/bulk-operations/organizations/{org_id}/bulk-delete",
         json={"dry_run": True, "resource_types": ["memory_blocks", "agents", "keywords"]},
         headers=h_outsider,
     )
-    assert r.status_code == 200, (
-        f"BUG NOT REPRODUCED: outsider was rejected by bulk-delete dry-run "
-        f"(status={r.status_code}): {r.text}"
+    assert r.status_code == 403, (
+        f"REGRESSION (F6): outsider got {r.status_code} from bulk-delete dry-run; "
+        f"expected 403. Body: {r.text}"
     )
-    body = r.json()
-    assert "resources_to_delete" in body
-    assert "memory_blocks" in body["resources_to_delete"]
-    assert "agents" in body["resources_to_delete"]
-    assert "keywords" in body["resources_to_delete"]
+
+    # Member of the org still gets the plan (positive case).
+    r2 = client.post(
+        f"/bulk-operations/organizations/{org_id}/bulk-delete",
+        json={"dry_run": True, "resource_types": ["memory_blocks", "agents", "keywords"]},
+        headers=h_admin,
+    )
+    assert r2.status_code == 200, r2.text
+    assert "resources_to_delete" in r2.json()
 
 
 # ---------------------------------------------------------------------------

@@ -270,11 +270,15 @@ async def bulk_delete(
 ):
     user, current_user = user_context
     dry_run = payload.get("dry_run", True)
-    # Allow dry-run for members; require manage rights for execution
+    # Both dry-run (planning) and execution require source-org membership;
+    # execution additionally requires manage rights. Planning that bypasses
+    # membership leaks per-resource counts to outsiders.
+    is_super = bool(current_user.get("is_superadmin"))
     if dry_run:
-        # Allow planning without strict membership enforcement to enable safe previews.
-        # Execution (non-dry-run) remains protected below.
-        pass
+        sid = str(org_id)
+        mem = (current_user.get("memberships_by_org") or {}).get(sid)
+        if not (is_super or mem):
+            raise HTTPException(status_code=403, detail="Forbidden")
     else:
         if not can_manage_org_effective(org_id, current_user, db=db, user_id=user.id, allow_db_fallback=True):
             raise HTTPException(status_code=403, detail="Forbidden")
