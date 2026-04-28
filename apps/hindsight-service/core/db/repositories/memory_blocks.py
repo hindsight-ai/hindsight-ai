@@ -306,30 +306,7 @@ def retrieve_relevant_memories(
         payload.pop("search_type", None)
         payload.pop("rank_explanation", None)
         sanitized.append(schemas.MemoryBlock.model_validate(payload))
-    if sanitized:
-        return sanitized
-
-    # Legacy fallback to maintain behavior when search service filters return nothing
-    query = db.query(models.MemoryBlock)
-    if agent_id:
-        query = query.filter(models.MemoryBlock.agent_id == agent_id)
-    if conversation_id:
-        query = query.filter(models.MemoryBlock.conversation_id == conversation_id)
-
-    legacy_filters = []
-    for kw in normalized:
-        pattern = f"%{kw}%"
-        legacy_filters.append(models.MemoryBlock.content.ilike(pattern))
-        legacy_filters.append(models.MemoryBlock.errors.ilike(pattern))
-        legacy_filters.append(models.MemoryBlock.lessons_learned.ilike(pattern))
-    if legacy_filters:
-        query = query.filter(or_(*legacy_filters))
-
-    legacy_results = query.limit(limit).all()
-    return [
-        schemas.MemoryBlock.model_validate(result, from_attributes=True)
-        for result in legacy_results
-    ]
+    return sanitized
 
 
 def create_feedback_log(db: Session, feedback_log: schemas.FeedbackLogCreate):
