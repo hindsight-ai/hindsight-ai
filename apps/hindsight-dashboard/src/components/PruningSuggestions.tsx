@@ -154,14 +154,16 @@ const PruningSuggestions: React.FC = () => {
     );
   }
 
+  // pruning_score semantics: lower = higher priority for pruning. So low
+  // scores warn (red), high scores are safe to keep (green).
   const scoreBadgeClass = (score: number | string | undefined): string => {
     if (score === undefined || score === null || score === '') {
       return 'bg-red-100 text-red-700 border-red-200';
     }
     const numScore = typeof score === 'string' ? parseFloat(score) : score;
-    if (numScore < 30) return 'bg-green-100 text-green-700 border-green-200';
+    if (numScore < 30) return 'bg-red-100 text-red-700 border-red-200';
     if (numScore < 70) return 'bg-amber-100 text-amber-700 border-amber-200';
-    return 'bg-red-100 text-red-700 border-red-200';
+    return 'bg-green-100 text-green-700 border-green-200';
   };
 
   const formatScore = (score: number | string | undefined): string => {
