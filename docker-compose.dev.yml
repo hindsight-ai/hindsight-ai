@@ -13,6 +13,10 @@ services:
       APP_BASE_URL: ${APP_BASE_URL}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
       DEV_MODE: ${DEV_MODE}
+      # Local-dev fallback in /user-info now defaults OFF in production. The dev
+      # stack still wants it on so a fresh `docker-compose -f docker-compose.dev.yml up`
+      # can serve the dashboard without an oauth2-proxy round-trip.
+      ALLOW_LOCAL_DEV_AUTH: ${ALLOW_LOCAL_DEV_AUTH:-true}
       BUILD_SHA: ${BACKEND_BUILD_SHA}
       BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}
       IMAGE_TAG: ${BACKEND_IMAGE_TAG}

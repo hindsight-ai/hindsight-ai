@@ -84,6 +84,18 @@ def get_or_create_user(
         db.add(user)
         was_new = True
     elif external_subject is not None:
+        # If the IdP's user-id claim is set to the email itself (oauth2-proxy
+        # default `preferred_username` for Google), every external_subject
+        # equals the email and the binding can never distinguish two humans
+        # sharing an email. Warn loudly so the operator notices the config is
+        # not providing the protection it should.
+        if external_subject == email:
+            logger.warning(
+                "auth_subject_is_email: external_subject==email for %s — "
+                "set OAUTH2_PROXY_USER_ID_CLAIM=sub (or equivalent) so the "
+                "external_subject binding can actually catch email-reuse.",
+                email,
+            )
         # Identity binding for existing rows:
         #   - row has no bound subject -> bind it (TOFU; covers legacy users)
         #   - row's subject matches    -> ok
