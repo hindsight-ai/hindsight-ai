@@ -576,6 +576,32 @@ def test_F6_bulk_delete_dry_run_rejects_non_member(db_session):
     assert "resources_to_delete" in r2.json()
 
 
+def test_change_scope_non_superadmin_cannot_set_new_owner_user_id(db_session):
+    """
+    Single-block sibling of the B fix: `change_memory_block_scope` (in
+    main.py) accepts a `new_owner_user_id` but only a superadmin may use it.
+    Confirm the guard fires for a non-superadmin.
+    """
+    h_alice = _h("alice-changescope")
+    h_bob = _h("bob-changescope")
+    client_alice = _client()
+    client_bob = _client()
+
+    bob_id = client_bob.get("/user-info", headers=h_bob).json()["user_id"]
+    mb = _create_personal_memory(client_alice, h_alice, f"CS_{uuid.uuid4().hex}")
+
+    # Alice is not superadmin; she cannot redirect a personal block to bob.
+    r = client_alice.post(
+        f"/memory-blocks/{mb['id']}/change-scope",
+        json={"visibility_scope": "personal", "new_owner_user_id": bob_id},
+        headers=h_alice,
+    )
+    assert r.status_code == 403, (
+        f"REGRESSION: non-superadmin was allowed to set new_owner_user_id. "
+        f"Status={r.status_code}: {r.text}"
+    )
+
+
 def test_E_apply_scope_filter_treats_id_less_user_as_guest(db_session):
     """
     Regression guard for E: a malformed `current_user` dict that lacks an
