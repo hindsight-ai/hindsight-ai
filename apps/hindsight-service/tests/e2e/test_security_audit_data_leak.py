@@ -223,15 +223,13 @@ def test_F1_guest_basic_search_with_agent_id_does_not_leak_personal_data(db_sess
 # ---------------------------------------------------------------------------
 
 
-def test_A_consolidation_validate_minted_under_first_id_owner(db_session):
+def test_A_consolidation_validate_rejects_cross_owner_suggestion(db_session):
     """
-    Build a consolidation suggestion whose original_memory_ids = [bob_mb, alice_mb].
-    Have alice (NOT bob) validate. The new merged block is created with
-    owner_user_id = bob.id (from original_memory_ids[0]) and bob's personal
-    memory is archived without bob's consent or write check.
-
-    The user's reported symptom: bob sees a new "personal" memory in his list
-    that contains content (the LLM-merged suggested_content) he never wrote.
+    Regression guard for A: validating a consolidation suggestion whose
+    `original_memory_ids` span more than one (scope, owner, org) tuple must
+    be refused. Otherwise the new merged block is minted under
+    `original_memory_ids[0].owner_user_id` and originals are archived
+    without a write-access check on every original.
     """
     h_alice = _h("alice-consol")
     h_bob = _h("bob-consol")
@@ -243,15 +241,7 @@ def test_A_consolidation_validate_minted_under_first_id_owner(db_session):
     mb_alice = _create_personal_memory(client_alice, h_alice, alice_secret)
     mb_bob = _create_personal_memory(client_bob, h_bob, bob_secret)
 
-    # Resolve user ids from /user-info
-    alice_id = client_alice.get("/user-info", headers=h_alice).json()["user_id"]
-    bob_id = client_bob.get("/user-info", headers=h_bob).json()["user_id"]
-
     merged_content = f"MERGED_FROM_BOTH_{uuid.uuid4().hex}"
-
-    # Insert a consolidation_suggestion row directly (the worker normally does
-    # this; we shortcut the LLM step). original_memory_ids[0] is bob's id, so
-    # the new block will be minted under bob.
     suggestion = models.ConsolidationSuggestion(
         group_id=uuid.uuid4(),
         suggested_content=merged_content,
@@ -264,46 +254,52 @@ def test_A_consolidation_validate_minted_under_first_id_owner(db_session):
     db_session.commit()
     suggestion_id = str(suggestion.suggestion_id)
 
-    # Alice validates the suggestion (she can read at least one original — her own).
+    # Alice attempts to validate — she lacks write access on bob's original AND
+    # the originals span owners. Either the 403 (write-on-every-original) or
+    # the 409 (cross-owner) check should reject; the bug previously returned 200.
     r = client_alice.post(
         f"/consolidation-suggestions/{suggestion_id}/validate/",
         headers=h_alice,
     )
-    assert r.status_code == 200, r.text
+    assert r.status_code in (403, 409), (
+        f"REGRESSION (A): cross-owner validation returned {r.status_code}. "
+        f"Body: {r.text}"
+    )
 
-    # Refresh from DB and assert the new memory block landed under BOB.
+    # No merged block was created and no original was archived.
     db_session.expire_all()
     new_blocks = (
         db_session.query(models.MemoryBlock)
         .filter(models.MemoryBlock.content == merged_content)
         .all()
     )
-    assert len(new_blocks) == 1, (
-        f"Expected exactly 1 new merged block, got {len(new_blocks)}"
+    assert new_blocks == [], (
+        f"REGRESSION (A): a merged block was created despite rejection. Found: {new_blocks}"
     )
-    new_mb = new_blocks[0]
-    assert str(new_mb.owner_user_id) == str(bob_id), (
-        f"BUG NOT REPRODUCED: merged block owner is {new_mb.owner_user_id}, "
-        f"expected bob ({bob_id})."
-    )
-    assert new_mb.visibility_scope == "personal"
-    assert new_mb.archived is False
-
-    # Bob (the unwitting "owner") now sees the merged content in his personal listing.
-    r_list_bob = client_bob.get("/memory-blocks/", headers=h_bob)
-    assert r_list_bob.status_code == 200
-    contents = [it["content"] for it in r_list_bob.json()["items"]]
-    assert merged_content in contents, (
-        "Bob's personal listing should include the merged block he never created."
-    )
-
-    # Both originals are archived (note: alice's was archived by alice's own action,
-    # bob's was archived by alice WITHOUT a write check on bob's row).
-    db_session.expire_all()
     bob_orig = db_session.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(mb_bob["id"])).first()
     alice_orig = db_session.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(mb_alice["id"])).first()
-    assert bob_orig.archived is True, "Bob's original should have been archived (without his consent)."
-    assert alice_orig.archived is True
+    assert bob_orig.archived is False, "Bob's memory must not have been archived by alice's failed attempt."
+    assert alice_orig.archived is False, "Alice's memory must not have been archived by her failed attempt."
+
+    # Positive case: a same-owner suggestion (alice over alice's own blocks) still works.
+    alice_secret2 = f"ALICE_PIECE2_{uuid.uuid4().hex}"
+    mb_alice2 = _create_personal_memory(client_alice, h_alice, alice_secret2)
+    same_owner_suggestion = models.ConsolidationSuggestion(
+        group_id=uuid.uuid4(),
+        suggested_content=f"ALICE_MERGED_{uuid.uuid4().hex}",
+        suggested_lessons_learned="MERGED_LESSONS",
+        suggested_keywords=["alpha"],
+        original_memory_ids=[mb_alice["id"], mb_alice2["id"]],
+        status="pending",
+    )
+    db_session.add(same_owner_suggestion)
+    db_session.commit()
+    sid = str(same_owner_suggestion.suggestion_id)
+    r2 = client_alice.post(
+        f"/consolidation-suggestions/{sid}/validate/",
+        headers=h_alice,
+    )
+    assert r2.status_code == 200, r2.text
 
 
 # ---------------------------------------------------------------------------
