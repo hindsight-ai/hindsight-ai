@@ -125,7 +125,7 @@ const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({ i
         </div>
 
         {/* Content */}
-        <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+        <div className="px-6 py-4 overflow-y-auto overscroll-contain max-h-[calc(90vh-140px)]">
           {/* Guest User Message */}
           {guest && (
             <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">

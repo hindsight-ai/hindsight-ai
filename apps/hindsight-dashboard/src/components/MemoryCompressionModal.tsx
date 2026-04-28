@@ -115,7 +115,7 @@ const MemoryCompressionModal: React.FC<MemoryCompressionModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-6">
           {!compactionResult ? (
             /* Initial State - Show original content and compaction options */
             <div className="space-y-6">
