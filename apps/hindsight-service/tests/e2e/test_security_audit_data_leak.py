@@ -23,8 +23,10 @@ rollback handles teardown.
 import os
 import uuid
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from httpx import ASGITransport
 
 from core.api.main import app as main_app
 from core.db import models
@@ -57,6 +59,19 @@ def _client(extra_headers: dict | None = None) -> TestClient:
 def _guest_client() -> TestClient:
     """A TestClient that sends no auth headers and no default scope header."""
     return TestClient(main_app)
+
+
+def _async_client_with_loopback_ip() -> httpx.AsyncClient:
+    """An httpx.AsyncClient that drives the FastAPI app via ASGITransport,
+    with the request scope's `client` set to ('127.0.0.1', 50000). Needed
+    to exercise the legitimate local-dev fallback path in /user-info,
+    which checks `request.client.host in ('127.0.0.1', '::1')`. The
+    default TestClient yields `client=('testclient', 50000)` and would
+    never satisfy the check. ASGITransport is async-only in httpx 0.28+,
+    so the test using this helper must be async.
+    """
+    transport = ASGITransport(app=main_app, client=("127.0.0.1", 50000))
+    return httpx.AsyncClient(transport=transport, base_url="http://testserver")
 
 
 def _create_personal_memory(client: TestClient, headers: dict, content: str, agent_name: str | None = None) -> dict:
@@ -158,6 +173,23 @@ def test_F2_email_recycle_attempt_is_rejected(db_session):
     rows = db_session.query(models.User).filter(models.User.email == email).all()
     assert len(rows) == 1, f"Expected 1 User row for {email}, found {len(rows)}"
     assert rows[0].external_subject == "Alice First"
+
+    # Validate the global IdentityMismatchError handler also catches the
+    # search-endpoint path (which previously surfaced the error as 500).
+    r_search = client_second.get(
+        "/memory-blocks/search/",
+        params={"keywords": "anything", "search_type": "fulltext"},
+        headers={
+            "x-auth-request-user": "Alice Second",
+            "x-auth-request-email": email,
+        },
+    )
+    assert r_search.status_code == 401, (
+        f"REGRESSION (F2 handler): mismatched second sign-in via /search/ "
+        f"returned {r_search.status_code} instead of 401. The global "
+        f"IdentityMismatchError exception handler is missing or scoped "
+        f"too narrowly. Body: {r_search.text}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -264,16 +296,15 @@ def test_A_consolidation_validate_rejects_cross_owner_suggestion(db_session):
     db_session.commit()
     suggestion_id = str(suggestion.suggestion_id)
 
-    # Alice attempts to validate — she lacks write access on bob's original AND
-    # the originals span owners. Either the 403 (write-on-every-original) or
-    # the 409 (cross-owner) check should reject; the bug previously returned 200.
+    # Alice attempts to validate — she lacks write access on bob's original.
+    # The write check fires before the cross-owner check, so this MUST be 403.
     r = client_alice.post(
         f"/consolidation-suggestions/{suggestion_id}/validate/",
         headers=h_alice,
     )
-    assert r.status_code in (403, 409), (
-        f"REGRESSION (A): cross-owner validation returned {r.status_code}. "
-        f"Body: {r.text}"
+    assert r.status_code == 403, (
+        f"REGRESSION (A write check): alice has no write access on bob's block; "
+        f"expected 403, got {r.status_code}. Body: {r.text}"
     )
 
     # No merged block was created and no original was archived.
@@ -310,6 +341,51 @@ def test_A_consolidation_validate_rejects_cross_owner_suggestion(db_session):
         headers=h_alice,
     )
     assert r2.status_code == 200, r2.text
+
+
+def test_A_consolidation_superadmin_cross_owner_returns_409(db_session):
+    """
+    Regression guard for A's cross-owner check at the apply layer. When the
+    actor IS a superadmin (so `_user_can_write_suggestion` passes), the
+    cross-owner refusal in apply_consolidation must still fire. The 409
+    path is what proves the apply-layer invariant is active; the 403 path
+    in test_A_consolidation_validate_rejects_cross_owner_suggestion only
+    proves the write-check exists.
+    """
+    h_alice = _h("alice-admin-A409")
+    h_bob = _h("bob-A409")
+    client_alice = _client()
+    client_bob = _client()
+
+    mb_alice = _create_personal_memory(client_alice, h_alice, f"ALICE_{uuid.uuid4().hex}")
+    mb_bob = _create_personal_memory(client_bob, h_bob, f"BOB_{uuid.uuid4().hex}")
+
+    # Promote alice to superadmin via DB so the write check passes.
+    alice_id = client_alice.get("/user-info", headers=h_alice).json()["user_id"]
+    alice_row = db_session.query(models.User).filter(models.User.id == uuid.UUID(alice_id)).one()
+    alice_row.is_superadmin = True
+    db_session.commit()
+
+    suggestion = models.ConsolidationSuggestion(
+        group_id=uuid.uuid4(),
+        suggested_content=f"MERGED_409_{uuid.uuid4().hex}",
+        suggested_lessons_learned="MERGED_LESSONS",
+        suggested_keywords=["alpha"],
+        original_memory_ids=[mb_bob["id"], mb_alice["id"]],
+        status="pending",
+    )
+    db_session.add(suggestion)
+    db_session.commit()
+
+    r = client_alice.post(
+        f"/consolidation-suggestions/{suggestion.suggestion_id}/validate/",
+        headers=h_alice,
+    )
+    assert r.status_code == 409, (
+        f"REGRESSION (A apply-layer): superadmin validation of a cross-owner "
+        f"suggestion should still hit the apply-time invariant and return 409, "
+        f"got {r.status_code}. Body: {r.text}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -599,39 +675,56 @@ def test_bulk_move_dry_run_requires_source_org_membership(db_session):
 # ---------------------------------------------------------------------------
 
 
-def test_D_user_info_no_longer_spoofable_via_host_header(db_session, monkeypatch):
+def test_D_host_header_spoof_does_not_grant_dev_user(db_session, monkeypatch):
     """
-    Regression guard for D: the local-dev fallback in /user-info must NOT
-    fire purely because the Host header starts with 'localhost'. Production
-    safety previously relied entirely on Traefik filtering Host; any direct
-    backend access (port-forward, debug, internal) bypassed it.
-
-    We assert two cases:
-      1. ALLOW_LOCAL_DEV_AUTH=true + spoofed Host: localhost.* → 401 unauth
-         (because client_ip from TestClient is 'testclient', not loopback)
-      2. ALLOW_LOCAL_DEV_AUTH unset → default off → 401 unauth
+    Regression guard for D (negative case): a non-loopback caller sending
+    `Host: localhost.*` plus `ALLOW_LOCAL_DEV_AUTH=true` and no auth
+    headers must not get the dev user. Pre-fix, `host.startswith('localhost')`
+    was sufficient to mint a `dev@localhost` superadmin context regardless of
+    the actual peer.
     """
     monkeypatch.delenv("DEV_MODE", raising=False)
-
-    # Case 1: env explicitly opts in, but client_ip is not loopback.
     monkeypatch.setenv("ALLOW_LOCAL_DEV_AUTH", "true")
-    client = _guest_client()
-    r = client.get("/user-info", headers={"host": "localhost.evil.example.com"})
-    assert r.status_code in (401, 200), r.text
-    if r.status_code == 200:
-        # If the endpoint still returns 200 it must be the unauthenticated marker, not a dev user.
-        body = r.json()
-        assert body.get("authenticated") is not True, (
-            f"REGRESSION (D): Host-header spoof produced an authenticated response: {body}"
-        )
-        assert body.get("email") != "dev@localhost"
 
-    # Case 2: env unset → default off.
+    client = _guest_client()  # client_ip = 'testclient'
+    r = client.get("/user-info", headers={"host": "localhost.evil.example.com"})
+    assert r.status_code == 401, (
+        f"REGRESSION (D): host-header spoof from non-loopback peer "
+        f"returned {r.status_code} instead of 401. Body: {r.text}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_D_default_off_blocks_loopback_when_env_unset(db_session, monkeypatch):
+    """
+    Regression guard for D's env default: with ALLOW_LOCAL_DEV_AUTH unset,
+    even a real loopback caller must NOT get the dev fallback.
+    """
+    monkeypatch.delenv("DEV_MODE", raising=False)
     monkeypatch.delenv("ALLOW_LOCAL_DEV_AUTH", raising=False)
-    client2 = _guest_client()
-    r2 = client2.get("/user-info", headers={"host": "localhost.evil.example.com"})
-    assert r2.status_code in (401, 200), r2.text
-    if r2.status_code == 200:
-        body2 = r2.json()
-        assert body2.get("authenticated") is not True
-        assert body2.get("email") != "dev@localhost"
+
+    async with _async_client_with_loopback_ip() as client:
+        r = await client.get("/user-info")
+        assert r.status_code == 401, (
+            f"REGRESSION (D): default-off was bypassed even from loopback. "
+            f"Status={r.status_code} body={r.text}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_D_loopback_with_env_on_still_works(db_session, monkeypatch):
+    """
+    Positive case for D: when ALLOW_LOCAL_DEV_AUTH=true AND the peer is
+    actually loopback (real local-dev workflow), the fallback must still
+    produce the dev user. Without this case, an over-tight fix that
+    accidentally broke the legitimate local-dev path would go unnoticed.
+    """
+    monkeypatch.delenv("DEV_MODE", raising=False)
+    monkeypatch.setenv("ALLOW_LOCAL_DEV_AUTH", "true")
+
+    async with _async_client_with_loopback_ip() as client:
+        r = await client.get("/user-info")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body.get("authenticated") is True
+        assert body.get("email") == os.getenv("DEV_LOCAL_EMAIL", "dev@localhost")
