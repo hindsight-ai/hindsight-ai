@@ -500,6 +500,54 @@ def test_F6_bulk_delete_dry_run_rejects_non_member(db_session):
     assert "resources_to_delete" in r2.json()
 
 
+def test_E_apply_scope_filter_treats_id_less_user_as_guest(db_session):
+    """
+    Regression guard for E: a malformed `current_user` dict that lacks an
+    `id` key must not produce `owner_user_id IS NULL`, which would match
+    every organization-scoped row (NULL owner is the canonical org-row
+    signature) and silently leak all org data.
+    """
+    from core.db import models, scope_utils
+    from core.services.search_service import _apply_user_scope_filter
+
+    # Seed: one personal block with explicit owner, one org block with NULL owner.
+    user = models.User(email=f"e_user_{uuid.uuid4().hex}@ex.com", display_name="E", is_superadmin=False)
+    db_session.add(user); db_session.commit(); db_session.refresh(user)
+    agent_p = models.Agent(agent_name=f"E-agent-{uuid.uuid4().hex[:6]}", visibility_scope="personal", owner_user_id=user.id)
+    db_session.add(agent_p); db_session.commit(); db_session.refresh(agent_p)
+    org = models.Organization(name=f"E-org-{uuid.uuid4().hex[:6]}", slug=f"e-org-{uuid.uuid4().hex[:6]}", created_by=user.id)
+    db_session.add(org); db_session.commit(); db_session.refresh(org)
+    agent_o = models.Agent(agent_name=f"E-org-agent-{uuid.uuid4().hex[:6]}", visibility_scope="organization", organization_id=org.id)
+    db_session.add(agent_o); db_session.commit(); db_session.refresh(agent_o)
+
+    mb_personal = models.MemoryBlock(agent_id=agent_p.agent_id, conversation_id=uuid.uuid4(), content="E_PERSONAL", visibility_scope="personal", owner_user_id=user.id)
+    mb_org = models.MemoryBlock(agent_id=agent_o.agent_id, conversation_id=uuid.uuid4(), content="E_ORG", visibility_scope="organization", organization_id=org.id)
+    db_session.add_all([mb_personal, mb_org]); db_session.commit()
+
+    malformed_ctx = {}  # truthy dict, no 'id' — the dangerous shape.
+
+    # scope_utils.apply_scope_filter must treat the malformed dict as a guest.
+    q1 = scope_utils.apply_scope_filter(db_session.query(models.MemoryBlock), malformed_ctx, models.MemoryBlock)
+    rows1 = q1.all()
+    org_rows_1 = [r for r in rows1 if r.visibility_scope == "organization"]
+    personal_rows_1 = [r for r in rows1 if r.visibility_scope == "personal"]
+    assert org_rows_1 == [], (
+        f"REGRESSION (E): scope_utils.apply_scope_filter leaked {len(org_rows_1)} org rows to a "
+        f"malformed user_ctx (no 'id')."
+    )
+    assert personal_rows_1 == [], (
+        f"REGRESSION (E): scope_utils.apply_scope_filter leaked {len(personal_rows_1)} personal rows."
+    )
+
+    # search_service._apply_user_scope_filter same invariant.
+    q2 = _apply_user_scope_filter(db_session.query(models.MemoryBlock), malformed_ctx, models.MemoryBlock)
+    rows2 = q2.all()
+    assert all(r.visibility_scope == "public" for r in rows2), (
+        f"REGRESSION (E): search_service._apply_user_scope_filter returned non-public rows for a "
+        f"malformed user_ctx: {[(r.id, r.visibility_scope) for r in rows2]}"
+    )
+
+
 def test_bulk_move_dry_run_requires_source_org_membership(db_session):
     """
     Regression guard for the asymmetry that the F6 fix surfaced: bulk_move's

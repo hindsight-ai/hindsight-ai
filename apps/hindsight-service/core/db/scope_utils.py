@@ -63,11 +63,21 @@ def apply_scope_filter(query, current_user: Optional[Dict[str, Any]], model_clas
     Returns:
         Filtered query
     """
+    # Defensive: a current_user dict that lacks an `id` would translate to
+    # `owner_user_id == NULL`, which matches every organization-scoped row
+    # (NULL owner is the canonical org-row signature) AND every public row.
+    # That would silently leak all org data. Treat it as "guest" so the
+    # caller gets public-only.
+    if current_user is not None:
+        try:
+            uid = current_user.get('id')
+        except Exception:
+            uid = None
+        if uid is None:
+            return query.filter(model_class.visibility_scope == SCOPE_PUBLIC)
+
     # Prepare unified OR conditions first so patched `or_` is always invoked in tests
-    try:
-        user_id = current_user.get('id') if current_user else None
-    except Exception:
-        user_id = None
+    user_id = current_user.get('id') if current_user else None
 
     org_ids = get_user_organization_ids(current_user) if current_user else []
 

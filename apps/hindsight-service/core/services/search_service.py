@@ -173,6 +173,40 @@ def _create_memory_block_with_score(
     return schemas.MemoryBlockWithScore(**memory_block_dict)
 
 
+def _apply_user_scope_filter(query, current_user, model_class):
+    """Apply visibility filter mirroring scope_utils.apply_scope_filter.
+
+    Treats `current_user is None` OR `current_user.get('id') is None` as a
+    guest: public-only. The latter case is critical — a malformed user dict
+    that lacks `id` would otherwise produce `owner_user_id == NULL`, which
+    matches every organization-scoped row (NULL owner is the canonical
+    org-row signature) and silently leaks all org data.
+    """
+    if current_user is None:
+        return query.filter(model_class.visibility_scope == SCOPE_PUBLIC)
+    user_id = current_user.get('id')
+    if user_id is None:
+        return query.filter(model_class.visibility_scope == SCOPE_PUBLIC)
+
+    org_ids: List[uuid.UUID] = []
+    for m in (current_user.get('memberships') or []):
+        try:
+            org_ids.append(uuid.UUID(m.get('organization_id')))
+        except Exception:
+            continue
+
+    return query.filter(
+        or_(
+            model_class.visibility_scope == SCOPE_PUBLIC,
+            model_class.owner_user_id == user_id,
+            and_(
+                model_class.visibility_scope == SCOPE_ORGANIZATION,
+                model_class.organization_id.in_(org_ids) if org_ids else False,
+            ),
+        )
+    )
+
+
 class SearchService:
     """Service for handling different types of memory block searches."""
     
@@ -245,26 +279,8 @@ class SearchService:
             )
 
             # Scope filters
-            if current_user is None:
-                base_query = base_query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
-            else:
-                org_ids: List[uuid.UUID] = []
-                for m in (current_user.get('memberships') or []):
-                    try:
-                        org_ids.append(uuid.UUID(m.get('organization_id')))
-                    except Exception:
-                        pass
-                base_query = base_query.filter(
-                    or_(
-                        models.MemoryBlock.visibility_scope == SCOPE_PUBLIC,
-                        models.MemoryBlock.owner_user_id == current_user.get('id'),
-                        and_(
-                            models.MemoryBlock.visibility_scope == SCOPE_ORGANIZATION,
-                            models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
-                        ),
-                    )
-                )
-            
+            base_query = _apply_user_scope_filter(base_query, current_user, models.MemoryBlock)
+
             # Apply filters
             if agent_id:
                 base_query = base_query.filter(models.MemoryBlock.agent_id == agent_id)
@@ -460,25 +476,7 @@ class SearchService:
         )
 
         # Scope filters (mirrors fulltext path)
-        if current_user is None:
-            base_query = base_query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
-        else:
-            org_ids: List[uuid.UUID] = []
-            for membership in (current_user.get("memberships") or []):
-                try:
-                    org_ids.append(uuid.UUID(membership.get("organization_id")))
-                except Exception:
-                    continue
-            base_query = base_query.filter(
-                or_(
-                    models.MemoryBlock.visibility_scope == SCOPE_PUBLIC,
-                    models.MemoryBlock.owner_user_id == current_user.get("id"),
-                    and_(
-                        models.MemoryBlock.visibility_scope == SCOPE_ORGANIZATION,
-                        models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
-                    ),
-                )
-            )
+        base_query = _apply_user_scope_filter(base_query, current_user, models.MemoryBlock)
 
         if agent_id:
             base_query = base_query.filter(models.MemoryBlock.agent_id == agent_id)
@@ -1130,27 +1128,8 @@ class SearchService:
         if combined_filter is not None:
             query = query.filter(combined_filter)
         
-        # Apply scope filters
-        if current_user is None:
-            # Guests see public data only, regardless of agent_id/conversation_id hints.
-            query = query.filter(models.MemoryBlock.visibility_scope == SCOPE_PUBLIC)
-        else:
-            org_ids: List[uuid.UUID] = []
-            for m in (current_user.get('memberships') or []):
-                try:
-                    org_ids.append(uuid.UUID(m.get('organization_id')))
-                except Exception:
-                    pass
-            query = query.filter(
-                or_(
-                    models.MemoryBlock.visibility_scope == SCOPE_PUBLIC,
-                    models.MemoryBlock.owner_user_id == current_user.get('id'),
-                    and_(
-                        models.MemoryBlock.visibility_scope == SCOPE_ORGANIZATION,
-                        models.MemoryBlock.organization_id.in_(org_ids) if org_ids else False,
-                    ),
-                )
-            )
+        # Apply scope filters; guests (and malformed dicts without `id`) see public only.
+        query = _apply_user_scope_filter(query, current_user, models.MemoryBlock)
 
         # Apply additional filters
         if agent_id:
