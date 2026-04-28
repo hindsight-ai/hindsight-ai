@@ -31,7 +31,7 @@ const Layout: React.FC<LayoutProps> = ({ children, title, onOpenAbout, onToggleD
         onCollapseChange={handleSidebarCollapse}
         onToggleDebugPanel={VITE_DEV_MODE ? onToggleDebugPanel : undefined}
       />
-      <div className={sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}>
+      <div className={sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-72'}>
         <MainContent
           title={title}
           toggleSidebar={toggleSidebar}
