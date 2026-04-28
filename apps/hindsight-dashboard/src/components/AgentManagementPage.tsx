@@ -3,6 +3,7 @@ import agentService, { Agent } from '../api/agentService';
 import AddAgentModal from './AddAgentModal';
 import AgentDetailsModal from './AgentDetailsModal';
 import RefreshIndicator from './RefreshIndicator';
+import Button from './Button';
 import usePageHeader from '../hooks/usePageHeader';
 import notificationService from '../services/notificationService';
 
@@ -184,15 +185,12 @@ const AgentManagementPage = () => {
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-gray-900 text-white px-4 py-2 rounded-lg flex items-center justify-center text-sm font-medium hover:bg-gray-800 transition-colors"
-        >
-          <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <Button onClick={() => setShowAddModal(true)}>
+          <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
           </svg>
           Create Agent
-        </button>
+        </Button>
       </div>
 
       {hasActiveFilters && (
@@ -223,12 +221,9 @@ const AgentManagementPage = () => {
             {searchTerm ? 'No agents match your search.' : 'Get started by creating your first agent.'}
           </p>
           {!searchTerm && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-            >
+            <Button onClick={() => setShowAddModal(true)}>
               Create Agent
-            </button>
+            </Button>
           )}
         </div>
       ) : (
