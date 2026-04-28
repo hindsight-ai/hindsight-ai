@@ -358,18 +358,21 @@ def get_user_info(
         except HTTPException as e:
             return JSONResponse({"authenticated": False, "detail": e.detail}, status_code=e.status_code)
 
-    # Local dev fallback (no oauth, no PAT) when running on localhost
+    # Local dev fallback (no oauth, no PAT). Defaults to OFF; the previous
+    # default-on + Host: localhost* check was spoofable via the Host header
+    # whenever the backend was reachable without Traefik in front of it.
+    # Now we require: explicit opt-in via ALLOW_LOCAL_DEV_AUTH=true AND a
+    # loopback client_ip. The Host header is no longer consulted.
     try:
-        allow_local = os.getenv("ALLOW_LOCAL_DEV_AUTH", "true").lower() == "true"
+        allow_local = os.getenv("ALLOW_LOCAL_DEV_AUTH", "false").lower() == "true"
     except Exception:
-        allow_local = True
-    host = (request.headers.get('host') or '').lower()
+        allow_local = False
     client_ip = None
     try:
         client_ip = request.client.host if request.client else None
     except Exception:
         client_ip = None
-    is_local = allow_local and (host.startswith('localhost') or host.startswith('127.0.0.1') or client_ip in ('127.0.0.1', '::1', None))
+    is_local = allow_local and client_ip in ("127.0.0.1", "::1")
     if is_local and not any([x_auth_request_user, x_auth_request_email, x_forwarded_user, x_forwarded_email]):
         email = os.getenv('DEV_LOCAL_EMAIL', 'dev@localhost')
         name = os.getenv('DEV_LOCAL_NAME', 'Development User')

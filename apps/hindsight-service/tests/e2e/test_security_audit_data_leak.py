@@ -488,25 +488,39 @@ def test_F6_bulk_delete_dry_run_rejects_non_member(db_session):
 # ---------------------------------------------------------------------------
 
 
-def test_D_user_info_localhost_host_fallback_returns_dev_user(db_session, monkeypatch):
+def test_D_user_info_no_longer_spoofable_via_host_header(db_session, monkeypatch):
     """
-    `core/api/main.py:361-387`: when no auth headers and no PAT are present,
-    if Host starts with 'localhost' OR client_ip is in (127.0.0.1, ::1, None),
-    `/user-info` returns the dev user `dev@localhost` with full memberships.
+    Regression guard for D: the local-dev fallback in /user-info must NOT
+    fire purely because the Host header starts with 'localhost'. Production
+    safety previously relied entirely on Traefik filtering Host; any direct
+    backend access (port-forward, debug, internal) bypassed it.
 
-    TestClient sets `host = testserver` by default, so we override it.
+    We assert two cases:
+      1. ALLOW_LOCAL_DEV_AUTH=true + spoofed Host: localhost.* → 401 unauth
+         (because client_ip from TestClient is 'testclient', not loopback)
+      2. ALLOW_LOCAL_DEV_AUTH unset → default off → 401 unauth
     """
-    monkeypatch.setenv("ALLOW_LOCAL_DEV_AUTH", "true")
-    # Make sure DEV_MODE itself is OFF so we hit the local-dev fallback branch,
-    # not the dev-mode branch.
     monkeypatch.delenv("DEV_MODE", raising=False)
 
+    # Case 1: env explicitly opts in, but client_ip is not loopback.
+    monkeypatch.setenv("ALLOW_LOCAL_DEV_AUTH", "true")
     client = _guest_client()
     r = client.get("/user-info", headers={"host": "localhost.evil.example.com"})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body.get("authenticated") is True, (
-        f"BUG NOT REPRODUCED: localhost-host fallback did not authenticate the request. "
-        f"Body: {body}"
-    )
-    assert body.get("email") == "dev@localhost"
+    assert r.status_code in (401, 200), r.text
+    if r.status_code == 200:
+        # If the endpoint still returns 200 it must be the unauthenticated marker, not a dev user.
+        body = r.json()
+        assert body.get("authenticated") is not True, (
+            f"REGRESSION (D): Host-header spoof produced an authenticated response: {body}"
+        )
+        assert body.get("email") != "dev@localhost"
+
+    # Case 2: env unset → default off.
+    monkeypatch.delenv("ALLOW_LOCAL_DEV_AUTH", raising=False)
+    client2 = _guest_client()
+    r2 = client2.get("/user-info", headers={"host": "localhost.evil.example.com"})
+    assert r2.status_code in (401, 200), r2.text
+    if r2.status_code == 200:
+        body2 = r2.json()
+        assert body2.get("authenticated") is not True
+        assert body2.get("email") != "dev@localhost"
