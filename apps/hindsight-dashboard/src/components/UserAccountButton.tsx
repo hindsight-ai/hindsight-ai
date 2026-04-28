@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import OrganizationManagement from './OrganizationManagement';
 
-const UserAccountButton: React.FC = () => {
+interface UserAccountButtonProps {
+  onOpenAbout?: () => void;
+}
+
+const UserAccountButton: React.FC<UserAccountButtonProps> = ({ onOpenAbout }) => {
   const { user, loading, exitGuestMode } = useAuth();
   const superadmin = Boolean(user?.is_superadmin);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -146,6 +150,23 @@ const UserAccountButton: React.FC = () => {
                 </svg>
                 Manage Organizations
               </button>
+              {onOpenAbout && (
+                <button
+                  onClick={() => {
+                    setShowDropdown(false);
+                    onOpenAbout();
+                  }}
+                  className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"
+                >
+                  {/* Info icon */}
+                  <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  About Hindsight AI
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition duration-200"

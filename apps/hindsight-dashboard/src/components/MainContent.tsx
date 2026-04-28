@@ -95,7 +95,7 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, sidebarColla
                   </button>
                 )}
                 <NotificationBell />
-                <UserAccountButton />
+                <UserAccountButton onOpenAbout={onOpenAbout} />
               </div>
             </div>
           {/* Row 2: page title and actions */}
