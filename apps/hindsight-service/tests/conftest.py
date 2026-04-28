@@ -120,12 +120,25 @@ _current_session: ContextVar[object] = ContextVar("_current_session", default=No
 # Fallback for threadpool contexts where ContextVar may not propagate
 _GLOBAL_SESSION = None
 
-# Per-test transactional session (fast cleanup without truncation)
+# Per-test transactional session (fast cleanup without truncation).
+#
+# `join_transaction_mode="create_savepoint"` is the SQLAlchemy 2.x idiom that
+# turns every `session.commit()` into a SAVEPOINT release inside the outer
+# `connection.begin()` transaction (instead of committing the outer tx).
+# Without it, any production code path that calls `db.commit()` while a
+# request is in flight (e.g. the F2 TOFU bind in core.api.auth, or the
+# pre-existing admin/beta-status updates) silently commits the outer tx and
+# leaks state across tests. With it, the outer trans.rollback() at teardown
+# still wipes everything, so each test starts clean even when the handler
+# under test commits multiple times.
+#
+# Reference: https://docs.sqlalchemy.org/en/20/orm/session_transaction.html
+#            #joining-a-session-into-an-external-transaction-such-as-for-test-suites
 @pytest.fixture(autouse=True)
 def db_session(_engine, _SessionLocal):
     connection = _engine.connect()
     trans = connection.begin()
-    session = _SessionLocal(bind=connection)
+    session = _SessionLocal(bind=connection, join_transaction_mode="create_savepoint")
     token = _current_session.set(session)
     global _GLOBAL_SESSION
     _GLOBAL_SESSION = session
