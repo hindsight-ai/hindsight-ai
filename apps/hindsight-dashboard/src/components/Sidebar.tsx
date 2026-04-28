@@ -69,10 +69,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onCollapseChange, on
     <>
       {isOpen && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} />}
       <aside
-        role="dialog"
-        aria-modal={isOpen ? 'true' : undefined}
         aria-label="Main navigation"
-        className={`fixed top-0 left-0 h-[100dvh] z-50 ${isCollapsed ? 'w-16' : 'w-72 max-w-[80vw] lg:max-w-none'} flex-shrink-0 bg-[#0F172A] text-gray-300 flex flex-col overflow-y-auto overscroll-contain transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
+        className={`fixed top-0 left-0 h-[100dvh] z-50 ${isCollapsed ? 'w-16' : 'w-64 max-w-[80vw]'} flex-shrink-0 bg-[#0F172A] text-gray-300 flex flex-col overflow-y-auto overscroll-contain transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
       >
         <div className="h-16 flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-700">
           <div className={`flex flex-col transition-all duration-200 ${isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'}`}>
