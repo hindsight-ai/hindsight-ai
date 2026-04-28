@@ -24,7 +24,7 @@ Updated as PRs land. **Merged** = on `integration/rfc-0002-batch-1` (or
 | H4 — GetStarted seen-flag | high | Merged (integration) | [#54](https://github.com/hindsight-ai/hindsight-ai/pull/54) | Co-landed with M5. |
 | M5 — Esc + backdrop dismiss | medium | Merged (integration) | [#54](https://github.com/hindsight-ai/hindsight-ai/pull/54) | Co-landed with H4. |
 | H1+H2 — modals half | high | Merged (integration) | [#55](https://github.com/hindsight-ai/hindsight-ai/pull/55) | `Add{Keyword,MemoryBlock}Modal` rewritten with Tailwind; `<Button>` gains `secondary` variant. |
-| H1+H2 — pages half | high | Pending | — | `MemoryBlockList`, `Consolidation*`, `Pruning*`. Has dead-code complications (duplicate empty-state markup) requiring design decisions. |
+| H1+H2 — pages half | high | Merged (integration) | [#57](https://github.com/hindsight-ai/hindsight-ai/pull/57) | `MemoryBlockList`, `Consolidation*`, `Pruning*` retagged with Tailwind. Dead duplicate empty-state markup + unreachable skeleton/error branches in `ConsolidationSuggestions` deleted (587→522 lines). PruningSuggestions params form is now a `grid md:grid-cols-3`; div-grid table replaced with a real `<table>`. |
 | M1 — Scroll model rewrite | medium | Pending | — | Touches `MainContent.tsx`; manual smoke-test of every header-anchored popover required. |
 | M2 — OrgSwitcher truncate | medium | Pending | — | Lands after M1. |
 | M3 — Tokens table overflow | medium | Pending | — | Lands after M1. |
