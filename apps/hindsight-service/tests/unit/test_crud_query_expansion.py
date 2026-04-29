@@ -1,7 +1,11 @@
 from types import SimpleNamespace
 import uuid
 
-from core.db import crud
+import core.services.search_service as search_service_module
+from core.services.search_service import (
+    _execute_with_query_expansion,
+    search_memory_blocks_hybrid,
+)
 from core.services.query_expansion import QueryExpansionResult
 
 
@@ -18,14 +22,14 @@ def test_execute_with_query_expansion_merges_results(monkeypatch):
     expanded_result = SimpleNamespace(id=expanded_id, search_score=0.9, search_type="fulltext", rank_explanation="synonym")
 
     engine = DummyEngine(["performance"])
-    monkeypatch.setattr(crud, "get_query_expansion_engine", lambda: engine)
+    monkeypatch.setattr(search_service_module, "get_query_expansion_engine", lambda: engine)
 
     def runner(query):
         if query == "performance":
             return [expanded_result], {"total_search_time_ms": 5.0, "search_type": "fulltext"}
         return [], {"total_search_time_ms": 1.0, "search_type": "fulltext"}
 
-    results, metadata = crud._execute_with_query_expansion(  # pylint: disable=protected-access
+    results, metadata = _execute_with_query_expansion(
         base_query="speed",
         limit=5,
         context={"search_type": "fulltext"},
@@ -50,7 +54,7 @@ def test_search_memory_blocks_hybrid_uses_expansion(monkeypatch):
     )
 
     engine = DummyEngine(["performance"])
-    monkeypatch.setattr(crud, "get_query_expansion_engine", lambda: engine)
+    monkeypatch.setattr(search_service_module, "get_query_expansion_engine", lambda: engine)
 
     calls = []
 
@@ -64,7 +68,7 @@ def test_search_memory_blocks_hybrid_uses_expansion(monkeypatch):
 
     monkeypatch.setattr("core.services.search_service.get_search_service", lambda: FakeService())
 
-    results, metadata = crud.search_memory_blocks_hybrid(
+    results, metadata = search_memory_blocks_hybrid(
         db=SimpleNamespace(),
         query="speed",
         agent_id=None,

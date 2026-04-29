@@ -9,8 +9,12 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from sqlalchemy.orm import Session
 
-from core.db import crud
-from core.services.search_service import get_search_service
+from core.services.search_service import (
+    get_search_service,
+    search_memory_blocks_fulltext,
+    search_memory_blocks_semantic,
+    search_memory_blocks_hybrid,
+)
 
 
 @dataclass
@@ -143,18 +147,18 @@ def _run_expanded(db: Session, case: QueryExpansionCase, current_user: Optional[
         "current_user": current_user,
     }
     if search_type == "semantic":
-        return crud.search_memory_blocks_semantic(
+        return search_memory_blocks_semantic(
             similarity_threshold=0.7,
             **kwargs,
         )
     if search_type == "hybrid":
-        return crud.search_memory_blocks_hybrid(
+        return search_memory_blocks_hybrid(
             fulltext_weight=0.7,
             semantic_weight=0.3,
             min_combined_score=0.1,
             **kwargs,
         )
-    return crud.search_memory_blocks_fulltext(
+    return search_memory_blocks_fulltext(
         min_score=0.1,
         **kwargs,
     )

@@ -159,7 +159,7 @@ def health_check():
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException
 from core.db.database import get_db
-from core.db import crud
+from core.db.repositories.memory_blocks import get_unique_conversation_count
 from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_read
 
 
@@ -172,7 +172,7 @@ def get_conversations_count_endpoint(
     try:
         user, current_user, scope_ctx = scoped
         ensure_pat_allows_read(current_user, scope_ctx.organization_id)
-        count = crud.get_unique_conversation_count(db, current_user=current_user, scope_ctx=scope_ctx)
+        count = get_unique_conversation_count(db, current_user=current_user, scope_ctx=scope_ctx)
         return {"count": count or 0}
     except HTTPException:
         raise

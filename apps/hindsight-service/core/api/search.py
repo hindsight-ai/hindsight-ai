@@ -12,9 +12,14 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from core.db import crud, schemas
+from core.db import schemas
 from core.db.database import get_db
 from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_read
+from core.services.search_service import (
+    search_memory_blocks_fulltext,
+    search_memory_blocks_semantic,
+    search_memory_blocks_hybrid,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +53,7 @@ def search_memory_blocks_fulltext_endpoint(
         ensure_pat_allows_read(current_user, organization_id)
 
     try:
-        results, metadata = crud.search_memory_blocks_fulltext(
+        results, metadata = search_memory_blocks_fulltext(
             db=db,
             query=query.strip(),
             agent_id=agent_id,
@@ -93,7 +98,7 @@ def search_memory_blocks_semantic_endpoint(
         ensure_pat_allows_read(current_user, organization_id)
 
     try:
-        results, metadata = crud.search_memory_blocks_semantic(
+        results, metadata = search_memory_blocks_semantic(
             db=db,
             query=query.strip(),
             agent_id=agent_id,
@@ -152,7 +157,7 @@ def search_memory_blocks_hybrid_endpoint(
         ensure_pat_allows_read(current_user, organization_id)
 
     try:
-        results, metadata = crud.search_memory_blocks_hybrid(
+        results, metadata = search_memory_blocks_hybrid(
             db=db,
             query=query.strip(),
             agent_id=agent_id,

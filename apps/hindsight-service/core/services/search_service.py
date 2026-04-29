@@ -16,7 +16,7 @@ from core.utils.scopes import SCOPE_PUBLIC, SCOPE_ORGANIZATION, SCOPE_PERSONAL
 
 from core.db import models, schemas
 from core.db.types import HAS_PGVECTOR
-from core.services import get_embedding_service
+from core.services import get_embedding_service, get_query_expansion_engine
 
 if TYPE_CHECKING:
     from core.api.deps import CurrentUserContext
@@ -1198,3 +1198,257 @@ def get_search_service() -> SearchService:
     if _search_service is None:
         _search_service = SearchService()
     return _search_service
+
+
+# ---------------------------------------------------------------------------
+# Module-level search helpers with query-expansion wrappers.
+# These functions wrap the SearchService methods with the _execute_with_query_expansion
+# logic so callers do not need to go through the db.crud module.
+# ---------------------------------------------------------------------------
+
+def _execute_with_query_expansion(
+    base_query: str,
+    limit: int,
+    context: Dict[str, Any],
+    runner: Any,
+    search_label: str,
+) -> Tuple[List["schemas.MemoryBlockWithScore"], Dict[str, Any]]:
+    """Run the supplied search callable against the base query and any expansions.
+
+    This is the canonical implementation. The identical function previously in
+    ``core.db.crud`` has been removed; import from here instead.
+    """
+    expansion_engine = get_query_expansion_engine()
+    expansion_result = expansion_engine.expand(base_query, context)
+
+    variants: List[str] = [base_query]
+    variants.extend(expansion_result.expanded_queries)
+
+    aggregated: Dict[uuid.UUID, Any] = {}
+    variant_runs: List[Dict[str, Any]] = []
+    total_time_ms = 0.0
+    base_metadata: Optional[Dict[str, Any]] = None
+
+    for variant in variants:
+        results, metadata = runner(variant)
+        if base_metadata is None:
+            base_metadata = dict(metadata)
+        variant_runs.append({
+            "query": variant,
+            "results_count": len(results),
+            "metadata": metadata,
+        })
+        total_time_ms += float(metadata.get("total_search_time_ms", 0.0) or 0.0)
+        for item in results:
+            existing = aggregated.get(item.id)
+            if existing is None or item.search_score > existing.search_score:
+                aggregated[item.id] = item
+
+    ordered_results = sorted(aggregated.values(), key=lambda r: r.search_score, reverse=True)
+    limited_results = ordered_results[: limit if limit is not None else len(ordered_results)]
+
+    combined_metadata: Dict[str, Any] = base_metadata.copy() if base_metadata else {"search_type": search_label}
+    combined_metadata["variant_runs"] = variant_runs
+    combined_metadata["expansion"] = expansion_result.to_metadata()
+    combined_metadata["combined_results_count"] = len(limited_results)
+    combined_metadata["total_search_time_ms"] = total_time_ms
+
+    if expansion_result.expanded_queries:
+        combined_metadata["search_type"] = f"{combined_metadata.get('search_type', search_label)}_expanded"
+    else:
+        combined_metadata.setdefault("search_type", search_label)
+
+    return limited_results, combined_metadata
+
+
+def search_memory_blocks_fulltext(
+    db: Session,
+    query: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    min_score: float = 0.1,
+    include_archived: bool = False,
+    *,
+    current_user: Optional[Dict[str, Any]] = None,
+) -> Tuple[List["schemas.MemoryBlockWithScore"], Dict[str, Any]]:
+    """Full-text search with optional query expansion."""
+    search_service = get_search_service()
+    trimmed_query = (query or "").strip()
+
+    if not trimmed_query:
+        return [], {"search_type": "fulltext", "message": "Empty query"}
+
+    def _runner(expanded_query: str):
+        return search_service.search_memory_blocks_fulltext(
+            db=db,
+            query=expanded_query,
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            min_score=min_score,
+            include_archived=include_archived,
+            current_user=current_user,
+        )
+
+    context: Dict[str, Any] = {
+        "search_type": "fulltext",
+        "agent_id": str(agent_id) if agent_id else None,
+        "conversation_id": str(conversation_id) if conversation_id else None,
+    }
+
+    return _execute_with_query_expansion(trimmed_query, limit, context, _runner, "fulltext")
+
+
+def search_memory_blocks_semantic(
+    db: Session,
+    query: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    similarity_threshold: float = 0.7,
+    include_archived: bool = False,
+    *,
+    current_user: Optional[Dict[str, Any]] = None,
+) -> Tuple[List["schemas.MemoryBlockWithScore"], Dict[str, Any]]:
+    """Semantic search with optional query expansion."""
+    search_service = get_search_service()
+    trimmed_query = (query or "").strip()
+    if not trimmed_query:
+        return [], {"search_type": "semantic", "message": "Empty query"}
+
+    def _runner(expanded_query: str):
+        return search_service.search_memory_blocks_semantic(
+            db=db,
+            query=expanded_query,
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            similarity_threshold=similarity_threshold,
+            include_archived=include_archived,
+            current_user=current_user,
+        )
+
+    context: Dict[str, Any] = {
+        "search_type": "semantic",
+        "agent_id": str(agent_id) if agent_id else None,
+        "conversation_id": str(conversation_id) if conversation_id else None,
+        "similarity_threshold": similarity_threshold,
+    }
+
+    return _execute_with_query_expansion(trimmed_query, limit, context, _runner, "semantic")
+
+
+def search_memory_blocks_hybrid(
+    db: Session,
+    query: str,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    fulltext_weight: float = 0.7,
+    semantic_weight: float = 0.3,
+    min_combined_score: float = 0.1,
+    include_archived: bool = False,
+    *,
+    current_user: Optional[Dict[str, Any]] = None,
+) -> Tuple[List["schemas.MemoryBlockWithScore"], Dict[str, Any]]:
+    """Hybrid search with optional query expansion."""
+    search_service = get_search_service()
+    trimmed_query = (query or "").strip()
+    if not trimmed_query:
+        return [], {"search_type": "hybrid", "message": "Empty query"}
+
+    def _runner(expanded_query: str):
+        return search_service.search_memory_blocks_hybrid(
+            db=db,
+            query=expanded_query,
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            fulltext_weight=fulltext_weight,
+            semantic_weight=semantic_weight,
+            min_combined_score=min_combined_score,
+            include_archived=include_archived,
+            current_user=current_user,
+        )
+
+    context: Dict[str, Any] = {
+        "search_type": "hybrid",
+        "agent_id": str(agent_id) if agent_id else None,
+        "conversation_id": str(conversation_id) if conversation_id else None,
+        "fulltext_weight": fulltext_weight,
+        "semantic_weight": semantic_weight,
+    }
+
+    return _execute_with_query_expansion(trimmed_query, limit, context, _runner, "hybrid")
+
+
+def search_memory_blocks_enhanced(
+    db: Session,
+    search_type: str = "basic",
+    search_query: Optional[str] = None,
+    agent_id: Optional[uuid.UUID] = None,
+    conversation_id: Optional[uuid.UUID] = None,
+    limit: int = 50,
+    include_archived: bool = False,
+    **search_params,
+) -> Tuple[List["schemas.MemoryBlockWithScore"], Dict[str, Any]]:
+    """Dispatcher that routes to fulltext/semantic/hybrid/basic search.
+
+    This is the canonical module-level entry-point previously kept in
+    ``core.db.crud``. It is re-exported from there so existing callers
+    (``crud.search_memory_blocks_enhanced``) continue to work.
+    """
+    search_service = get_search_service()
+    current_user = search_params.get("current_user")
+
+    if search_type == "fulltext":
+        return search_memory_blocks_fulltext(
+            db=db,
+            query=search_query or "",
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            min_score=search_params.get("min_score", 0.1),
+            include_archived=include_archived,
+            current_user=current_user,
+        )
+
+    if search_type == "semantic":
+        return search_memory_blocks_semantic(
+            db=db,
+            query=search_query or "",
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            similarity_threshold=search_params.get("similarity_threshold", 0.7),
+            include_archived=include_archived,
+            current_user=current_user,
+        )
+
+    if search_type == "hybrid":
+        return search_memory_blocks_hybrid(
+            db=db,
+            query=search_query or "",
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            limit=limit,
+            fulltext_weight=search_params.get("fulltext_weight", 0.7),
+            semantic_weight=search_params.get("semantic_weight", 0.3),
+            min_combined_score=search_params.get("min_combined_score", 0.1),
+            include_archived=include_archived,
+            current_user=current_user,
+        )
+
+    results, metadata = search_service.enhanced_search_memory_blocks(
+        db=db,
+        search_type=search_type,
+        search_query=search_query,
+        agent_id=agent_id,
+        conversation_id=conversation_id,
+        limit=limit,
+        include_archived=include_archived,
+        **search_params,
+    )
+
+    return results, metadata
