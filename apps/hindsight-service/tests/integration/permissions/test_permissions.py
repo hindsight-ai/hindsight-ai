@@ -1,4 +1,5 @@
 from core.api import permissions
+from core.api.deps import CurrentUserContext
 
 class Dummy:
     def __init__(self, visibility_scope, owner_user_id=None, organization_id=None):
@@ -9,12 +10,16 @@ class Dummy:
 
 def _ctx(uid, is_super=False, memberships=None):
     memberships = memberships or []
-    return {
-        "id": uid,
-        "is_superadmin": is_super,
-        "memberships": memberships,
-        "memberships_by_org": {m['organization_id']: m for m in memberships},
-    }
+    return CurrentUserContext(
+        id=uid,
+        email="",
+        display_name=None,
+        is_superadmin=is_super,
+        is_beta_access_admin=False,
+        memberships=memberships,
+        memberships_by_org={m['organization_id']: m for m in memberships},
+        beta_access_status=None,
+    )
 
 
 def test_can_read_public():

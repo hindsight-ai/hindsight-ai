@@ -15,9 +15,12 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import or_, and_, func, Text, cast, exists, select # Import func, and_, Text, cast, exists, select
 from .repositories import memory_blocks as repo_memories
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
 from core.services import get_query_expansion_engine
+
+if TYPE_CHECKING:
+    from core.api.deps import CurrentUserContext
 
 # CRUD for BulkOperation (facade delegates to repository)
 def create_bulk_operation(
@@ -475,8 +478,8 @@ def get_consolidation_suggestions_scoped(
     if scope == 'organization' and getattr(scope_ctx, 'organization_id', None):
         filters.append(mb.organization_id == scope_ctx.organization_id)
         filters.append(mb.visibility_scope == 'organization')
-    elif scope == 'personal' and current_user and current_user.get('id'):
-        filters.append(mb.owner_user_id == current_user.get('id'))
+    elif scope == 'personal' and current_user and current_user.id:
+        filters.append(mb.owner_user_id == current_user.id)
         filters.append(mb.visibility_scope == 'personal')
     elif scope == 'public':
         filters.append(mb.visibility_scope == 'public')

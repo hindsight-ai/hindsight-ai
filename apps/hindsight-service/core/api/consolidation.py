@@ -113,11 +113,11 @@ def get_consolidation_suggestions_endpoint(
             if sc == 'organization':
                 return getattr(mem, 'organization_id', None) == getattr(scope_ctx, 'organization_id', None)
             if sc == 'personal':
-                return getattr(mem, 'owner_user_id', None) == (current_user or {}).get('id')
+                return getattr(mem, 'owner_user_id', None) == (current_user.id if current_user else None)
             if sc == 'public':
                 return getattr(mem, 'visibility_scope', None) == 'public'
             # Default: treat as personal unless specified
-            return getattr(mem, 'owner_user_id', None) == (current_user or {}).get('id')
+            return getattr(mem, 'owner_user_id', None) == (current_user.id if current_user else None)
         except Exception:
             return False
 
@@ -238,7 +238,7 @@ def validate_consolidation_suggestion_endpoint(
                 status=AuditStatus.SUCCESS,
                 target_type="consolidation_suggestion",
                 target_id=updated.suggestion_id,
-                actor_user_id=current_user.get('id'),
+                actor_user_id=current_user.id,
                 organization_id=org_id,
                 metadata={
                     "group_id": str(updated.group_id) if getattr(updated, 'group_id', None) else None,
@@ -310,7 +310,7 @@ def reject_consolidation_suggestion_endpoint(
             status=AuditStatus.SUCCESS,
             target_type="consolidation_suggestion",
             target_id=updated.suggestion_id,
-            actor_user_id=current_user.get('id'),
+            actor_user_id=current_user.id,
             organization_id=org_id,
             metadata={
                 "group_id": str(updated.group_id) if getattr(updated, 'group_id', None) else None,

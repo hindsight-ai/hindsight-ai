@@ -31,7 +31,7 @@ def list_audit_logs(
     if organization_id:
         if not can_manage_org(organization_id, current_user):
             raise HTTPException(status_code=403, detail="Forbidden")
-    elif not current_user.get('is_superadmin'):
+    elif not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden, organization_id is required for non-superadmins")
 
     audit_logs = crud.get_audit_logs(db, organization_id=organization_id, user_id=user_id, skip=skip, limit=limit)

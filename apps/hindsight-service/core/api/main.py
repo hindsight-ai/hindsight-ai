@@ -2,6 +2,7 @@
 FastAPI app assembly: middleware and router wiring.
 Includes selected endpoints that span multiple resource modules.
 """
+import dataclasses
 import logging
 import os
 from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter, Body
@@ -36,6 +37,7 @@ from core.api.auth import (
     is_beta_access_admin,
 )
 from core.api.deps import (
+    CurrentUserContext,
     get_current_user_context,
     get_current_user_context_or_pat,
     get_or_create_user_for_request,
@@ -208,17 +210,17 @@ def change_memory_block_scope(
         # PAT org restriction (if applicable)
         ensure_pat_allows_write(current_user, target_org_uuid)
         # Consent check: moving personal -> organization requires owner consent unless superadmin
-        if mb.visibility_scope == SCOPE_PERSONAL and not (current_user.get('is_superadmin') or mb.owner_user_id == current_user.get('id')):
+        if mb.visibility_scope == SCOPE_PERSONAL and not (current_user.is_superadmin or mb.owner_user_id == current_user.id):
             raise HTTPException(status_code=409, detail="Owner consent required to move personal data to organization")
         if not can_move_scope(mb, SCOPE_ORGANIZATION, target_org_uuid, current_user):
             raise HTTPException(status_code=403, detail="Forbidden")
     elif target_scope == SCOPE_PERSONAL:
         if not can_move_scope(mb, SCOPE_PERSONAL, None, current_user):
             # Superadmin override allowed
-            if not current_user.get("is_superadmin"):
+            if not current_user.is_superadmin:
                 raise HTTPException(status_code=403, detail="Forbidden")
     elif target_scope == SCOPE_PUBLIC:
-        if not current_user.get("is_superadmin"):
+        if not current_user.is_superadmin:
             raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
 
     # Determine new ownership fields (capture previous state first)
@@ -236,14 +238,14 @@ def change_memory_block_scope(
                 owner_uuid = uuid.UUID(str(new_owner_user_id))
             except Exception:
                 raise HTTPException(status_code=422, detail="Invalid new_owner_user_id")
-            if not current_user.get("is_superadmin"):
+            if not current_user.is_superadmin:
                 raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
             owner_id = owner_uuid
         mb.visibility_scope = SCOPE_PERSONAL
         mb.owner_user_id = owner_id
         mb.organization_id = None
     else:  # public
-        if not current_user.get("is_superadmin"):
+        if not current_user.is_superadmin:
             raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
         mb.visibility_scope = SCOPE_PUBLIC
         mb.organization_id = None
@@ -260,7 +262,7 @@ def change_memory_block_scope(
             status=AuditStatus.SUCCESS,
             target_type="memory_block",
             target_id=mb.id,
-            actor_user_id=current_user.get("id"),
+            actor_user_id=current_user.id,
             organization_id=mb.organization_id or previous_org_id,
             metadata={
                 "old_scope": previous_scope,
@@ -358,7 +360,7 @@ def get_user_info(
                 x_forwarded_user=x_forwarded_user,
                 x_forwarded_email=x_forwarded_email,
             )
-            memberships = current_user.get("memberships") or []
+            memberships = current_user.memberships
             return {
                 "authenticated": True,
                 "user_id": str(user.id),
@@ -367,7 +369,7 @@ def get_user_info(
                 "is_superadmin": bool(getattr(user, "is_superadmin", False)),
                 "beta_access_status": user.beta_access_status,
                 "memberships": memberships,
-                "pat": current_user.get("pat") or None,
+                "pat": current_user.pat,
                 "llm_features_enabled": flags["llm_features_enabled"],
             }
         except HTTPException as e:
@@ -1093,23 +1095,27 @@ def search_memory_blocks_fulltext_endpoint(
             if email:
                 u = get_or_create_user_for_request(db, email=email, name=name)
                 memberships = get_user_memberships(db, u.id)
-                current_user = {
-                    "id": u.id,
-                    "is_superadmin": bool(u.is_superadmin),
-                    "memberships": memberships,
-                    "memberships_by_org": {m["organization_id"]: m for m in memberships},
-                }
+                current_user = CurrentUserContext(
+                    id=u.id,
+                    email=u.email,
+                    display_name=u.display_name,
+                    is_superadmin=bool(u.is_superadmin),
+                    is_beta_access_admin=False,
+                    memberships=memberships,
+                    memberships_by_org={m["organization_id"]: m for m in memberships},
+                    beta_access_status=None,
+                )
 
         # Narrow memberships to PAT org if present
-        if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
-            pat_org = str(current_user["pat"]["organization_id"])  # string key
-            m = (current_user.get("memberships_by_org") or {}).get(pat_org)
+        if current_user and current_user.pat is not None and current_user.pat.organization_id is not None:
+            pat_org = str(current_user.pat.organization_id)  # string key
+            m = current_user.memberships_by_org.get(pat_org)
             if m:
-                current_user = {
-                    **current_user,
-                    "memberships": [m],
-                    "memberships_by_org": {pat_org: m},
-                }
+                current_user = dataclasses.replace(
+                    current_user,
+                    memberships=[m],
+                    memberships_by_org={pat_org: m},
+                )
 
         results, metadata = crud.search_memory_blocks_fulltext(
             db=db,
@@ -1175,22 +1181,26 @@ def search_memory_blocks_semantic_endpoint(
             if email:
                 u = get_or_create_user_for_request(db, email=email, name=name)
                 memberships = get_user_memberships(db, u.id)
-                current_user = {
-                    "id": u.id,
-                    "is_superadmin": bool(u.is_superadmin),
-                    "memberships": memberships,
-                    "memberships_by_org": {m["organization_id"]: m for m in memberships},
-                }
+                current_user = CurrentUserContext(
+                    id=u.id,
+                    email=u.email,
+                    display_name=u.display_name,
+                    is_superadmin=bool(u.is_superadmin),
+                    is_beta_access_admin=False,
+                    memberships=memberships,
+                    memberships_by_org={m["organization_id"]: m for m in memberships},
+                    beta_access_status=None,
+                )
 
-        if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
-            pat_org = str(current_user["pat"]["organization_id"])  # string key
-            m = (current_user.get("memberships_by_org") or {}).get(pat_org)
+        if current_user and current_user.pat is not None and current_user.pat.organization_id is not None:
+            pat_org = str(current_user.pat.organization_id)  # string key
+            m = current_user.memberships_by_org.get(pat_org)
             if m:
-                current_user = {
-                    **current_user,
-                    "memberships": [m],
-                    "memberships_by_org": {pat_org: m},
-                }
+                current_user = dataclasses.replace(
+                    current_user,
+                    memberships=[m],
+                    memberships_by_org={pat_org: m},
+                )
         results, metadata = crud.search_memory_blocks_semantic(
             db=db,
             query=query.strip(),
@@ -1283,22 +1293,26 @@ def search_memory_blocks_hybrid_endpoint(
             if email:
                 u = get_or_create_user_for_request(db, email=email, name=name)
                 memberships = get_user_memberships(db, u.id)
-                current_user = {
-                    "id": u.id,
-                    "is_superadmin": bool(u.is_superadmin),
-                    "memberships": memberships,
-                    "memberships_by_org": {m["organization_id"]: m for m in memberships},
-                }
+                current_user = CurrentUserContext(
+                    id=u.id,
+                    email=u.email,
+                    display_name=u.display_name,
+                    is_superadmin=bool(u.is_superadmin),
+                    is_beta_access_admin=False,
+                    memberships=memberships,
+                    memberships_by_org={m["organization_id"]: m for m in memberships},
+                    beta_access_status=None,
+                )
 
-        if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
-            pat_org = str(current_user["pat"]["organization_id"])  # string key
-            m = (current_user.get("memberships_by_org") or {}).get(pat_org)
+        if current_user and current_user.pat is not None and current_user.pat.organization_id is not None:
+            pat_org = str(current_user.pat.organization_id)  # string key
+            m = current_user.memberships_by_org.get(pat_org)
             if m:
-                current_user = {
-                    **current_user,
-                    "memberships": [m],
-                    "memberships_by_org": {pat_org: m},
-                }
+                current_user = dataclasses.replace(
+                    current_user,
+                    memberships=[m],
+                    memberships_by_org={pat_org: m},
+                )
         results, metadata = crud.search_memory_blocks_hybrid(
             db=db,
             query=query.strip(),

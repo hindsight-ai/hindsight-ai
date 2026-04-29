@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, TYPE_CHECKING
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, and_, or_, String, literal, cast, Float
 from core.utils.scopes import SCOPE_PUBLIC, SCOPE_ORGANIZATION, SCOPE_PERSONAL
@@ -17,6 +17,9 @@ from core.utils.scopes import SCOPE_PUBLIC, SCOPE_ORGANIZATION, SCOPE_PERSONAL
 from core.db import models, schemas
 from core.db.types import HAS_PGVECTOR
 from core.services import get_embedding_service
+
+if TYPE_CHECKING:
+    from core.api.deps import CurrentUserContext
 
 logger = logging.getLogger(__name__)
 
@@ -173,23 +176,29 @@ def _create_memory_block_with_score(
     return schemas.MemoryBlockWithScore(**memory_block_dict)
 
 
-def _apply_user_scope_filter(query, current_user, model_class):
+def _apply_user_scope_filter(query, current_user: Optional["CurrentUserContext"], model_class):
     """Apply visibility filter mirroring scope_utils.apply_scope_filter.
 
-    Treats `current_user is None` OR `current_user.get('id') is None` as a
-    guest: public-only. The latter case is critical — a malformed user dict
+    Treats `current_user is None` OR `current_user.id is None` as a
+    guest: public-only. The latter case is critical — a malformed user context
     that lacks `id` would otherwise produce `owner_user_id == NULL`, which
     matches every organization-scoped row (NULL owner is the canonical
     org-row signature) and silently leaks all org data.
     """
     if current_user is None:
         return query.filter(model_class.visibility_scope == SCOPE_PUBLIC)
-    user_id = current_user.get('id')
+    # Defensive against malformed input (dict missing 'id', or any non-CurrentUserContext
+    # value passed by a non-migrated caller). Matches scope_utils.apply_scope_filter
+    # behavior — treat malformed input as guest, public-only.
+    try:
+        user_id = current_user.id
+    except AttributeError:
+        return query.filter(model_class.visibility_scope == SCOPE_PUBLIC)
     if user_id is None:
         return query.filter(model_class.visibility_scope == SCOPE_PUBLIC)
 
     org_ids: List[uuid.UUID] = []
-    for m in (current_user.get('memberships') or []):
+    for m in (current_user.memberships or []):
         try:
             org_ids.append(uuid.UUID(m.get('organization_id')))
         except Exception:

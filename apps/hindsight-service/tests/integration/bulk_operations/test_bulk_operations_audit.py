@@ -2,7 +2,7 @@ import uuid
 from fastapi.testclient import TestClient
 from unittest.mock import Mock
 from core.api.main import app
-from core.api.deps import get_current_user_context
+from core.api.deps import get_current_user_context, CurrentUserContext
 from core.db import models, crud
 from tests.conftest import _current_session
 
@@ -29,7 +29,16 @@ def test_bulk_move_audit_start():
     payload = {"dry_run": False, "destination_owner_user_id": str(dest_owner), "resource_types": ["agents"]}
     # Use dependency override to simplify: treat user as owner of org
     fake_user = Mock(); fake_user.id = user_id
-    fake_user_context = {"id": user_id, "is_superadmin": True, "memberships_by_org": {str(org_id): {"role": "owner"}}}
+    fake_user_context = CurrentUserContext(
+        id=user_id,
+        email="auditor@example.com",
+        display_name="Auditor",
+        is_superadmin=True,
+        is_beta_access_admin=False,
+        memberships=[{"organization_id": str(org_id), "role": "owner"}],
+        memberships_by_org={str(org_id): {"role": "owner"}},
+        beta_access_status=None,
+    )
     
     def mock_get_current_user_context(
         db=None,

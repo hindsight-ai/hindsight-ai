@@ -5,13 +5,45 @@ Provides dependency-resolved user context and scope information for routes.
 """
 import uuid
 import logging
-from typing import Optional, Tuple, Dict, Any
+from dataclasses import dataclass, field
+from typing import Optional, Tuple, Dict, Any, List
+from uuid import UUID
 from fastapi import Query
 
 from fastapi import Header, HTTPException, status, Depends
 import os
 from sqlalchemy import text as _sql_text
 from sqlalchemy.orm import Session
+
+
+@dataclass(frozen=True)
+class PatContext:
+    """Metadata about the PAT used to authenticate this request."""
+    id: Any
+    token_id: str
+    scopes: List[str]
+    organization_id: Optional[Any]
+
+
+@dataclass(frozen=True)
+class CurrentUserContext:
+    """Per-request user context.
+
+    Replaces the legacy Dict[str, Any] shape. Consumers should access via
+    attribute (`ctx.is_superadmin`) instead of dict get (`ctx.get('is_superadmin')`).
+    Mistyped attribute access fails loudly at the call site instead of
+    silently returning None — the entire reason this type exists.
+    """
+    id: Any
+    email: str
+    display_name: Optional[str]
+    is_superadmin: bool
+    is_beta_access_admin: bool
+    memberships: List[Dict[str, Any]]
+    memberships_by_org: Dict[str, Dict[str, Any]]
+    beta_access_status: Optional[str]
+    pat: Optional[PatContext] = None
+    dev_mode_pat: Optional[str] = None
 
 from core.db.database import get_db
 from core.api.auth import (
@@ -129,17 +161,18 @@ def get_current_user_context(
         dev_pat_token = _ensure_dev_mode_defaults(db, user)
         memberships = get_user_memberships(db, user.id)
         memberships_by_org = {str(m["organization_id"]): m for m in memberships}
-        current_user = {
-            "id": user.id,
-            "email": user.email,
-            "display_name": user.display_name,
-            "is_superadmin": True,
-            "beta_access_status": "accepted",
-            "memberships": memberships,
-            "memberships_by_org": memberships_by_org,
-            "is_beta_access_admin": True,
-            "dev_mode_pat": dev_pat_token,
-        }
+        current_user = CurrentUserContext(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            is_superadmin=True,
+            is_beta_access_admin=True,
+            memberships=memberships,
+            memberships_by_org=memberships_by_org,
+            beta_access_status="accepted",
+            pat=None,
+            dev_mode_pat=dev_pat_token,
+        )
         return user, current_user
 
     # Normal mode: resolve from OAuth2 proxy headers
@@ -187,16 +220,18 @@ def get_current_user_context(
     is_superadmin = bool(getattr(user, "is_superadmin", False))
     is_beta_admin = is_beta_access_admin(user.email) or is_superadmin
 
-    current_user = {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "is_superadmin": is_superadmin,
-        "beta_access_status": user.beta_access_status,
-        "memberships": memberships,
-        "memberships_by_org": memberships_by_org,
-        "is_beta_access_admin": is_beta_admin,
-    }
+    current_user = CurrentUserContext(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        is_superadmin=is_superadmin,
+        is_beta_access_admin=is_beta_admin,
+        memberships=memberships,
+        memberships_by_org=memberships_by_org,
+        beta_access_status=user.beta_access_status,
+        pat=None,
+        dev_mode_pat=None,
+    )
     return user, current_user
 
 # Internal alias used by some modules.
@@ -266,22 +301,26 @@ def get_current_user_context_or_pat(
         memberships = get_user_memberships(db, user.id)
         memberships_by_org = {str(m["organization_id"]): m for m in memberships}
         is_superadmin = bool(getattr(user, "is_superadmin", False))
-        current_user = {
-            "id": user.id,
-            "email": user.email,
-            "display_name": user.display_name,
-            "is_superadmin": is_superadmin,
-            "is_beta_access_admin": is_beta_access_admin(user.email) or is_superadmin,
-            "memberships": memberships,
-            "memberships_by_org": memberships_by_org,
-            # PAT metadata for downstream checks
-            "pat": {
-                "id": pat.id,
-                "token_id": pat.token_id,
-                "scopes": list(pat.scopes or []),
-                "organization_id": pat.organization_id,
-            },
-        }
+        current_user = CurrentUserContext(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            is_superadmin=is_superadmin,
+            is_beta_access_admin=is_beta_access_admin(user.email) or is_superadmin,
+            memberships=memberships,
+            memberships_by_org=memberships_by_org,
+            # Closes latent bug: PAT path now populates beta_access_status
+            # (was None pre-this-RFC, silently degrading any consumer that
+            # read it for PAT-authenticated requests).
+            beta_access_status=user.beta_access_status,
+            pat=PatContext(
+                id=pat.id,
+                token_id=pat.token_id,
+                scopes=list(pat.scopes or []),
+                organization_id=pat.organization_id,
+            ),
+            dev_mode_pat=None,
+        )
         # Update last_used timestamp (best-effort)
         try:
             token_repo.mark_used_now(db, pat=pat)
@@ -303,25 +342,25 @@ def require_beta_access_admin(
     user_context = Depends(get_current_user_context),
 ):
     user, current_user = user_context
-    if not (current_user.get('is_beta_access_admin') or current_user.get('is_superadmin')):
+    if not (current_user.is_beta_access_admin or current_user.is_superadmin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Beta access admin privileges required.")
     return user, current_user
 
 
-def ensure_pat_allows_write(current_user: Dict[str, Any], target_org_id=None):
+def ensure_pat_allows_write(current_user: Optional[CurrentUserContext], target_org_id=None):
     """Raise 403 if a PAT is present and does not allow write to the target org.
 
     If no PAT present, this is a no-op.
     """
     if not current_user:
         return
-    pat = current_user.get("pat")
+    pat = current_user.pat
     if not pat:
         return
-    scopes = set((pat.get("scopes") or []))
+    scopes = set(pat.scopes)
     if "write" not in scopes:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token lacks write scope")
-    pat_org = pat.get("organization_id")
+    pat_org = pat.organization_id
     # If token has an org restriction and it conflicts with the requested target org, reject
     if pat_org and target_org_id and str(pat_org) != str(target_org_id):
         raise HTTPException(
@@ -334,7 +373,7 @@ def ensure_pat_allows_write(current_user: Dict[str, Any], target_org_id=None):
     # effective organization. Determine effective org (target_org_id preferred, else token org)
     effective_org = target_org_id or pat_org
     if effective_org:
-        memberships_by_org = current_user.get("memberships_by_org")
+        memberships_by_org = current_user.memberships_by_org
         # Only enforce membership-based checks when the effective org entry is
         # actually present in the memberships map. This avoids failing tests and
         # contexts that provide an empty memberships_by_org placeholder.
@@ -344,13 +383,13 @@ def ensure_pat_allows_write(current_user: Dict[str, Any], target_org_id=None):
                 # Emit a lightweight audit/log entry for denied PAT usage due to membership drift
                 logging.getLogger("hindsight.pat").warning(
                     "PAT denied: user=%s org=%s reason=%s",
-                    current_user.get("email"), str(effective_org), "user lacks can_write",
+                    current_user.email, str(effective_org), "user lacks can_write",
                 )
                 # deny if the user no longer has write permission on the organization
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token user lacks write permission for organization")
 
 
-def ensure_pat_allows_read(current_user: Dict[str, Any], target_org_id=None, *, write_implies_read: bool = True):
+def ensure_pat_allows_read(current_user: Optional[CurrentUserContext], target_org_id=None, *, write_implies_read: bool = True):
     """Raise 403 if a PAT is present and does not allow read to the target org.
 
     - Requires `read` scope, or `write` if `write_implies_read=True`.
@@ -359,14 +398,14 @@ def ensure_pat_allows_read(current_user: Dict[str, Any], target_org_id=None, *, 
     """
     if not current_user:
         return
-    pat = current_user.get("pat")
+    pat = current_user.pat
     if not pat:
         return
-    scopes = set((pat.get("scopes") or []))
+    scopes = set(pat.scopes)
     has_read = ("read" in scopes) or (write_implies_read and "write" in scopes)
     if not has_read:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token lacks read scope")
-    pat_org = pat.get("organization_id")
+    pat_org = pat.organization_id
     # If token has an org restriction and it conflicts with the requested target org, reject
     if pat_org and target_org_id and str(pat_org) != str(target_org_id):
         raise HTTPException(
@@ -378,13 +417,13 @@ def ensure_pat_allows_read(current_user: Dict[str, Any], target_org_id=None, *, 
     # token has write scope, prefer checking can_write when applicable.
     effective_org = target_org_id or pat_org
     if effective_org:
-        memberships_by_org = current_user.get("memberships_by_org")
+        memberships_by_org = current_user.memberships_by_org
         # Only enforce membership-based checks when the effective org entry is
         # actually present in the memberships map.
         if memberships_by_org and str(effective_org) in memberships_by_org:
             mem = memberships_by_org.get(str(effective_org))
             # Decide required flag: if token has write and write implies read, treat can_write as acceptable
-            scopes = set((pat.get("scopes") or []))
+            scopes = set(pat.scopes)
             requires_read_flag = True
             if write_implies_read and "write" in scopes:
                 requires_read_flag = False  # we'll allow can_write in place of can_read
@@ -445,8 +484,8 @@ def get_scope_context(
             # invalid PAT → bubble as unauthenticated scope (public)
             return ScopeContext(scope="public", organization_id=None)
 
-        pat = current_user.get("pat") or {}
-        pat_org = pat.get("organization_id")
+        pat = current_user.pat
+        pat_org = pat.organization_id if pat else None
         if pat_org:
             # Force organization scope by PAT restriction; ignore conflicting hints
             try:
@@ -470,7 +509,7 @@ def get_scope_context(
                 except Exception:
                     pass
                 try:
-                    db.execute(_sql_text("SET LOCAL hindsight.user_id = :uid"), {"uid": str(current_user.get('id'))})
+                    db.execute(_sql_text("SET LOCAL hindsight.user_id = :uid"), {"uid": str(current_user.id)})
                 except Exception:
                     pass
                 if ctx.scope == 'organization' and ctx.organization_id:
@@ -575,8 +614,8 @@ def get_scoped_user_and_context(
     """
     user, current_user = user_ctx
     # If PAT is present and request hinted a different org, raise 403
-    if current_user and current_user.get("pat") and current_user["pat"].get("organization_id") and organization_id:
-        pat_org = str(current_user["pat"]["organization_id"])  # store may be UUID or str
+    if current_user and current_user.pat and current_user.pat.organization_id and organization_id:
+        pat_org = str(current_user.pat.organization_id)  # store may be UUID or str
         req_org = _parse_uuid_maybe(organization_id)
         if req_org is not None and str(req_org) != str(pat_org):
             raise HTTPException(

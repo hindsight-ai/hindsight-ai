@@ -40,14 +40,14 @@ def create_keyword_endpoint(
     scope = sc.scope or SCOPE_PERSONAL
     org_id = sc.organization_id if scope == SCOPE_ORGANIZATION else None
     if scope == SCOPE_ORGANIZATION:
-        by_org = current_user.get('memberships_by_org', {})
+        by_org = current_user.memberships_by_org
         key = str(org_id) if org_id else None
         m = by_org.get(key) if key else None
         role = (m or {}).get('role') if m else None
         can_write_flag = bool((m or {}).get('can_write'))
         if not m or not (can_write_flag or role in ('owner', 'admin', 'editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
-    if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
+    if scope == SCOPE_PUBLIC and not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Only superadmin can create public keywords")
     existing = crud.get_scoped_keyword_by_text(
         db,
@@ -139,7 +139,7 @@ def update_keyword_endpoint(
         from core.audit import log_keyword, AuditAction, AuditStatus
         log_keyword(
             db,
-            actor_user_id=current_user.get('id') if current_user else existing.owner_user_id,
+            actor_user_id=current_user.id if current_user else existing.owner_user_id,
             organization_id=db_keyword.organization_id,
             keyword_id=db_keyword.keyword_id,
             action=AuditAction.KEYWORD_UPDATE,
@@ -173,7 +173,7 @@ def delete_keyword_endpoint(
             from core.audit import log_keyword, AuditAction, AuditStatus
             log_keyword(
                 db,
-                actor_user_id=current_user.get('id') if current_user else existing.owner_user_id,
+                actor_user_id=current_user.id if current_user else existing.owner_user_id,
                 organization_id=existing.organization_id,
                 keyword_id=existing.keyword_id,
                 action=AuditAction.KEYWORD_DELETE,

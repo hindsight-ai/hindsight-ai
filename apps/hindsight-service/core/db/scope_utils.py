@@ -5,7 +5,7 @@ This module provides reusable functions for applying scope-based access control
 to database queries, eliminating code duplication across CRUD operations.
 """
 import uuid
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -17,6 +17,9 @@ from core.utils.scopes import (
     SCOPE_PERSONAL,
     ALL_SCOPES,
 )
+
+if TYPE_CHECKING:
+    from core.api.deps import CurrentUserContext
 
 
 @dataclass(frozen=True)
@@ -30,14 +33,14 @@ class ScopeContext:
     organization_id: Optional[uuid.UUID] = None
 
 
-def get_user_organization_ids(current_user: Optional[Dict[str, Any]]) -> List[uuid.UUID]:
+def get_user_organization_ids(current_user: Optional["CurrentUserContext"]) -> List[uuid.UUID]:
     """Extract organization IDs that the user has access to."""
     if not current_user:
         return []
 
     org_ids = []
     try:
-        for membership in current_user.get('memberships', []):
+        for membership in current_user.memberships:
             org_id_str = membership.get('organization_id')
             if org_id_str:
                 try:
@@ -51,33 +54,33 @@ def get_user_organization_ids(current_user: Optional[Dict[str, Any]]) -> List[uu
 
 
 
-def apply_scope_filter(query, current_user: Optional[Dict[str, Any]], model_class):
+def apply_scope_filter(query, current_user: Optional["CurrentUserContext"], model_class):
     """
     Apply scope-based filtering to a SQLAlchemy query.
 
     Args:
         query: SQLAlchemy query object
-        current_user: User context dict or None for guests
+        current_user: User context or None for guests
         model_class: The model class (Agent, MemoryBlock, etc.)
 
     Returns:
         Filtered query
     """
-    # Defensive: a current_user dict that lacks an `id` would translate to
+    # Defensive: a current_user that lacks an `id` would translate to
     # `owner_user_id == NULL`, which matches every organization-scoped row
     # (NULL owner is the canonical org-row signature) AND every public row.
     # That would silently leak all org data. Treat it as "guest" so the
     # caller gets public-only.
     if current_user is not None:
         try:
-            uid = current_user.get('id')
+            uid = current_user.id
         except Exception:
             uid = None
         if uid is None:
             return query.filter(model_class.visibility_scope == SCOPE_PUBLIC)
 
     # Prepare unified OR conditions first so patched `or_` is always invoked in tests
-    user_id = current_user.get('id') if current_user else None
+    user_id = current_user.id if current_user else None
 
     org_ids = get_user_organization_ids(current_user) if current_user else []
 
@@ -102,7 +105,7 @@ def apply_scope_filter(query, current_user: Optional[Dict[str, Any]], model_clas
     combined = or_(*conditions)
 
     # Superadmin sees everything without adding filters
-    if current_user and current_user.get('is_superadmin'):
+    if current_user and current_user.is_superadmin:
         return query
 
     # Guests (no user) see only public data
@@ -135,7 +138,7 @@ def apply_optional_scope_narrowing(query, scope: Optional[str], organization_id:
     return query
 
 
-def validate_scope_access(current_user: Optional[Dict[str, Any]],
+def validate_scope_access(current_user: Optional["CurrentUserContext"],
                          visibility_scope: str,
                          organization_id: Optional[uuid.UUID] = None,
                          owner_user_id: Optional[uuid.UUID] = None) -> bool:
@@ -143,7 +146,7 @@ def validate_scope_access(current_user: Optional[Dict[str, Any]],
     Validate if a user can access a specific scope/ownership combination.
 
     Args:
-        current_user: User context dict or None
+        current_user: User context or None
         visibility_scope: The scope ('personal', 'organization', 'public')
         organization_id: Organization ID for organization scope
         owner_user_id: Owner user ID for personal scope
@@ -154,10 +157,10 @@ def validate_scope_access(current_user: Optional[Dict[str, Any]],
     if current_user is None:
         return visibility_scope == SCOPE_PUBLIC
 
-    if current_user.get('is_superadmin'):
+    if current_user.is_superadmin:
         return True
 
-    user_id = current_user.get('id')
+    user_id = current_user.id
 
     if visibility_scope == SCOPE_PUBLIC:
         return True

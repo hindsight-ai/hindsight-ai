@@ -2,6 +2,7 @@ import pytest
 import uuid
 from core.db.database import SessionLocal, engine
 from core.db import models, schemas, crud
+from core.api.deps import CurrentUserContext
 
 
 @pytest.fixture(scope="module")
@@ -88,7 +89,16 @@ def test_get_all_memory_blocks_scope_filters(db):
     unauth = crud.get_all_memory_blocks(db, current_user=None)
     assert {m.id for m in unauth} == {mb_public.id}
 
-    current_user = {"id": user.id, "memberships": [{"organization_id": str(org.id)}]}
+    current_user = CurrentUserContext(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        is_superadmin=False,
+        is_beta_access_admin=False,
+        memberships=[{"organization_id": str(org.id)}],
+        memberships_by_org={str(org.id): {"organization_id": str(org.id)}},
+        beta_access_status=None,
+    )
     visible = crud.get_all_memory_blocks(db, current_user=current_user)
     ids = {m.id for m in visible}
     assert {mb_public.id, mb_personal.id, mb_org.id}.issubset(ids)

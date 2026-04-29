@@ -25,6 +25,7 @@ from core.utils.scopes import (
     SCOPE_PERSONAL,
 )
 from core.api.deps import (
+    CurrentUserContext,
     get_current_user_context,
     get_current_user_context_or_pat,
     get_or_create_user_for_request,
@@ -84,14 +85,16 @@ def _resolve_search_user_context(
     user = get_or_create_user_for_request(db, email=email, name=name)
     memberships = get_user_memberships(db, user.id)
     memberships_by_org = {str(m["organization_id"]): m for m in memberships}
-    return {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "is_superadmin": bool(getattr(user, "is_superadmin", False)),
-        "memberships": memberships,
-        "memberships_by_org": memberships_by_org,
-    }
+    return CurrentUserContext(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        is_superadmin=bool(getattr(user, "is_superadmin", False)),
+        is_beta_access_admin=False,
+        memberships=memberships,
+        memberships_by_org=memberships_by_org,
+        beta_access_status=None,
+    )
 
 
 def _strip_search_fields(memory: schemas.MemoryBlockWithScore) -> schemas.MemoryBlock:
@@ -114,10 +117,10 @@ def create_memory_block_endpoint(
         raise HTTPException(status_code=404, detail="Agent not found")
     u, current_user = user_context
     _user2, _current2, sc = scope_ctx
-    memberships_by_org = current_user.get('memberships_by_org', {})
+    memberships_by_org = current_user.memberships_by_org
     scope = sc.scope or SCOPE_PERSONAL
     org_id = str(sc.organization_id) if sc.organization_id and scope == SCOPE_ORGANIZATION else None
-    if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
+    if scope == SCOPE_PUBLIC and not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Only superadmin can create public data")
     if scope == SCOPE_ORGANIZATION:
         if not org_id or org_id not in memberships_by_org:
@@ -381,7 +384,7 @@ def update_memory_block_endpoint(
         from core.audit import log_memory, AuditAction, AuditStatus
         log_memory(
             db,
-            actor_user_id=current_user.get("id"),
+            actor_user_id=current_user.id,
             organization_id=updated.organization_id,
             memory_block_id=updated.id,
             action=AuditAction.MEMORY_UPDATE,
@@ -415,7 +418,7 @@ def archive_memory_block_endpoint(
         from core.audit import log_memory, AuditAction, AuditStatus
         log_memory(
             db,
-            actor_user_id=current_user.get("id"),
+            actor_user_id=current_user.id,
             organization_id=db_memory_block.organization_id,
             memory_block_id=db_memory_block.id,
             action=AuditAction.MEMORY_ARCHIVE,
@@ -449,7 +452,7 @@ def soft_delete_memory_block_endpoint(
             from core.audit import log_memory, AuditAction, AuditStatus
             log_memory(
                 db,
-                actor_user_id=current_user.get("id"),
+                actor_user_id=current_user.id,
                 organization_id=current.organization_id,
                 memory_block_id=current.id,
                 action=AuditAction.MEMORY_ARCHIVE,
@@ -483,7 +486,7 @@ def hard_delete_memory_block_endpoint(
         from core.audit import log_memory, AuditAction, AuditStatus
         log_memory(
             db,
-            actor_user_id=current_user.get("id"),
+            actor_user_id=current_user.id,
             organization_id=current.organization_id,
             memory_block_id=current.id,
             action=AuditAction.MEMORY_DELETE,

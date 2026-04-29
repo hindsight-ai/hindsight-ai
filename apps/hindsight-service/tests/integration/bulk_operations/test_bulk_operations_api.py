@@ -7,6 +7,7 @@ from core.db import models
 from core.db.database import get_db
 from core.api.main import app
 from core.api import bulk_operations
+from core.api.deps import CurrentUserContext
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 
@@ -167,6 +168,15 @@ def test_get_operation_status_not_found_for_superadmin(db):
         bulk_operations.get_operation_status(
             uuid.uuid4(),
             db=db,
-            user_context=(dummy_user, {"is_superadmin": True, "memberships": [], "memberships_by_org": {}}),
+            user_context=(dummy_user, CurrentUserContext(
+                id=dummy_user.id,
+                email="",
+                display_name=None,
+                is_superadmin=True,
+                is_beta_access_admin=False,
+                memberships=[],
+                memberships_by_org={},
+                beta_access_status=None,
+            )),
         )
     assert exc.value.status_code == 404

@@ -85,7 +85,7 @@ def list_organizations(
     user, current_user = user_context
     # Always return only orgs where the user has membership, even for superadmins
     # This endpoint is used for the organization switcher dropdown
-    raw_ids = [m.get("organization_id") for m in current_user.get("memberships", [])]
+    raw_ids = [m.get("organization_id") for m in current_user.memberships]
     org_ids = []
     for rid in raw_ids:
         if not rid:
@@ -121,8 +121,8 @@ def list_manageable_organizations(
 ):
     """List organizations that the user can manage (own/admin role) or all organizations for superadmins."""
     user, current_user = user_context
-    
-    if current_user.get("is_superadmin"):
+
+    if current_user.is_superadmin:
         # Superadmins can manage all organizations
         orgs = db.query(models.Organization).all()
     else:
@@ -153,9 +153,9 @@ def list_organizations_admin(
 ):
     """List all organizations for administration purposes (superadmin only)."""
     user, current_user = user_context
-    
+
     # Only superadmins can access this endpoint
-    if not current_user.get("is_superadmin"):
+    if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Superadmin access required")
     
     # Return all organizations for management purposes
@@ -184,7 +184,7 @@ def get_organization(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    if not (current_user.get("is_superadmin") or str(org_id) in current_user.get("memberships_by_org", {})):
+    if not (current_user.is_superadmin or str(org_id) in current_user.memberships_by_org):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     return {"id": str(org.id), "name": org.name, "slug": org.slug, "is_active": org.is_active}
@@ -299,7 +299,7 @@ def list_members(
     user_context = Depends(get_current_user_context),
 ):
     user, current_user = user_context
-    if not can_manage_org(org_id, current_user) and not current_user.get("is_superadmin") and str(org_id) not in current_user.get("memberships_by_org", {}):
+    if not can_manage_org(org_id, current_user) and not current_user.is_superadmin and str(org_id) not in current_user.memberships_by_org:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     members = (
