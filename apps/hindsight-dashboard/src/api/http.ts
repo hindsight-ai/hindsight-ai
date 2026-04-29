@@ -1,5 +1,7 @@
 // Centralized HTTP helpers for consistent API URL handling
 
+import { getScope } from './scopeProvider';
+
 const getCookie = (name: string): string | null => {
   if (typeof document === 'undefined') return null;
   try {
@@ -116,9 +118,10 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
           activeOrgId = scopeOverride.organizationId || undefined;
         }
       } else {
-        activeScope = sessionStorage.getItem('ACTIVE_SCOPE') || undefined;
+        const snapshot = getScope();
+        activeScope = snapshot.scope;
         if (!activeScope && isGuest()) activeScope = 'public';
-        activeOrgId = sessionStorage.getItem('ACTIVE_ORG_ID') || undefined;
+        activeOrgId = snapshot.orgId;
       }
 
       // Add query params for compatibility

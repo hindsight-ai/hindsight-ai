@@ -1,5 +1,6 @@
 import notificationService from '../services/notificationService';
 import { apiFetch } from './http';
+import { getScope } from './scopeProvider';
 
 const isGuest = (): boolean => { try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; } };
 
@@ -138,7 +139,7 @@ const memoryService = {
     if (end_date) params.set('end_date', end_date);
     if (sort_by) params.set('sort_by', sort_by);
     if (sort_order) params.set('sort_order', sort_order);
-    try { const scope = sessionStorage.getItem('ACTIVE_SCOPE'); const orgId = sessionStorage.getItem('ACTIVE_ORG_ID'); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}
+    try { const { scope, orgId } = getScope(); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}
     const resp = await apiFetch('/consolidation-suggestions/', { ensureTrailingSlash: true, searchParams: params, signal });
     return jsonOrThrow(resp);
   },
@@ -163,7 +164,7 @@ const memoryService = {
     if (filters.agentId) params.append('agent_id', filters.agentId);
     if (filters.priority) params.append('priority', filters.priority);
     if (filters.dateRange) params.append('date_range', filters.dateRange);
-    try { const scope = sessionStorage.getItem('ACTIVE_SCOPE'); const orgId = sessionStorage.getItem('ACTIVE_ORG_ID'); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}
+    try { const { scope, orgId } = getScope(); if (scope) params.set('scope', scope); if (scope === 'organization' && orgId) params.set('organization_id', orgId); } catch {}
     const resp = await apiFetch('/memory-optimization/suggestions', { searchParams: params });
     return jsonOrThrow(resp);
   },

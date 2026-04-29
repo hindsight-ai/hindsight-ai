@@ -1,5 +1,6 @@
 import notificationService from '../services/notificationService';
 import { apiFetch, isGuest, apiUrl } from './http';
+import { getScope } from './scopeProvider';
 
 export interface Agent {
   agent_id: string;
@@ -21,8 +22,7 @@ const agentService = {
     const { per_page, ...rest } = filters;
     const params = new URLSearchParams({ ...rest, limit: per_page } as Record<string, string>);
     try {
-      const scope = sessionStorage.getItem('ACTIVE_SCOPE');
-      const orgId = sessionStorage.getItem('ACTIVE_ORG_ID');
+      const { scope, orgId } = getScope();
       if (scope) params.set('scope', scope);
       if (scope === 'organization' && orgId) params.set('organization_id', orgId);
     } catch {}
@@ -58,8 +58,9 @@ const agentService = {
     try {
       const overrideScope = opts?.scopeOverride?.scope;
       const overrideOrg = opts?.scopeOverride?.organizationId || undefined;
-      const scope = overrideScope || (sessionStorage.getItem('ACTIVE_SCOPE') || undefined);
-      const orgId = overrideScope ? (overrideScope === 'organization' ? (overrideOrg || undefined) : undefined) : (sessionStorage.getItem('ACTIVE_ORG_ID') || undefined);
+      const snapshot = getScope();
+      const scope = overrideScope || snapshot.scope;
+      const orgId = overrideScope ? (overrideScope === 'organization' ? (overrideOrg || undefined) : undefined) : snapshot.orgId;
       if (scope) {
         payload.visibility_scope = scope as any;
         // Also include as query params for backends that read scope from query on writes
@@ -113,8 +114,7 @@ const agentService = {
   searchAgents: async (query: string): Promise<Agent[]> => {
     const params = new URLSearchParams({ query });
     try {
-      const scope = sessionStorage.getItem('ACTIVE_SCOPE');
-      const orgId = sessionStorage.getItem('ACTIVE_ORG_ID');
+      const { scope, orgId } = getScope();
       if (scope) params.set('scope', scope);
       if (scope === 'organization' && orgId) params.set('organization_id', orgId);
     } catch {}
