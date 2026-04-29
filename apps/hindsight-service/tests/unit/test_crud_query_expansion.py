@@ -62,7 +62,7 @@ def test_search_memory_blocks_hybrid_uses_expansion(monkeypatch):
                 return [expanded_result], {"total_search_time_ms": 5.0, "search_type": "hybrid"}
             return [], {"total_search_time_ms": 1.0, "search_type": "hybrid"}
 
-    monkeypatch.setattr("core.search.get_search_service", lambda: FakeService())
+    monkeypatch.setattr("core.services.search_service.get_search_service", lambda: FakeService())
 
     results, metadata = crud.search_memory_blocks_hybrid(
         db=SimpleNamespace(),

@@ -16,7 +16,7 @@ from sqlalchemy import or_, Text
 from core.db import models, schemas, scope_utils
 from core.services import get_embedding_service
 from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
-from core.search import get_search_service
+from core.services.search_service import get_search_service
 
 logger = logging.getLogger(__name__)
 

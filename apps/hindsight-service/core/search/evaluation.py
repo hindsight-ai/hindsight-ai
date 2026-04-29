@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 from sqlalchemy.orm import Session
 
 from core.db import crud
-from core.search import get_search_service
+from core.services.search_service import get_search_service
 
 
 @dataclass

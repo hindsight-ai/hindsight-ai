@@ -642,7 +642,7 @@ def search_memory_blocks_enhanced(
     Enhanced search function that delegates to the search service.
     This provides a CRUD-level interface to the new search capabilities.
     """
-    from core.search import get_search_service
+    from core.services.search_service import get_search_service
     
     search_service = get_search_service()
 
@@ -765,7 +765,7 @@ def search_memory_blocks_fulltext(
     """
     Full-text search using PostgreSQL's built-in capabilities.
     """
-    from core.search import get_search_service
+    from core.services.search_service import get_search_service
     
     search_service = get_search_service()
     
@@ -812,7 +812,7 @@ def search_memory_blocks_semantic(
     current_user: Optional[dict] = None,
 ):
     """Semantic search using stored embeddings with optional query expansion."""
-    from core.search import get_search_service
+    from core.services.search_service import get_search_service
 
     search_service = get_search_service()
     trimmed_query = (query or "").strip()
@@ -860,7 +860,7 @@ def search_memory_blocks_hybrid(
     current_user: Optional[dict] = None,
 ):
     """Hybrid search combining full-text and semantic search with expansion."""
-    from core.search import get_search_service
+    from core.services.search_service import get_search_service
 
     search_service = get_search_service()
     trimmed_query = (query or "").strip()
