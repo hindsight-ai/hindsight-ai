@@ -71,7 +71,7 @@ const MainContent: React.FC<MainContentProps> = ({ children, title, toggleSideba
           Sticky header: z-10 creates a stacking context that sits above
           page content (which is at z-auto) but below the sidebar drawer
           (z-50) and modal Portals (z-50/z-[9999]). Header-anchored
-          dropdowns (OrgSwitcher z-20, NotificationDropdown z-50,
+          dropdowns (NotificationDropdown z-50,
           UserAccountButton z-20) stack within this header context, so
           they paint above page content as expected.
         */}
