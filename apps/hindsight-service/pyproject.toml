@@ -59,7 +59,7 @@ omit = [
     "core/db/sqlite_compiler_shims.py",
     # Exclude background/long-running worker & external service integration modules from unit test coverage
     # These require threads, external models, or heavy I/O not suitable for deterministic unit test runs.
-    "core/core/consolidation_worker.py",
+    "core/workers/consolidation_worker.py",
     "core/pruning/*",
     # Email orchestration layers integrate with third-party providers and are covered by integration tests
     "core/services/email_service.py",
