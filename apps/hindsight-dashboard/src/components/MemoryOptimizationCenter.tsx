@@ -727,8 +727,8 @@ const MemoryOptimizationCenter: FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h1 className="text-3xl font-bold text-gray-900">Memory Optimization Center</h1>
               <p className="mt-2 text-gray-600">
                 AI-powered suggestions to improve your memory store
@@ -737,7 +737,7 @@ const MemoryOptimizationCenter: FC = () => {
                 <p className="mt-1 text-sm text-gray-500">LLM features are currently disabled. Compaction actions are unavailable.</p>
               )}
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <button
                 onClick={fetchSuggestions}
                 disabled={loading}
