@@ -64,6 +64,7 @@ omit = [
     # Email orchestration layers integrate with third-party providers and are covered by integration tests
     "core/services/email_service.py",
     "core/services/notification_service.py",
+    "core/services/notifications/*",
     "core/services/transactional_email_service.py",
 ]
 
