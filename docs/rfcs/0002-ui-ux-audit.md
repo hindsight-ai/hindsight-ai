@@ -25,14 +25,15 @@ Updated as PRs land. **Merged** = on `integration/rfc-0002-batch-1` (or
 | M5 — Esc + backdrop dismiss | medium | Merged (integration) | [#54](https://github.com/hindsight-ai/hindsight-ai/pull/54) | Co-landed with H4. |
 | H1+H2 — modals half | high | Merged (integration) | [#55](https://github.com/hindsight-ai/hindsight-ai/pull/55) | `Add{Keyword,MemoryBlock}Modal` rewritten with Tailwind; `<Button>` gains `secondary` variant. |
 | H1+H2 — pages half | high | Merged (integration) | [#57](https://github.com/hindsight-ai/hindsight-ai/pull/57) | `MemoryBlockList`, `Consolidation*`, `Pruning*` retagged with Tailwind. Dead duplicate empty-state markup + unreachable skeleton/error branches in `ConsolidationSuggestions` deleted (587→522 lines). PruningSuggestions params form is now a `grid md:grid-cols-3`; div-grid table replaced with a real `<table>`. |
-| M1 — Scroll model rewrite | medium | Pending | — | Touches `MainContent.tsx`; manual smoke-test of every header-anchored popover required. |
-| M2 — OrgSwitcher truncate | medium | Pending | — | Lands after M1. |
-| M3 — Tokens table overflow | medium | Pending | — | Lands after M1. |
-| M4 — Sidebar drawer width | medium | Pending | — | Lands after M1. |
-| L1 — Console error triage | low | Pending | — | Needs full-capture audit run first to decide promotion. |
-| L2 — Stat card icon style | low | Pending | — | Polish. |
-| L3a — Refresh aria-label | low | Pending | — | Polish. |
+| M1 — Scroll model rewrite | medium | Merged (integration) | [#59](https://github.com/hindsight-ai/hindsight-ai/pull/59) | Document is now the scroller; `MainContent` header is `position: sticky`. `index.css` had `html, body { overflow:hidden; height:100% }` blocking the rewrite — also removed. `overscroll-contain` extended to 16+ Portal-mounted modal scrollers and Sidebar. |
+| M2 — OrgSwitcher truncate | medium | Merged (integration) | [#60](https://github.com/hindsight-ai/hindsight-ai/pull/60) | Pill name truncates; container uses `min-w-0 flex-1`; dot/chevron `flex-shrink-0`. |
+| M3 — Tokens table overflow | medium | Merged (integration) | [#60](https://github.com/hindsight-ai/hindsight-ai/pull/60) | `overflow-x-auto -mx-4 sm:mx-0` extends the scroll wrapper one gutter level outward. |
+| M4 — Sidebar drawer width | medium | Merged (integration) | [#60](https://github.com/hindsight-ai/hindsight-ai/pull/60) | `w-64 max-w-[80vw]` + `aria-label="Main navigation"`. RFC's `role="dialog"` + `aria-modal` dropped after review: WAI-ARIA needs focus trap + Esc handler, neither of which this PR adds. The width bump from `w-64` → `w-72` from RFC was also reverted — codebase was already at `w-64` (narrower than the audit baseline). |
+| L1 — Console error triage | low | Verified clean | — | Full-capture audit (mobile/tablet/desktop × every route + interaction probes) reports zero console errors. No fix needed. |
+| L2 — Stat card icon style | low | Verified non-issue | — | All three Dashboard StatCard icons in `Dashboard.tsx:191-230` already use the same outline style (`fill="none" stroke="currentColor" strokeWidth="2"` Heroicons). The RFC text was based on an earlier audit state. |
+| L3a — Refresh aria-label | low | Verified already-fixed | — | `RefreshIndicator.tsx:26` already carries `aria-label="Refresh data"`. The only other refresh icon (`ArchivedMemoryCard.tsx`) is decorative inside a labeled "Restore" button. |
 | L3b — Notification icon | low | Deferred | — | Punted: needs product input. |
+| (out-of-RFC) MemoryOptimizationCenter mobile overflow | medium | Merged (integration) | [#61](https://github.com/hindsight-ai/hindsight-ai/pull/61) | Final audit-script finding; not in original RFC table (M3 was Tokens-specific). Header switched to `flex-col sm:flex-row` + `flex-wrap` button cluster. Audit now reports zero findings. |
 
 **Audit infrastructure** (lands in #51): the `.claude/skills/ui-ux-audit/`
 skill, screenshot baseline at `docs/rfcs/0002-audit-screenshots/`, the
@@ -45,6 +46,13 @@ Integration branch `integration/rfc-0002-batch-1` accumulates all the
 above. When ready, a single merge `integration → staging` ships the
 whole batch with one CI run. `#52` is already on staging out-of-band;
 the merge will detect that commit and auto-skip it.
+
+**Status: ready to promote.** The audit script
+(`.claude/skills/ui-ux-audit/audit.mjs`) reports zero findings against
+the integration tip across mobile/tablet/desktop × every route ×
+interaction probes. All H/M findings merged; L1 verified clean by
+audit; L2/L3a verified already-correct in the running code; L3b stays
+deferred per its product-input note.
 
 ## Executive summary
 
