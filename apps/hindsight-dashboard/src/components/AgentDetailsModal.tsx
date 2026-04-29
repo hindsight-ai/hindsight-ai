@@ -143,7 +143,7 @@ const AgentDetailsModal: React.FC<AgentDetailsModalProps> = ({ isOpen, onClose, 
         </div>
 
         {/* Content - Scrollable */}
-        <div className="p-6 overflow-y-auto flex-1 min-h-0">
+        <div className="p-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">

@@ -33,17 +33,17 @@ const OrganizationSwitcher: React.FC = () => {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between w-full md:min-w-[320px] md:max-w-[420px] px-3 py-2 text-left bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+        className="flex items-center justify-between gap-2 w-full md:min-w-[320px] md:max-w-[420px] px-3 py-2 text-left bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors duration-200"
         disabled={loading}
       >
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${isPersonalMode ? 'bg-blue-500' : (isPublicMode ? 'bg-red-500' : 'bg-green-500')}`}></div>
-          <span className="font-medium text-gray-900">
+        <div className="flex items-center space-x-2 min-w-0 flex-1">
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isPersonalMode ? 'bg-blue-500' : (isPublicMode ? 'bg-red-500' : 'bg-green-500')}`}></div>
+          <span className="font-medium text-gray-900 truncate">
             {loading ? 'Loading...' : currentDisplayName}
           </span>
         </div>
         <svg
-          className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 flex-shrink-0 text-gray-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -58,7 +58,7 @@ const OrganizationSwitcher: React.FC = () => {
             className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
           ></div>
-          <div className="absolute top-full left-0 right-0 md:right-auto mt-1 w-full md:w-[320px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-80 overflow-y-auto">
+          <div className="absolute top-full left-0 right-0 md:right-auto mt-1 w-full md:w-[320px] bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-80 overflow-y-auto overscroll-contain">
             {error && (
               <div className="px-3 py-2 text-sm text-red-600 bg-red-50 border-b border-gray-200">
                 {error}

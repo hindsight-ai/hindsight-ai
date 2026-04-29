@@ -530,7 +530,7 @@ const KeywordManager: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+            <div className="p-6 overflow-y-auto overscroll-contain max-h-[calc(90vh-120px)]">
               {loadingAssociations ? (
                 <div className="space-y-4">
                   {[...Array(3)].map((_, index) => (

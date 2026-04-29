@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import memoryService from '../api/memoryService';
 import notificationService from '../services/notificationService';
 import { useAuth } from '../context/AuthContext';
+import Button from './Button';
 
 interface PruningSuggestion {
   memory_block_id: string;
@@ -153,164 +154,210 @@ const PruningSuggestions: React.FC = () => {
     );
   }
 
+  // pruning_score semantics: lower = higher priority for pruning. So low
+  // scores warn (red), high scores are safe to keep (green).
+  const scoreBadgeClass = (score: number | string | undefined): string => {
+    if (score === undefined || score === null || score === '') {
+      return 'bg-red-100 text-red-700 border-red-200';
+    }
+    const numScore = typeof score === 'string' ? parseFloat(score) : score;
+    if (numScore < 30) return 'bg-red-100 text-red-700 border-red-200';
+    if (numScore < 70) return 'bg-amber-100 text-amber-700 border-amber-200';
+    return 'bg-green-100 text-green-700 border-green-200';
+  };
+
+  const formatScore = (score: number | string | undefined): string => {
+    if (score === undefined || score === null || score === '') return 'N/A';
+    return (typeof score === 'string' ? parseFloat(score) : score).toFixed(2);
+  };
+
   return (
-    <div className="memory-block-list-container">
+    <div className="flex flex-col gap-4 p-4 sm:p-6">
       {/* Pruning Parameters */}
-      <div className="pruning-params-section">
-        <h3>Pruning Parameters</h3>
-        <div className="pruning-params-form">
-          <div className="form-group">
-            <label>Batch Size:</label>
+      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+        <h3 className="text-base font-semibold text-gray-900">Pruning Parameters</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="space-y-1.5">
+            <label htmlFor="batch_size" className="block text-sm font-medium text-gray-700">
+              Batch Size
+            </label>
             <input
+              id="batch_size"
               type="number"
               name="batch_size"
               value={pruningParams.batch_size}
               onChange={handleParamChange}
-              min="1"
-              max="100"
+              min={1}
+              max={100}
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
-            <small className="param-hint">Number of memory blocks to evaluate in each batch (default: 50)</small>
+            <small className="block text-xs text-gray-500">
+              Number of memory blocks to evaluate in each batch (default: 50)
+            </small>
           </div>
-          <div className="form-group">
-            <label>Target Count:</label>
+          <div className="space-y-1.5">
+            <label htmlFor="target_count" className="block text-sm font-medium text-gray-700">
+              Target Count
+            </label>
             <input
+              id="target_count"
               type="number"
               name="target_count"
               value={pruningParams.target_count || ''}
               onChange={handleParamChange}
-              min="0"
+              min={0}
               placeholder="Leave empty for no limit"
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
-            <small className="param-hint">Maximum number of blocks to suggest for pruning (default: 100, leave empty for no limit)</small>
+            <small className="block text-xs text-gray-500">
+              Maximum number of blocks to suggest for pruning (default: 100, leave empty for no limit)
+            </small>
           </div>
-          <div className="form-group">
-            <label>Max Iterations:</label>
+          <div className="space-y-1.5">
+            <label htmlFor="max_iterations" className="block text-sm font-medium text-gray-700">
+              Max Iterations
+            </label>
             <input
+              id="max_iterations"
               type="number"
               name="max_iterations"
               value={pruningParams.max_iterations}
               onChange={handleParamChange}
-              min="1"
-              max="100"
+              min={1}
+              max={100}
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
             />
-            <small className="param-hint">Maximum number of evaluation iterations to run (default: 10)</small>
+            <small className="block text-xs text-gray-500">
+              Maximum number of evaluation iterations to run (default: 10)
+            </small>
           </div>
-          <button
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
             onClick={handleRefresh}
             disabled={loading || llmDisabled}
-            style={llmDisabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
             title={llmDisabled ? 'LLM features are currently disabled' : undefined}
           >
-            {loading ? 'Loading...' : 'Generate Suggestions'}
-          </button>
+            {loading ? 'Loading…' : 'Generate Suggestions'}
+          </Button>
+          {llmDisabled && (
+            <p className="text-sm text-gray-500">LLM features are currently disabled. Generation is unavailable.</p>
+          )}
         </div>
-        {llmDisabled && (
-          <p className="text-sm text-gray-500 mt-3">LLM features are currently disabled. Generation is unavailable.</p>
-        )}
-      </div>
+      </section>
 
-      {/* Error Message */}
-      {error && <div className="error-message">{error}</div>}
+      {/* Error */}
+      {error && (
+        <div
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          data-testid="error-message"
+        >
+          {error}
+        </div>
+      )}
 
       {/* Empty State */}
       {!loading && suggestions.length === 0 && !error && (
-        <div className="empty-state-message">
-          <p>No pruning suggestions available</p>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-sm text-gray-500">
+          <p className="font-medium text-gray-700 mb-1">No pruning suggestions available</p>
           <p>Adjust the parameters and refresh to generate new suggestions.</p>
         </div>
       )}
 
       {/* Suggestions Table */}
       {suggestions.length > 0 && (
-        <div className="pruning-suggestions-container">
-          <div className="bulk-action-bar">
-            <div className="bulk-action-left">
+        <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={selectedBlocks.length === suggestions.length && suggestions.length > 0}
                 onChange={handleSelectAll}
                 disabled={suggestions.length === 0}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                aria-label="Select all suggestions"
               />
               <span>{selectedBlocks.length} of {suggestions.length} selected</span>
             </div>
-            <div className="bulk-action-right">
-              <button 
-                onClick={handleConfirmPruning} 
-                disabled={selectedBlocks.length === 0 || confirming}
-                className="confirm-pruning-button"
-              >
-                {confirming ? 'Archiving...' : `Archive Selected (${selectedBlocks.length})`}
-              </button>
-            </div>
-          </div>
+            <Button
+              onClick={handleConfirmPruning}
+              disabled={selectedBlocks.length === 0 || confirming}
+            >
+              {confirming ? 'Archiving…' : `Archive Selected (${selectedBlocks.length})`}
+            </Button>
+          </header>
 
-          <div className="data-table-container">
-            <div className="data-table-header">
-              <div className="header-cell">Select</div>
-              <div className="header-cell">ID</div>
-              <div className="header-cell">Score</div>
-              <div className="header-cell">Reason</div>
-              <div className="header-cell">Content</div>
-              <div className="header-cell">Created</div>
-              <div className="header-cell">Actions</div>
-            </div>
-            
-            <div className="data-table-body">
-              {suggestions.map((block) => (
-                <div key={block.memory_block_id} className="data-table-row">
-                  <div className="data-cell">
-                    <input
-                      type="checkbox"
-                      checked={selectedBlocks.includes(block.memory_block_id)}
-                      onChange={() => handleSelectBlock(block.memory_block_id)}
-                    />
-                  </div>
-                  <div className="data-cell" title={block.memory_block_id}>
-                    {truncate(block.memory_block_id, 8)}
-                  </div>
-                  <div className="data-cell">
-                    <span className={`score-badge ${(() => {
-                      const score = block.pruning_score;
-                      if (score === undefined || score === null || score === '') return 'high';
-                      const numScore = typeof score === 'string' ? parseFloat(score) : score;
-                      return (numScore < 30) ? 'low' : (numScore < 70) ? 'medium' : 'high';
-                    })()}`}>
-                      {(() => {
-                        const score = block.pruning_score;
-                        return (score !== undefined && score !== null && score !== '') ? (typeof score === 'string' ? parseFloat(score) : score).toFixed(2) : 'N/A';
-                      })()}
-                    </span>
-                  </div>
-                  <div className="data-cell" title={block.rationale}>
-                    {truncate(block.rationale || 'No reason provided', 50)}
-                  </div>
-                  <div className="data-cell" title={block.content_preview}>
-                    {truncate(block.content_preview || '', 100)}
-                  </div>
-                  <div className="data-cell">
-                    {block.created_at ? new Date(block.created_at).toLocaleDateString() : 'N/A'}
-                  </div>
-                  <div className="data-cell">
-                    <button
-                      onClick={() => handleViewDetails(block.memory_block_id)}
-                      className="action-icon-button view-edit-button"
-                      title="View Details"
-                    >
-                      👁️
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th scope="col" className="px-4 py-2 w-10">Select</th>
+                  <th scope="col" className="px-4 py-2">ID</th>
+                  <th scope="col" className="px-4 py-2">Score</th>
+                  <th scope="col" className="px-4 py-2">Reason</th>
+                  <th scope="col" className="px-4 py-2">Content</th>
+                  <th scope="col" className="px-4 py-2">Created</th>
+                  <th scope="col" className="px-4 py-2 w-16 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {suggestions.map((block) => (
+                  <tr key={block.memory_block_id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedBlocks.includes(block.memory_block_id)}
+                        onChange={() => handleSelectBlock(block.memory_block_id)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        aria-label={`Select suggestion ${block.memory_block_id.slice(0, 8)}`}
+                      />
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs text-gray-600" title={block.memory_block_id}>
+                      {truncate(block.memory_block_id, 8)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${scoreBadgeClass(block.pruning_score)}`}
+                      >
+                        {formatScore(block.pruning_score)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-gray-700 max-w-xs truncate" title={block.rationale}>
+                      {truncate(block.rationale || 'No reason provided', 50)}
+                    </td>
+                    <td className="px-4 py-2 text-gray-700 max-w-md truncate" title={block.content_preview}>
+                      {truncate(block.content_preview || '', 100)}
+                    </td>
+                    <td className="px-4 py-2 text-gray-600 whitespace-nowrap">
+                      {block.created_at ? new Date(block.created_at).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleViewDetails(block.memory_block_id)}
+                        className="inline-flex items-center justify-center rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        title="View Details"
+                        aria-label="View Details"
+                      >
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Loading State */}
       {loading && (
-        <div className="loading-message">
-          Generating pruning suggestions...
-        </div>
+        <p className="text-sm text-gray-500" data-testid="loading-message">
+          Generating pruning suggestions…
+        </p>
       )}
     </div>
   );

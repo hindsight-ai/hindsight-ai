@@ -11,6 +11,7 @@ import PaginationControls from './PaginationControls';
 import { UIMemoryBlock, UIMemoryKeyword } from '../types/domain';
 import { Agent } from '../api/agentService';
 import RefreshIndicator from './RefreshIndicator';
+import Button from './Button';
 import { isValidUuid } from '../utils/uuid';
 
 // Interfaces for component state
@@ -510,35 +511,39 @@ const MemoryBlockList: React.FC = () => {
   };
 
   if (loading) return (
-    <div className="loading-container" data-testid="loading-indicator">
-      <div className="loading-spinner">Loading memory blocks...</div>
+    <div className="px-6 py-4 text-sm text-gray-500" data-testid="loading-indicator">
+      Loading memory blocks…
     </div>
   );
 
-  // Display error message if there is one
   if (error) return (
-    <div className="error-message" data-testid="error-message">
+    <div
+      className="mx-6 my-4 flex items-start justify-between gap-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+      data-testid="error-message"
+    >
       <p>Error: {error}</p>
-      <button
-        className="error-dismiss-btn"
-        data-testid="dismiss-error"
+      <Button
+        variant="secondary"
         onClick={() => setError(null)}
+        data-testid="dismiss-error"
       >
         Dismiss
-      </button>
+      </Button>
     </div>
   );
 
   return (
-    <div className="memory-block-list-container">
-      {/* Success Message */}
+    <div className="flex flex-col gap-4 p-4 sm:p-6">
       {successMessage && (
-        <div className="success-message" data-testid="success-message">
-          <p>{successMessage}</p>
+        <div
+          className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700"
+          data-testid="success-message"
+        >
+          {successMessage}
         </div>
       )}
 
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end">
         <RefreshIndicator
           lastUpdated={lastUpdated}
           onRefresh={handleRefreshData}
@@ -546,29 +551,23 @@ const MemoryBlockList: React.FC = () => {
         />
       </div>
 
-      {/* Empty State Message */}
       {!loading && !error && memoryBlocks.length === 0 && !areFiltersActive() && (
-        <div className="empty-state-message">
-          <p>No Memory Blocks Found</p>
-          <p>
-            It looks like there are no memory blocks in your system.
-            Start by creating a new one!
-          </p>
-          {/* The "Add New Memory Block" button is now in App.js header */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-sm text-gray-500">
+          <p className="font-medium text-gray-700 mb-1">No Memory Blocks Found</p>
+          <p>It looks like there are no memory blocks in your system. Start by creating a new one!</p>
         </div>
       )}
 
-      {/* Empty State Message when filters are active but no results */}
       {!loading && !error && memoryBlocks.length === 0 && areFiltersActive() && (
-        <div className="empty-state-message">
-          <p>No Memory Blocks Match Your Filters</p>
-          <p>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-sm text-gray-500">
+          <p className="font-medium text-gray-700 mb-1">No Memory Blocks Match Your Filters</p>
+          <p className="mb-4">
             We couldn't find any memory blocks that match your current search criteria.
             Try adjusting your filters or clearing them to see all memory blocks.
           </p>
-          <button onClick={resetFilters}>
+          <Button variant="secondary" onClick={resetFilters}>
             Clear Active Filters
-          </button>
+          </Button>
         </div>
       )}
 
@@ -609,27 +608,8 @@ const MemoryBlockList: React.FC = () => {
           )}
 
           {/* Memory Blocks Header - positioned above the table */}
-          <div className="memory-blocks-header" style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '16px 25px',
-            borderBottom: '1px solid #e0e0e0',
-            marginBottom: '0',
-            marginLeft: 'var(--content-margin)',
-            marginRight: 'var(--content-margin)',
-            width: 'var(--content-max-width)',
-            boxSizing: 'border-box',
-            minWidth: '0' // Allow flex items to shrink below their content size
-          }}>
-            {/* Total Count - Left Side */}
-            <div className="total-count" style={{
-              fontSize: '0.9em',
-              color: '#666',
-              fontWeight: '500',
-              flexShrink: 0, // Prevent shrinking
-              whiteSpace: 'nowrap'
-            }}>
+          <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 min-w-0">
+            <div className="text-sm font-medium text-gray-600 whitespace-nowrap flex-shrink-0">
               {pagination.total_items > 0 && (
                 <span>
                   {pagination.total_items} memory block{pagination.total_items !== 1 ? 's' : ''} found
@@ -637,49 +617,21 @@ const MemoryBlockList: React.FC = () => {
               )}
             </div>
 
-            {/* Developer-only test controls */}
             {VITE_DEV_MODE && (
-              <div className="header-actions" style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                flexShrink: 0,
-                marginLeft: 'auto'
-              }}>
+              <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
                 <button
-                  className="test-save-button"
+                  type="button"
                   data-testid="save-button"
                   onClick={() => notificationService.showSuccess('Item saved successfully')}
-                  style={{
-                    backgroundColor: '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    padding: '6px 10px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '11px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0
-                  }}
+                  className="rounded bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 whitespace-nowrap"
                 >
                   Test Save
                 </button>
-
                 <button
-                  className="test-invalid-button"
+                  type="button"
                   data-testid="invalid-action"
                   onClick={() => notificationService.showError('Invalid action performed')}
-                  style={{
-                    backgroundColor: '#dc3545',
-                    color: 'white',
-                    border: 'none',
-                    padding: '6px 10px',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '11px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0
-                  }}
+                  className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 whitespace-nowrap"
                 >
                   Test Error
                 </button>

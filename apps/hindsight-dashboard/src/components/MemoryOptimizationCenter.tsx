@@ -560,7 +560,7 @@ const MemoryOptimizationCenter: FC = () => {
 
     return (
       <Portal>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm overflow-y-auto h-full w-full z-50">
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm overflow-y-auto overscroll-contain h-full w-full z-50">
         <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
           <div className="mt-3">
             {/* Header */}
@@ -597,7 +597,7 @@ const MemoryOptimizationCenter: FC = () => {
               <h4 className="text-lg font-medium text-gray-900 mb-3">
                 Affected Memory Blocks ({suggestion.affected_blocks?.length || 0})
               </h4>
-              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+              <div className="max-h-64 overflow-y-auto overscroll-contain border border-gray-200 rounded-lg">
                 {(suggestion.affected_blocks || []).length === 0 ? (
                   <div className="p-4 text-center text-gray-500">
                     No memory blocks specified for this suggestion.
@@ -727,8 +727,8 @@ const MemoryOptimizationCenter: FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h1 className="text-3xl font-bold text-gray-900">Memory Optimization Center</h1>
               <p className="mt-2 text-gray-600">
                 AI-powered suggestions to improve your memory store
@@ -737,7 +737,7 @@ const MemoryOptimizationCenter: FC = () => {
                 <p className="mt-1 text-sm text-gray-500">LLM features are currently disabled. Compaction actions are unavailable.</p>
               )}
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <button
                 onClick={fetchSuggestions}
                 disabled={loading}
