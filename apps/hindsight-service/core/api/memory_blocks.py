@@ -561,4 +561,130 @@ def search_memory_blocks_endpoint(
 
     return sanitized_results
 
-# Slimmed scope change endpoint omitted for now (kept in main for backwards compat)
+
+
+# ---------------------------------------------------------------------------
+# Routes moved from main.py
+# ---------------------------------------------------------------------------
+
+@router.post("/{memory_id}/change-scope", response_model=schemas.MemoryBlock)
+def change_memory_block_scope(
+    memory_id: uuid.UUID,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
+):
+    mb = crud.get_memory_block(db, memory_id)
+    if not mb:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    u, current_user = user_context
+
+    target_scope = (payload.get("visibility_scope") or '').lower()
+    if target_scope not in ALL_SCOPES:
+        raise HTTPException(status_code=422, detail="Invalid target visibility_scope")
+
+    target_org_id = payload.get("organization_id")
+    new_owner_user_id = payload.get("new_owner_user_id")
+
+    # Permission to move
+    from core.api.permissions import can_move_scope
+    if target_scope == SCOPE_ORGANIZATION:
+        if not target_org_id:
+            raise HTTPException(status_code=422, detail="organization_id required for organization scope")
+        try:
+            target_org_uuid = uuid.UUID(str(target_org_id))
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid organization_id")
+        # PAT org restriction (if applicable)
+        ensure_pat_allows_write(current_user, target_org_uuid)
+        # Consent check: moving personal -> organization requires owner consent unless superadmin
+        if mb.visibility_scope == SCOPE_PERSONAL and not (current_user.is_superadmin or mb.owner_user_id == current_user.id):
+            raise HTTPException(status_code=409, detail="Owner consent required to move personal data to organization")
+        if not can_move_scope(mb, SCOPE_ORGANIZATION, target_org_uuid, current_user):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == SCOPE_PERSONAL:
+        if not can_move_scope(mb, SCOPE_PERSONAL, None, current_user):
+            # Superadmin override allowed
+            if not current_user.is_superadmin:
+                raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == SCOPE_PUBLIC:
+        if not current_user.is_superadmin:
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+
+    # Determine new ownership fields (capture previous state first)
+    previous_scope = mb.visibility_scope
+    previous_org_id = mb.organization_id
+    previous_owner_id = mb.owner_user_id
+    if target_scope == SCOPE_ORGANIZATION:
+        mb.visibility_scope = SCOPE_ORGANIZATION
+        mb.organization_id = target_org_uuid
+        mb.owner_user_id = None
+    elif target_scope == SCOPE_PERSONAL:
+        owner_id = u.id
+        if new_owner_user_id:
+            try:
+                owner_uuid = uuid.UUID(str(new_owner_user_id))
+            except Exception:
+                raise HTTPException(status_code=422, detail="Invalid new_owner_user_id")
+            if not current_user.is_superadmin:
+                raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
+            owner_id = owner_uuid
+        mb.visibility_scope = SCOPE_PERSONAL
+        mb.owner_user_id = owner_id
+        mb.organization_id = None
+    else:  # public
+        if not current_user.is_superadmin:
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+        mb.visibility_scope = SCOPE_PUBLIC
+        mb.organization_id = None
+        mb.owner_user_id = None
+
+    db.commit()
+    db.refresh(mb)
+    # Audit log
+    try:
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.MEMORY_SCOPE_CHANGE,
+            status=AuditStatus.SUCCESS,
+            target_type="memory_block",
+            target_id=mb.id,
+            actor_user_id=current_user.id,
+            organization_id=mb.organization_id or previous_org_id,
+            metadata={
+                "old_scope": previous_scope,
+                "new_scope": mb.visibility_scope,
+                "old_org_id": str(previous_org_id) if previous_org_id else None,
+                "new_org_id": str(mb.organization_id) if mb.organization_id else None,
+                "old_owner_user_id": str(previous_owner_id) if previous_owner_id else None,
+                "new_owner_user_id": str(mb.owner_user_id) if mb.owner_user_id else None,
+            },
+        )
+    except Exception:
+        pass
+    return mb
+    # Re-query keywords since relationship may not be loaded
+    current_keywords = mb.keywords
+    new_keyword_ids = []
+    for kw in current_keywords:
+        target_kw = crud._get_or_create_keyword(
+            db,
+            kw.keyword_text,
+            visibility_scope=mb.visibility_scope,
+            owner_user_id=mb.owner_user_id,
+            organization_id=mb.organization_id,
+        )
+        new_keyword_ids.append(target_kw.keyword_id)
+
+    # Update associations to point to target-scope keywords
+    # Delete existing associations and recreate to the new keyword ids
+    db.query(models.MemoryBlockKeyword).filter(models.MemoryBlockKeyword.memory_id == mb.id).delete(synchronize_session=False)
+    for kid in new_keyword_ids:
+        db.add(models.MemoryBlockKeyword(memory_id=mb.id, keyword_id=kid))
+
+    db.commit()
+    db.refresh(mb)
+    return mb
+
+

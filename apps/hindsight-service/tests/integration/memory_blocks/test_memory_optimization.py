@@ -108,7 +108,7 @@ def test_execute_optimization_suggestion_keywords(client, db_session):
     db_session.commit()
     
     # Mock the extract_keywords_enhanced function
-    with patch('core.api.main.extract_keywords_enhanced', return_value=['python', 'programming']):
+    with patch('core.services.keyword_extraction_service.extract_keywords_enhanced', return_value=['python', 'programming']):
         headers = {"x-auth-request-user": "testuser", "x-auth-request-email": "testuser@example.com"}
         # First get suggestions to find the ID
         response = client.get("/memory-optimization/suggestions", headers=headers)
