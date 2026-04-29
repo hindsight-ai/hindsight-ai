@@ -5,7 +5,7 @@ Includes selected endpoints that span multiple resource modules.
 import dataclasses
 import logging
 import os
-from fastapi import FastAPI, Header, Depends, HTTPException, status, APIRouter, Body
+from fastapi import FastAPI, Header, Depends, HTTPException, Query, status, APIRouter, Body
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -459,7 +459,8 @@ def get_conversations_count_endpoint(
 @router.post("/memory/prune/suggest", response_model=dict)
 def generate_pruning_suggestions_endpoint(
     request: dict = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """
     Generate memory block pruning suggestions using LLM evaluation.
@@ -467,6 +468,11 @@ def generate_pruning_suggestions_endpoint(
     """
     if request is None:
         request = {}
+
+    user, current_user, _scope_ctx = scoped
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    ensure_pat_allows_write(current_user)
 
     if not llm_features_enabled():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
@@ -500,16 +506,22 @@ def generate_pruning_suggestions_endpoint(
 @router.post("/memory/prune/confirm", response_model=dict)
 def confirm_pruning_endpoint(
     request: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """
     Confirm and archive selected memory blocks for pruning.
     This endpoint archives the memory blocks that were approved for pruning.
     """
     memory_block_ids = request.get("memory_block_ids", [])
-    
+
     if not memory_block_ids:
         raise HTTPException(status_code=400, detail="No memory block IDs provided for pruning")
+
+    user, current_user, _scope_ctx = scoped
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    ensure_pat_allows_write(current_user)
     
     archived_count = 0
     failed_count = 0
@@ -553,7 +565,8 @@ def confirm_pruning_endpoint(
 def compress_memory_block_endpoint(
     memory_id: uuid.UUID,
     request: dict = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """
     Compress a memory block using LLM to create a more condensed version.
@@ -561,6 +574,11 @@ def compress_memory_block_endpoint(
     """
     if request is None:
         request = {}
+
+    user, current_user, _scope_ctx = scoped
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    ensure_pat_allows_write(current_user)
 
     if not llm_features_enabled():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
@@ -603,7 +621,8 @@ def compress_memory_block_endpoint(
 def apply_memory_compression_endpoint(
     memory_id: uuid.UUID,
     request: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """
     Apply the compressed version to replace the original memory block content.
@@ -613,6 +632,11 @@ def apply_memory_compression_endpoint(
 
     if not compressed_content:
         raise HTTPException(status_code=400, detail="Compressed content is required")
+
+    user, current_user, _scope_ctx = scoped
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    ensure_pat_allows_write(current_user)
 
     try:
         # Update the memory block with compressed content
@@ -643,16 +667,22 @@ def apply_memory_compression_endpoint(
 @router.post("/memory-blocks/bulk-generate-keywords", response_model=dict)
 def bulk_generate_keywords_endpoint(
     request: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """
     Generate keywords for multiple memory blocks using basic keyword extraction.
     Returns suggested keywords for each memory block for user review and approval.
     """
     memory_block_ids = request.get("memory_block_ids", [])
-    
+
     if not memory_block_ids:
         raise HTTPException(status_code=400, detail="No memory block IDs provided")
+
+    user, current_user, _scope_ctx = scoped
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    ensure_pat_allows_write(current_user)
     
     try:
         suggestions = []
@@ -776,16 +806,22 @@ def extract_keywords_enhanced(text: str) -> List[str]:
 @router.post("/memory-blocks/bulk-apply-keywords", response_model=dict)
 def bulk_apply_keywords_endpoint(
     request: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """
     Apply selected keywords to memory blocks.
     Expects a list of memory block IDs with their selected keywords.
     """
     applications = request.get("applications", [])
-    
+
     if not applications:
         raise HTTPException(status_code=400, detail="No keyword applications provided")
+
+    user, current_user, _scope_ctx = scoped
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    ensure_pat_allows_write(current_user)
     
     try:
         successful_count = 0
@@ -861,7 +897,8 @@ def bulk_apply_keywords_endpoint(
 @router.post("/memory-blocks/bulk-compact", response_model=dict)
 async def bulk_compact_memory_blocks_endpoint(
     request: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
     """
     Bulk compact multiple memory blocks using AI compression.
@@ -869,7 +906,12 @@ async def bulk_compact_memory_blocks_endpoint(
     """
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
-    
+
+    user, current_user, _scope_ctx = scoped
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    ensure_pat_allows_write(current_user)
+
     if not llm_features_enabled():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
 
@@ -1045,78 +1087,25 @@ def search_memory_blocks_fulltext_endpoint(
     limit: int = 50,
     min_score: float = 0.1,
     include_archived: bool = False,
+    organization_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
-    authorization: Optional[str] = Header(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    """
-    Perform BM25-like full-text search on memory blocks using PostgreSQL's full-text search capabilities.
-    
-    Args:
-        query: Search query string
-        agent_id: Optional agent filter
-        conversation_id: Optional conversation filter
-        limit: Maximum number of results (default: 50)
-        min_score: Minimum relevance score threshold (default: 0.1)
-        include_archived: Whether to include archived memory blocks (default: False)
-    
-    Returns:
-        List of memory blocks with search scores, ranked by relevance
+    """Perform BM25-like full-text search on memory blocks using PostgreSQL's full-text search capabilities.
+
+    Auth: optional (guests get public-only). PAT scope-narrowing is enforced
+    by the unified dep: get_scoped_user_and_context raises 403 on PAT-org
+    mismatch and narrows memberships to the PAT's org. ensure_pat_allows_read
+    is the explicit defense-in-depth check on the route's organization_id.
     """
     if not query or query.strip() == "":
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
-    
+
+    user, current_user, _scope_ctx = scoped
+    if current_user is not None and organization_id:
+        ensure_pat_allows_read(current_user, organization_id)
+
     try:
-        current_user = None
-        if authorization or x_api_key:
-            try:
-                _u, current_user = get_current_user_context_or_pat(
-                    db=db,
-                    authorization=authorization,
-                    x_api_key=x_api_key,
-                    x_auth_request_user=x_auth_request_user,
-                    x_auth_request_email=x_auth_request_email,
-                    x_forwarded_user=x_forwarded_user,
-                    x_forwarded_email=x_forwarded_email,
-                )
-            except HTTPException:
-                raise
-        else:
-            name, email = resolve_identity_from_headers(
-                x_auth_request_user=x_auth_request_user,
-                x_auth_request_email=x_auth_request_email,
-                x_forwarded_user=x_forwarded_user,
-                x_forwarded_email=x_forwarded_email,
-            )
-            if email:
-                u = get_or_create_user_for_request(db, email=email, name=name)
-                memberships = get_user_memberships(db, u.id)
-                current_user = CurrentUserContext(
-                    id=u.id,
-                    email=u.email,
-                    display_name=u.display_name,
-                    is_superadmin=bool(u.is_superadmin),
-                    is_beta_access_admin=False,
-                    memberships=memberships,
-                    memberships_by_org={m["organization_id"]: m for m in memberships},
-                    beta_access_status=None,
-                )
-
-        # Narrow memberships to PAT org if present
-        if current_user and current_user.pat is not None and current_user.pat.organization_id is not None:
-            pat_org = str(current_user.pat.organization_id)  # string key
-            m = current_user.memberships_by_org.get(pat_org)
-            if m:
-                current_user = dataclasses.replace(
-                    current_user,
-                    memberships=[m],
-                    memberships_by_org={pat_org: m},
-                )
-
         results, metadata = crud.search_memory_blocks_fulltext(
             db=db,
             query=query.strip(),
@@ -1127,10 +1116,12 @@ def search_memory_blocks_fulltext_endpoint(
             include_archived=include_archived,
             current_user=current_user,
         )
-        
+
         logger.info(f"Full-text search for '{query}' returned {len(results)} results")
         return results
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error in full-text search: %s", e)
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
@@ -1143,64 +1134,22 @@ def search_memory_blocks_semantic_endpoint(
     limit: int = 50,
     similarity_threshold: float = 0.7,
     include_archived: bool = False,
+    organization_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
-    authorization: Optional[str] = Header(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    """Perform semantic search on memory blocks using stored embeddings."""
+    """Perform semantic search on memory blocks using stored embeddings.
+
+    Auth: optional. PAT scope-narrowing handled by get_scoped_user_and_context.
+    """
     if not query or query.strip() == "":
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
-    
-    try:
-        current_user = None
-        if authorization or x_api_key:
-            try:
-                _u, current_user = get_current_user_context_or_pat(
-                    db=db,
-                    authorization=authorization,
-                    x_api_key=x_api_key,
-                    x_auth_request_user=x_auth_request_user,
-                    x_auth_request_email=x_auth_request_email,
-                    x_forwarded_user=x_forwarded_user,
-                    x_forwarded_email=x_forwarded_email,
-                )
-            except HTTPException:
-                raise
-        else:
-            name, email = resolve_identity_from_headers(
-                x_auth_request_user=x_auth_request_user,
-                x_auth_request_email=x_auth_request_email,
-                x_forwarded_user=x_forwarded_user,
-                x_forwarded_email=x_forwarded_email,
-            )
-            current_user = None
-            if email:
-                u = get_or_create_user_for_request(db, email=email, name=name)
-                memberships = get_user_memberships(db, u.id)
-                current_user = CurrentUserContext(
-                    id=u.id,
-                    email=u.email,
-                    display_name=u.display_name,
-                    is_superadmin=bool(u.is_superadmin),
-                    is_beta_access_admin=False,
-                    memberships=memberships,
-                    memberships_by_org={m["organization_id"]: m for m in memberships},
-                    beta_access_status=None,
-                )
 
-        if current_user and current_user.pat is not None and current_user.pat.organization_id is not None:
-            pat_org = str(current_user.pat.organization_id)  # string key
-            m = current_user.memberships_by_org.get(pat_org)
-            if m:
-                current_user = dataclasses.replace(
-                    current_user,
-                    memberships=[m],
-                    memberships_by_org={pat_org: m},
-                )
+    user, current_user, _scope_ctx = scoped
+    if current_user is not None and organization_id:
+        ensure_pat_allows_read(current_user, organization_id)
+
+    try:
         results, metadata = crud.search_memory_blocks_semantic(
             db=db,
             query=query.strip(),
@@ -1211,7 +1160,7 @@ def search_memory_blocks_semantic_endpoint(
             include_archived=include_archived,
             current_user=current_user,
         )
-        
+
         expansion_meta = metadata.get("expansion", {})
         logger.info(
             "Semantic search for '%s' returned %d results (mode=%s, fallback=%s, expansion_applied=%s)",
@@ -1222,7 +1171,9 @@ def search_memory_blocks_semantic_endpoint(
             expansion_meta.get("expansion_applied"),
         )
         return results
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error in semantic search: %s", e)
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
@@ -1237,82 +1188,26 @@ def search_memory_blocks_hybrid_endpoint(
     semantic_weight: float = 0.3,
     min_combined_score: float = 0.1,
     include_archived: bool = False,
+    organization_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
-    authorization: Optional[str] = Header(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    """
-    Perform hybrid search combining full-text and semantic search with weighted scoring.
-    
-    Args:
-        query: Search query string
-        agent_id: Optional agent filter
-        conversation_id: Optional conversation filter
-        limit: Maximum number of results (default: 50)
-        fulltext_weight: Weight for full-text search results (default: 0.7)
-        semantic_weight: Weight for semantic search results (default: 0.3)
-        min_combined_score: Minimum combined score threshold (default: 0.1)
-        include_archived: Whether to include archived memory blocks (default: False)
-    
-    Returns:
-        List of memory blocks with combined scores from both search methods
+    """Perform hybrid search combining full-text and semantic search with weighted scoring.
+
+    Auth: optional. PAT scope-narrowing handled by get_scoped_user_and_context.
     """
     if not query or query.strip() == "":
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
-    
+
     # Validate weights
     if abs(fulltext_weight + semantic_weight - 1.0) > 0.001:
         raise HTTPException(status_code=400, detail="Fulltext and semantic weights must sum to 1.0")
-    
-    try:
-        current_user = None
-        if authorization or x_api_key:
-            try:
-                _u, current_user = get_current_user_context_or_pat(
-                    db=db,
-                    authorization=authorization,
-                    x_api_key=x_api_key,
-                    x_auth_request_user=x_auth_request_user,
-                    x_auth_request_email=x_auth_request_email,
-                    x_forwarded_user=x_forwarded_user,
-                    x_forwarded_email=x_forwarded_email,
-                )
-            except HTTPException:
-                raise
-        else:
-            name, email = resolve_identity_from_headers(
-                x_auth_request_user=x_auth_request_user,
-                x_auth_request_email=x_auth_request_email,
-                x_forwarded_user=x_forwarded_user,
-                x_forwarded_email=x_forwarded_email,
-            )
-            if email:
-                u = get_or_create_user_for_request(db, email=email, name=name)
-                memberships = get_user_memberships(db, u.id)
-                current_user = CurrentUserContext(
-                    id=u.id,
-                    email=u.email,
-                    display_name=u.display_name,
-                    is_superadmin=bool(u.is_superadmin),
-                    is_beta_access_admin=False,
-                    memberships=memberships,
-                    memberships_by_org={m["organization_id"]: m for m in memberships},
-                    beta_access_status=None,
-                )
 
-        if current_user and current_user.pat is not None and current_user.pat.organization_id is not None:
-            pat_org = str(current_user.pat.organization_id)  # string key
-            m = current_user.memberships_by_org.get(pat_org)
-            if m:
-                current_user = dataclasses.replace(
-                    current_user,
-                    memberships=[m],
-                    memberships_by_org={pat_org: m},
-                )
+    user, current_user, _scope_ctx = scoped
+    if current_user is not None and organization_id:
+        ensure_pat_allows_read(current_user, organization_id)
+
+    try:
         results, metadata = crud.search_memory_blocks_hybrid(
             db=db,
             query=query.strip(),
@@ -1325,7 +1220,7 @@ def search_memory_blocks_hybrid_endpoint(
             include_archived=include_archived,
             current_user=current_user,
         )
-        
+
         expansion_meta = metadata.get("expansion", {})
         logger.info(
             "Hybrid search for '%s' returned %d results (expansion_applied=%s)",
@@ -1334,7 +1229,9 @@ def search_memory_blocks_hybrid_endpoint(
             expansion_meta.get("expansion_applied"),
         )
         return results
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in hybrid search: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")

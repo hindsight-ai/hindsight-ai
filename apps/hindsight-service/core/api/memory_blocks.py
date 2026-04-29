@@ -50,53 +50,6 @@ def parse_optional_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
 ALLOWED_SEARCH_STRATEGIES = {"basic", "fulltext", "semantic", "hybrid"}
 
 
-def _resolve_search_user_context(
-    db: Session,
-    *,
-    authorization: Optional[str],
-    x_api_key: Optional[str],
-    x_auth_request_user: Optional[str],
-    x_auth_request_email: Optional[str],
-    x_forwarded_user: Optional[str],
-    x_forwarded_email: Optional[str],
-):
-    """Resolve user context for search endpoints (PAT first, headers fallback)."""
-    if authorization or x_api_key:
-        _, current_user = get_current_user_context_or_pat(
-            db=db,
-            authorization=authorization,
-            x_api_key=x_api_key,
-            x_auth_request_user=x_auth_request_user,
-            x_auth_request_email=x_auth_request_email,
-            x_forwarded_user=x_forwarded_user,
-            x_forwarded_email=x_forwarded_email,
-        )
-        return current_user
-
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    if not email:
-        return None
-
-    user = get_or_create_user_for_request(db, email=email, name=name)
-    memberships = get_user_memberships(db, user.id)
-    memberships_by_org = {str(m["organization_id"]): m for m in memberships}
-    return CurrentUserContext(
-        id=user.id,
-        email=user.email,
-        display_name=user.display_name,
-        is_superadmin=bool(getattr(user, "is_superadmin", False)),
-        is_beta_access_admin=False,
-        memberships=memberships,
-        memberships_by_org=memberships_by_org,
-        beta_access_status=None,
-    )
-
-
 def _strip_search_fields(memory: schemas.MemoryBlockWithScore) -> schemas.MemoryBlock:
     data = memory.model_dump()
     data.pop("search_score", None)
@@ -534,15 +487,14 @@ def search_memory_blocks_endpoint(
     conversation_id: Optional[str] = Query(default=None),
     limit: int = Query(default=10, ge=1, le=200),
     include_archived: bool = False,
+    organization_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    authorization: Optional[str] = Header(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    """Run keyword/basic queries through the unified SearchService."""
+    """Run keyword/basic queries through the unified SearchService.
+
+    Auth: optional. PAT scope-narrowing handled by get_scoped_user_and_context.
+    """
 
     agent_uuid = parse_optional_uuid(agent_id)
     conversation_uuid = parse_optional_uuid(conversation_id)
@@ -560,15 +512,9 @@ def search_memory_blocks_endpoint(
         allowed = ", ".join(sorted(ALLOWED_SEARCH_STRATEGIES))
         raise HTTPException(status_code=422, detail=f"Invalid strategy '{selected_strategy}'. Allowed values: [{allowed}]")
 
-    current_user = _resolve_search_user_context(
-        db,
-        authorization=authorization,
-        x_api_key=x_api_key,
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
+    user, current_user, _scope_ctx = scoped
+    if current_user is not None and organization_id:
+        ensure_pat_allows_read(current_user, organization_id)
 
     search_params = {"current_user": current_user}
     if raw_keywords:

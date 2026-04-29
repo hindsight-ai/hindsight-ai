@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 
 from core.db import crud, schemas, models
 from core.api.permissions import can_read, can_write
-from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_read, ensure_pat_allows_write
+from core.api.deps import (
+    get_scoped_user_and_context,
+    get_current_user_context_or_pat,
+    ensure_pat_allows_read,
+    ensure_pat_allows_write,
+)
 from core.audit import log as audit_log, AuditAction, AuditStatus
 from core.db.database import get_db
 from core.utils.feature_flags import llm_features_enabled
@@ -26,10 +31,29 @@ router = APIRouter(tags=["consolidation"])  # keep paths stable for now
 
 
 @router.post("/consolidation/trigger/", status_code=status.HTTP_202_ACCEPTED)
-def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
-    """Trigger the memory block consolidation process manually."""
+def trigger_consolidation_endpoint(
+    db: Session = Depends(get_db),
+    user_ctx = Depends(get_current_user_context_or_pat),
+):
+    """Trigger the memory block consolidation process manually.
+
+    Auth: requires authenticated user (oauth2-proxy) or PAT.
+    Org-scoped PATs are rejected: this endpoint runs a global LLM
+    consolidation that touches every org the user can see, so a PAT
+    restricted to a single org should not be allowed to fan out across
+    orgs.
+    """
     import os
     from core.workers.consolidation_worker import run_consolidation_analysis
+
+    user, current_user = user_ctx
+    # Reject org-scoped PATs: global consolidation should not fan out under
+    # an org-restricted token. (failure-mode-analyst F-trigger)
+    if current_user and current_user.pat is not None and current_user.pat.organization_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Org-scoped PAT cannot trigger global consolidation",
+        )
 
     logger.info("Manual trigger of consolidation process received")
 
@@ -327,9 +351,32 @@ def reject_consolidation_suggestion_endpoint(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_consolidation_suggestion_endpoint(
-    suggestion_id: uuid.UUID, db: Session = Depends(get_db)
+    suggestion_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    """Delete a consolidation suggestion from the database."""
+    """Delete a consolidation suggestion from the database.
+
+    Auth: requires user (oauth2-proxy or PAT). Permission: superadmin OR
+    write-capability on every original memory block of the suggestion
+    (uses the existing _user_can_write_suggestion helper). PAT scope is
+    enforced via ensure_pat_allows_write on each owning org.
+    """
+    user, current_user, _scope_ctx = scoped
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+
+    if not (current_user.is_superadmin or _user_can_write_suggestion(db, suggestion, current_user)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permission to delete suggestion")
+
+    # If a PAT is in use, also enforce org-scope match for any org touched
+    if current_user.pat is not None and current_user.pat.organization_id is not None:
+        ensure_pat_allows_write(current_user, str(current_user.pat.organization_id))
+
     success = crud.delete_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not success:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")

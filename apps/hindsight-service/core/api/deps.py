@@ -611,7 +611,11 @@ def get_scoped_user_and_context(
     """Return a tuple (user, current_user, scope_ctx) for endpoints.
 
     Enforces PAT-org mismatch when a conflicting organization_id query param is provided.
+    Narrows current_user.memberships/memberships_by_org to the PAT's org when an
+    org-scoped PAT is present, so downstream membership-based filters cannot
+    accidentally leak data from other orgs the user is also a member of.
     """
+    import dataclasses
     user, current_user = user_ctx
     # If PAT is present and request hinted a different org, raise 403
     if current_user and current_user.pat and current_user.pat.organization_id and organization_id:
@@ -622,4 +626,35 @@ def get_scoped_user_and_context(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Token organization restriction mismatch: token is limited to org {pat_org}, but request targeted org {req_org}",
             )
+
+    # Narrow memberships to PAT org. Without this, a user in both org-A and
+    # org-B holding a PAT scoped to org-A could read org-B data via endpoints
+    # that filter by current_user.memberships (e.g. search). Surfaced as F6
+    # by the failure-mode-analyst review of #70: the inline narrowing
+    # introduced in #69's main.py search endpoints (via dataclasses.replace)
+    # is moved here so EVERY consumer of get_scoped_user_and_context gets
+    # the safe membership view, not just the 3 routes that had it inline.
+    if (
+        current_user
+        and current_user.pat is not None
+        and current_user.pat.organization_id is not None
+    ):
+        pat_org_str = str(current_user.pat.organization_id)
+        m = current_user.memberships_by_org.get(pat_org_str)
+        if m:
+            current_user = dataclasses.replace(
+                current_user,
+                memberships=[m],
+                memberships_by_org={pat_org_str: m},
+            )
+        else:
+            # PAT references an org the user no longer belongs to: treat as
+            # zero memberships (the PAT-token is still valid but the user
+            # has been removed from the org).
+            current_user = dataclasses.replace(
+                current_user,
+                memberships=[],
+                memberships_by_org={},
+            )
+
     return user, current_user, scope_ctx
