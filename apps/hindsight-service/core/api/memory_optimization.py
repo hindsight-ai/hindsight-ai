@@ -198,7 +198,7 @@ async def execute_optimization_suggestion(
         if suggestion["type"] == "keywords":
             # Execute keyword generation directly using the bulk keyword generation function
             try:
-                from core.api.main import extract_keywords_enhanced
+                from core.services.keyword_extraction_service import extract_keywords_enhanced
                 
                 suggestions_list = []
                 successful_count = 0

@@ -1,15 +1,20 @@
 """
 Keyword extraction service.
 
-Pure-function module providing enhanced keyword extraction using simple
-text analysis. Used by bulk keyword generation routes.
+Single canonical implementation for keyword extraction across the
+backend. Used by bulk keyword generation, the per-block suggest endpoint,
+and the memory-optimization keyword suggestion path.
+
+Public API: `extract_keywords(text, max_keywords=10)`. The legacy alias
+`extract_keywords_enhanced` is preserved for backwards compatibility with
+existing callers and patch points.
 """
 import re
 from collections import Counter
 from typing import List
 
 
-def extract_keywords_enhanced(text: str, max_keywords: int = 10) -> List[str]:
+def extract_keywords(text: str, max_keywords: int = 10) -> List[str]:
     """
     Enhanced keyword extraction using simple text analysis.
     This is a fallback function when spaCy is not available.
@@ -73,3 +78,7 @@ def extract_keywords_enhanced(text: str, max_keywords: int = 10) -> List[str]:
 
     # Return top keywords (default 8 to match original behaviour; honour max_keywords)
     return keywords[:max_keywords]
+
+
+# Backward-compatible alias — pre-#82 callers used this name.
+extract_keywords_enhanced = extract_keywords

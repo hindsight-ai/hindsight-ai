@@ -688,3 +688,43 @@ def change_memory_block_scope(
     return mb
 
 
+@router.post("/{memory_id}/suggest-keywords", response_model=dict)
+def suggest_keywords_for_memory_block_endpoint(
+    memory_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
+    """Suggest keywords for a single memory block using the canonical
+    extraction service.
+
+    Closes the 404 bug surfaced in #82: the dashboard's
+    `memoryService.suggestKeywords` posts to this URL but no backend
+    endpoint existed pre-#82. The bulk-keyword flow uses the same
+    canonical service so the per-block and bulk paths cannot diverge.
+    """
+    from core.services.keyword_extraction_service import extract_keywords
+
+    user, current_user, _scope_ctx = scoped
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    memory_block = crud.get_memory_block(db, memory_id=memory_id)
+    if not memory_block:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+
+    if not can_read(memory_block, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    ensure_pat_allows_read(current_user, getattr(memory_block, "organization_id", None))
+
+    content_text = (memory_block.content or "") + " " + (memory_block.lessons_learned or "")
+    suggested = extract_keywords(content_text)
+
+    current = [kw.keyword_text for kw in (memory_block.keywords or [])]
+    return {
+        "memory_block_id": str(memory_id),
+        "suggested_keywords": suggested,
+        "current_keywords": current,
+    }
+
+
