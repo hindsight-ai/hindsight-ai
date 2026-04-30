@@ -246,8 +246,11 @@ def update_beta_access_user_status(
     if previous_status == desired:
         return {"success": True, "user": _serialize_user(user, beta_repo.get_beta_access_request_by_email(db, user.email))}
 
-    user.beta_access_status = desired
-
+    # Source-of-truth ordering (#77): write the BetaAccessRequest record FIRST
+    # (canonical audit trail), then mirror the result to user.beta_access_status
+    # (denormalized cache). Pre-#77 the user row was written first and the
+    # request record was patched after, which let admin-override transitions
+    # exit half-applied if the request-side write failed.
     request = beta_repo.get_beta_access_request_by_email(db, user.email)
     reviewer_email = admin_user.email
 
@@ -269,6 +272,10 @@ def update_beta_access_user_status(
             "Access manually revoked via beta access admin console",
         )
         request = beta_repo.get_beta_access_request_by_email(db, user.email)
+
+    # Mirror the result to the user row only after the request-side write
+    # succeeded.
+    user.beta_access_status = desired
 
     try:
         db.commit()
