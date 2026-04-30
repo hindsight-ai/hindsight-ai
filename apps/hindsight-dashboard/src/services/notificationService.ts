@@ -1,18 +1,15 @@
-export type NotificationType = 'success' | 'info' | 'warning' | 'error';
+import type {
+  INotificationService,
+  NotificationItem,
+  NotificationListener,
+  NotificationType,
+} from './notificationService.types';
 
-export interface NotificationItem {
-  id: number;
-  type: NotificationType;
-  message: string;
-  duration?: number;
-  onRefresh?: () => void;
-}
+export type { INotificationService, NotificationItem, NotificationListener, NotificationType };
 
-type Listener = (notifications: NotificationItem[]) => void;
-
-class NotificationService {
+class NotificationService implements INotificationService {
   private notifications: NotificationItem[] = [];
-  private listeners: Listener[] = [];
+  private listeners: NotificationListener[] = [];
   private lastNotificationTimes: Map<string, number> = new Map();
   private debounceDelay = 5000; // ms
 
@@ -63,8 +60,8 @@ class NotificationService {
     this.notifyListeners();
   }
 
-  addListener(callback: Listener) { this.listeners.push(callback); }
-  removeListener(callback: Listener) { this.listeners = this.listeners.filter(l => l !== callback); }
+  addListener(callback: NotificationListener) { this.listeners.push(callback); }
+  removeListener(callback: NotificationListener) { this.listeners = this.listeners.filter(l => l !== callback); }
   private notifyListeners() { this.listeners.forEach(cb => cb(this.getNotifications())); }
 
   show401Error() {
@@ -153,5 +150,5 @@ class NotificationService {
   showError(message: string, duration = 10000) { return this.addNotification({ type: 'error', message, duration }); }
 }
 
-const notificationService = new NotificationService();
+const notificationService: INotificationService = new NotificationService();
 export default notificationService;

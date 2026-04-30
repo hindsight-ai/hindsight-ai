@@ -1,18 +1,19 @@
 import notificationService from '../services/notificationService';
+import type { INotificationService } from '../services/notificationService.types';
 import { ApiError, AuthenticationError, AuthorizationError, NetworkError } from './errors';
 
-export function showErrorToast(error: unknown): void {
+export function showErrorToast(error: unknown, service: INotificationService = notificationService): void {
     if (error instanceof AuthenticationError) {
-        notificationService.show401Error();
+        service.show401Error();
     } else if (error instanceof AuthorizationError) {
-        notificationService.showApiError('Permission denied. Contact your administrator.');
+        service.show403Error();
     } else if (error instanceof NetworkError) {
-        notificationService.showNetworkError();
+        service.showNetworkError();
     } else if (error instanceof ApiError) {
-        notificationService.showApiError(error.message);
+        service.showApiError(error.status, error.message);
     } else if (error instanceof Error) {
-        notificationService.showApiError(error.message);
+        service.showError(error.message);
     } else {
-        notificationService.showApiError('Unexpected error');
+        service.showError('Unexpected error');
     }
 }

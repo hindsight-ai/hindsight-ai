@@ -41,15 +41,13 @@ describe('errorHandler.showErrorToast routing', () => {
     expect(notificationService.show401Error).toHaveBeenCalled();
   });
 
-  it('routes AuthorizationError to showApiError with permission message', async () => {
+  it('routes AuthorizationError to show403Error', async () => {
     const { showErrorToast } = await import('../errorHandler');
     const notificationService = (await import('../../services/notificationService')).default;
 
     showErrorToast(new AuthorizationError());
 
-    expect(notificationService.showApiError).toHaveBeenCalledWith(
-      expect.stringContaining('Permission denied')
-    );
+    expect(notificationService.show403Error).toHaveBeenCalled();
   });
 
   it('routes NetworkError to showNetworkError', async () => {
@@ -61,22 +59,22 @@ describe('errorHandler.showErrorToast routing', () => {
     expect(notificationService.showNetworkError).toHaveBeenCalled();
   });
 
-  it('routes generic ApiError to showApiError with message', async () => {
+  it('routes generic ApiError to showApiError with status + message', async () => {
     const { showErrorToast } = await import('../errorHandler');
     const notificationService = (await import('../../services/notificationService')).default;
 
     showErrorToast(new ApiError(500, 'Server error'));
 
-    expect(notificationService.showApiError).toHaveBeenCalledWith('Server error');
+    expect(notificationService.showApiError).toHaveBeenCalledWith(500, 'Server error');
   });
 
-  it('routes unknown errors to showApiError with fallback', async () => {
+  it('routes unknown errors to showError with fallback', async () => {
     const { showErrorToast } = await import('../errorHandler');
     const notificationService = (await import('../../services/notificationService')).default;
 
     showErrorToast('something unexpected');
 
-    expect(notificationService.showApiError).toHaveBeenCalledWith('Unexpected error');
+    expect(notificationService.showError).toHaveBeenCalledWith('Unexpected error');
   });
 });
 
@@ -105,9 +103,7 @@ describe('Service throws typed errors that errorHandler can route', () => {
 
     expect(caught).toBeInstanceOf(AuthorizationError);
     showErrorToast(caught);
-    expect(notificationService.showApiError).toHaveBeenCalledWith(
-      expect.stringContaining('Permission denied')
-    );
+    expect(notificationService.show403Error).toHaveBeenCalled();
   });
 
   it('organizationService throws NetworkError on fetch failure, errorHandler maps to network toast', async () => {
