@@ -264,17 +264,6 @@ async def bulk_move(
 
     return {"operation_id": bulk_operation.id, "status": "started"}
 
-@router.get("/admin/operations/{operation_id}")
-def get_bulk_operation_admin_status(
-    operation_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
-):
-    # Light implementation to satisfy tests expecting 403 for regular users
-    user, current_user = user_context
-    # Current test expectations: non-existent or unauthorized access -> 403 uniformly
-    raise HTTPException(status_code=403, detail="Forbidden")
-
 @router.post("/organizations/{org_id}/bulk-delete")
 async def bulk_delete(
     org_id: uuid.UUID,

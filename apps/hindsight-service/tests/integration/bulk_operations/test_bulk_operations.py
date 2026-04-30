@@ -156,7 +156,10 @@ def test_bulk_delete_no_dry_run(client, org_owner, monkeypatch):
 
 
 def test_get_operation_status_forbidden(client, org_owner):
-    user, org = org_owner
-    headers = _headers(user.email)
+    # Use a fresh non-superadmin email — earlier tests in the suite can
+    # promote shared fixture emails to is_superadmin via test pollution;
+    # we need a clean caller here so the admin permission check fires.
+    fresh_email = f"plain-fb-{uuid.uuid4().hex[:8]}@example.com"
+    headers = _headers(fresh_email)
     resp = client.get(f"/bulk-operations/admin/operations/{uuid.uuid4()}", headers=headers)
     assert resp.status_code == 403

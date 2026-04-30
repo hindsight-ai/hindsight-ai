@@ -93,10 +93,13 @@ def test_bulk_delete_dry_run(client):
 
 
 def test_get_operation_status_forbidden_and_not_found(client):
-    # call with non-superadmin (regular user)
-    client.get("/keywords/", headers=auth())
+    # Use a fresh non-superadmin email — admin@example.com gets is_superadmin
+    # promoted by earlier tests in the suite; we need a clean caller here.
+    fresh_email = f"plain-{uuid.uuid4().hex[:8]}@example.com"
+    fresh_auth = {"x-auth-request-email": fresh_email, "x-auth-request-user": fresh_email.split("@")[0]}
+    client.get("/keywords/", headers=fresh_auth)
     fake_id = str(uuid.uuid4())
-    r = client.get(f"/bulk-operations/admin/operations/{fake_id}", headers=auth())
+    r = client.get(f"/bulk-operations/admin/operations/{fake_id}", headers=fresh_auth)
     # Should be forbidden because user not superadmin
     assert r.status_code == 403
 
