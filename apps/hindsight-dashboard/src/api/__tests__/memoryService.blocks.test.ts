@@ -1,9 +1,5 @@
 import memoryService from '../memoryService';
-
-jest.mock('../../services/notificationService', () => ({
-  __esModule: true,
-  default: { show401Error: jest.fn(), showWarning: jest.fn() },
-}));
+import { AuthenticationError } from '../errors';
 
 describe('memoryService memory block endpoints', () => {
   beforeEach(() => { global.fetch.mockReset && global.fetch.mockReset(); });
@@ -54,10 +50,9 @@ describe('memoryService memory block endpoints', () => {
     expect(url).toContain('skip=5');
   });
 
-  test('deleteMemoryBlock 401 triggers notification', async () => {
-    const notification = require('../../services/notificationService').default;
+  test('deleteMemoryBlock 401 throws AuthenticationError', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 401 });
+    await expect(memoryService.deleteMemoryBlock('mb1')).rejects.toThrow(AuthenticationError);
     await expect(memoryService.deleteMemoryBlock('mb1')).rejects.toThrow('Authentication required');
-    expect(notification.show401Error).toHaveBeenCalled();
   });
 });

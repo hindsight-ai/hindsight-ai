@@ -1,5 +1,5 @@
-import notificationService from '../services/notificationService';
 import { apiFetch } from './http';
+import { ApiError } from './errors';
 import { getScope } from './scopeProvider';
 
 const isGuest = (): boolean => { try { return sessionStorage.getItem('GUEST_MODE') === 'true'; } catch { return false; } };
@@ -26,14 +26,14 @@ try {
 
 const base = () => {
   const relativeUrl = isGuest() ? '/guest-api' : API_BASE_URL;
-  
+
   // Convert to absolute URL to avoid browser base URL resolution issues
   let absoluteUrl;
   if (typeof window !== 'undefined') {
     // In development, ensure we use the correct port
     const currentOrigin = window.location.origin;
     const isDev = currentOrigin.includes(':3000');
-    
+
     if (isDev) {
       absoluteUrl = `http://localhost:3000${relativeUrl}`;
     } else {
@@ -43,7 +43,7 @@ const base = () => {
   } else {
     absoluteUrl = relativeUrl; // Fallback for server-side rendering
   }
-  
+
   console.log('[DEBUG] memoryService base URL:', absoluteUrl, 'original:', relativeUrl, 'origin:', typeof window !== 'undefined' ? window.location.origin : 'N/A');
   return absoluteUrl;
 };
@@ -60,16 +60,10 @@ export interface ConsolidationSuggestion {
 
 type AbortOpt = { signal?: AbortSignal };
 
-const authFail = (status: number) => {
-  if (status === 401) { notificationService.show401Error(); throw new Error('Authentication required'); }
-};
+// apiFetch now throws typed errors on non-ok responses; just await and call .json()
+const jsonOrThrow = async (resp: Response) => resp.json();
 
-const jsonOrThrow = async (resp: Response) => {
-  if (!resp.ok) { authFail(resp.status); throw new Error(`HTTP error ${resp.status}`); }
-  return resp.json();
-};
-
-const guardGuest = (action: string) => { if (isGuest()) { notificationService.showWarning(`Guest mode is read-only. ${action}`); throw new Error('Guest mode read-only'); } };
+const guardGuest = (action: string) => { if (isGuest()) { throw new Error('Guest mode read-only'); } };
 
 const memoryService = {
   getMemoryBlocks: async (filters: Record<string, any> = {}) => {
@@ -81,22 +75,20 @@ const memoryService = {
   },
   contactSupport: async (payload: Record<string, any>) => {
     guardGuest('Sign in to contact support.');
-    const resp = await apiFetch('/support/contact', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (resp.status === 429) {
-      // Surface rate-limit message clearly
-      try {
-        const data = await resp.json();
-        const msg = data?.detail || `Please wait before sending another support request.`;
-        throw new Error(msg);
-      } catch {
+    try {
+      const resp = await apiFetch('/support/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return jsonOrThrow(resp);
+    } catch (err) {
+      // Preserve the 429 detail message for the caller
+      if (err instanceof ApiError && err.status === 429) {
         throw new Error('Please wait before sending another support request.');
       }
+      throw err;
     }
-    return jsonOrThrow(resp);
   },
   getMemoryBlockById: async (id: string): Promise<MemoryBlock> => {
     const resp = await apiFetch(`/memory-blocks/${id}`);
@@ -115,7 +107,7 @@ const memoryService = {
   },
   updateMemoryBlock: async (id: string, data: Partial<MemoryBlock>) => { guardGuest('Sign in to edit memory blocks.'); const resp = await apiFetch(`/memory-blocks/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return jsonOrThrow(resp); },
   archiveMemoryBlock: async (id: string) => { guardGuest('Sign in to archive memory blocks.'); const resp = await apiFetch(`/memory-blocks/${id}/archive`, { method: 'POST' }); return jsonOrThrow(resp); },
-  deleteMemoryBlock: async (id: string) => { guardGuest('Sign in to delete memory blocks.'); const resp = await apiFetch(`/memory-blocks/${id}/hard-delete`, { method: 'DELETE' }); if (!resp.ok && resp.status !== 204) { authFail(resp.status); throw new Error(`HTTP error ${resp.status}`); } if (resp.status === 204) { return; } try { return await resp.json(); } catch { return; } },
+  deleteMemoryBlock: async (id: string) => { guardGuest('Sign in to delete memory blocks.'); const resp = await apiFetch(`/memory-blocks/${id}/hard-delete`, { method: 'DELETE' }); if (resp.status === 204) { return; } try { return await resp.json(); } catch { return; } },
   getArchivedMemoryBlocks: async (filters: Record<string, any> = {}) => {
     const { per_page, ...rest } = filters; const params = new URLSearchParams(rest);
     if (per_page != null) params.set('limit', String(per_page));
@@ -147,7 +139,7 @@ const memoryService = {
   validateConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to validate suggestions.'); const resp = await apiFetch(`/consolidation-suggestions/${id}/validate/`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }); return jsonOrThrow(resp); },
   rejectConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to reject suggestions.'); const resp = await apiFetch(`/consolidation-suggestions/${id}/reject/`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }); return jsonOrThrow(resp); },
   triggerConsolidation: async () => { guardGuest('Sign in to trigger consolidation.'); const resp = await apiFetch('/consolidation/trigger/', { method: 'POST' }); return jsonOrThrow(resp); },
-  deleteConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to delete suggestions.'); const resp = await apiFetch(`/consolidation-suggestions/${id}`, { method: 'DELETE' }); if (!resp.ok && resp.status !== 204) { authFail(resp.status); throw new Error(`HTTP error ${resp.status}`); } if (resp.status === 204) { return; } try { return await resp.json(); } catch { return; } },
+  deleteConsolidationSuggestion: async (id: string) => { guardGuest('Sign in to delete suggestions.'); const resp = await apiFetch(`/consolidation-suggestions/${id}`, { method: 'DELETE' }); if (resp.status === 204) { return; } try { return await resp.json(); } catch { return; } },
   generatePruningSuggestions: async (params: Record<string, any> = {}) => { const resp = await apiFetch('/memory/prune/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) }); return jsonOrThrow(resp); },
   confirmPruning: async (memoryBlockIds: string[]) => { const resp = await apiFetch('/memory/prune/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memory_block_ids: memoryBlockIds }) }); return jsonOrThrow(resp); },
   getBuildInfo: async () => { const resp = await apiFetch('/build-info'); return jsonOrThrow(resp); },

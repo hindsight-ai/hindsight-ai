@@ -1,10 +1,5 @@
 import memoryService from '../memoryService';
-
-// Mock notificationService to verify 401 handling
-jest.mock('../../services/notificationService', () => ({
-  __esModule: true,
-  default: { show401Error: jest.fn(), showWarning: jest.fn() },
-}));
+import { AuthenticationError } from '../errors';
 
 describe('memoryService.getMemoryBlocks', () => {
   beforeEach(() => { global.fetch.mockReset && global.fetch.mockReset(); });
@@ -23,11 +18,10 @@ describe('memoryService.getMemoryBlocks', () => {
     expect(url).toContain('agent_id=a1');
   });
 
-  test('triggers 401 notification and throws on 401', async () => {
-    const notification = require('../../services/notificationService').default;
+  test('throws AuthenticationError on 401 without calling notificationService', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 401 });
+    await expect(memoryService.getMemoryBlocks()).rejects.toThrow(AuthenticationError);
     await expect(memoryService.getMemoryBlocks()).rejects.toThrow('Authentication required');
-    expect(notification.show401Error).toHaveBeenCalled();
   });
 });
 

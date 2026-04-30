@@ -1,10 +1,5 @@
 import agentService from '../agentService';
 
-jest.mock('../../services/notificationService', () => ({
-  __esModule: true,
-  default: { show401Error: jest.fn(), showWarning: jest.fn() },
-}));
-
 describe('agentService 401 branches', () => {
   beforeEach(() => {
     global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 401 });

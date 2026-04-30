@@ -1,6 +1,7 @@
 // Centralized HTTP helpers for consistent API URL handling
 
 import { getScope } from './scopeProvider';
+import { ApiError, AuthenticationError, AuthorizationError, NetworkError } from './errors';
 
 const getCookie = (name: string): string | null => {
   if (typeof document === 'undefined') return null;
@@ -191,6 +192,12 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
 
   const allowLocalFallback = shouldUseLocalFallback();
 
+  const throwTypedError = (res: Response): never => {
+    if (res.status === 401) throw new AuthenticationError();
+    if (res.status === 403) throw new AuthorizationError();
+    throw new ApiError(res.status, `HTTP error ${res.status}`);
+  };
+
   try {
     const res = await fetch(url, req);
     // If backend is unreachable via proxy (/api) in local dev, try direct fallbacks.
@@ -206,14 +213,21 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
         try {
           const directUrl = (ensureTrailingSlash ? `${base}${path}`.replace(/([^/])$/, '$1/') : `${base}${path}`);
           const res2 = await fetch(directUrl, req);
-          if (res2.ok || res2.status !== 502) return res2;
-        } catch {}
+          if (res2.ok || res2.status !== 502) {
+            if (!res2.ok) throwTypedError(res2);
+            return res2;
+          }
+        } catch (fallbackErr) {
+          if (fallbackErr instanceof ApiError || fallbackErr instanceof AuthenticationError || fallbackErr instanceof AuthorizationError) throw fallbackErr;
+        }
       }
     }
+    if (!res.ok) throwTypedError(res);
     return res;
   } catch (e) {
     // Network error: attempt direct fallbacks in dev scenario
     if (
+      e instanceof TypeError &&
       allowLocalFallback &&
       (apiBasePath() === '/api' || apiBasePath() === '/guest-api')
     ) {
@@ -222,10 +236,15 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
         try {
           const directUrl = (ensureTrailingSlash ? `${base}${path}`.replace(/([^/])$/, '$1/') : `${base}${path}`);
           const res2 = await fetch(directUrl, req);
+          if (!res2.ok) throwTypedError(res2);
           return res2;
-        } catch {}
+        } catch (fallbackErr) {
+          if (fallbackErr instanceof ApiError || fallbackErr instanceof AuthenticationError || fallbackErr instanceof AuthorizationError) throw fallbackErr;
+        }
       }
     }
-    throw e;
+    // Wrap raw TypeError fetch failures as NetworkError; re-throw typed errors as-is
+    if (e instanceof ApiError || e instanceof AuthenticationError || e instanceof AuthorizationError || e instanceof NetworkError) throw e;
+    throw new NetworkError(e instanceof Error ? e.message : 'Network error', e);
   }
 };
