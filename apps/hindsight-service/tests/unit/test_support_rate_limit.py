@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core.api.main import app
-from core.api.deps import get_current_user_context
+from core.api.deps import get_current_user_context, UserContext, CurrentUserContext
 from core.db import models
 
 
@@ -34,8 +34,17 @@ def test_support_contact_rate_limited(db_session, monkeypatch):
 
     # Dependency override to return our current user
     def _mock_ctx():
-        cu = {"id": user.id, "email": user.email, "display_name": user.display_name, "memberships": [], "memberships_by_org": {}}
-        return user, cu
+        cu = CurrentUserContext(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            is_superadmin=False,
+            is_beta_access_admin=False,
+            memberships=[],
+            memberships_by_org={},
+            beta_access_status=None,
+        )
+        return UserContext(user=user, current=cu)
 
     original = app.dependency_overrides.get(get_current_user_context)
     app.dependency_overrides[get_current_user_context] = _mock_ctx

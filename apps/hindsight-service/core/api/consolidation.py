@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 
 from core.db import crud, schemas, models
 from core.api.permissions import can_read, can_write
-from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_read, ensure_pat_allows_write
+from core.api.deps import (
+    get_scoped_user_and_context,
+    get_current_user_context_or_pat,
+    ensure_pat_allows_read,
+    ensure_pat_allows_write,
+)
 from core.audit import log as audit_log, AuditAction, AuditStatus
 from core.db.database import get_db
 from core.utils.feature_flags import llm_features_enabled
@@ -26,10 +31,30 @@ router = APIRouter(tags=["consolidation"])  # keep paths stable for now
 
 
 @router.post("/consolidation/trigger/", status_code=status.HTTP_202_ACCEPTED)
-def trigger_consolidation_endpoint(db: Session = Depends(get_db)):
-    """Trigger the memory block consolidation process manually."""
+def trigger_consolidation_endpoint(
+    db: Session = Depends(get_db),
+    user_ctx = Depends(get_current_user_context_or_pat),
+):
+    """Trigger the memory block consolidation process manually.
+
+    Auth: requires authenticated user (oauth2-proxy) or PAT.
+    Org-scoped PATs are rejected: this endpoint runs a global LLM
+    consolidation that touches every org the user can see, so a PAT
+    restricted to a single org should not be allowed to fan out across
+    orgs.
+    """
     import os
     from core.workers.consolidation_worker import run_consolidation_analysis
+
+    user = user_ctx.user
+    current_user = user_ctx.current
+    # Reject org-scoped PATs: global consolidation should not fan out under
+    # an org-restricted token. (failure-mode-analyst F-trigger)
+    if current_user and current_user.pat is not None and current_user.pat.organization_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Org-scoped PAT cannot trigger global consolidation",
+        )
 
     logger.info("Manual trigger of consolidation process received")
 
@@ -93,7 +118,9 @@ def get_consolidation_suggestions_endpoint(
         f"Fetching consolidation suggestions with filters: status={status}, group_id={group_id}"
     )
 
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     # Enforce PAT read permissions based on requested scope
     ensure_pat_allows_read(current_user, getattr(scope_ctx, 'organization_id', None))
 
@@ -113,11 +140,11 @@ def get_consolidation_suggestions_endpoint(
             if sc == 'organization':
                 return getattr(mem, 'organization_id', None) == getattr(scope_ctx, 'organization_id', None)
             if sc == 'personal':
-                return getattr(mem, 'owner_user_id', None) == (current_user or {}).get('id')
+                return getattr(mem, 'owner_user_id', None) == (current_user.id if current_user else None)
             if sc == 'public':
                 return getattr(mem, 'visibility_scope', None) == 'public'
             # Default: treat as personal unless specified
-            return getattr(mem, 'owner_user_id', None) == (current_user or {}).get('id')
+            return getattr(mem, 'owner_user_id', None) == (current_user.id if current_user else None)
         except Exception:
             return False
 
@@ -153,7 +180,9 @@ def get_consolidation_suggestion_endpoint(
     scoped = Depends(get_scoped_user_and_context),
 ):
     """Retrieve a specific consolidation suggestion by ID."""
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not suggestion:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
@@ -174,7 +203,9 @@ def validate_consolidation_suggestion_endpoint(
 ):
     """Validate a consolidation suggestion and apply the consolidation."""
     logger.info(f"Validating consolidation suggestion {suggestion_id}")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not suggestion:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
@@ -238,7 +269,7 @@ def validate_consolidation_suggestion_endpoint(
                 status=AuditStatus.SUCCESS,
                 target_type="consolidation_suggestion",
                 target_id=updated.suggestion_id,
-                actor_user_id=current_user.get('id'),
+                actor_user_id=current_user.id,
                 organization_id=org_id,
                 metadata={
                     "group_id": str(updated.group_id) if getattr(updated, 'group_id', None) else None,
@@ -264,7 +295,9 @@ def reject_consolidation_suggestion_endpoint(
 ):
     """Reject a consolidation suggestion, marking it as rejected."""
     logger.info(f"Rejecting consolidation suggestion {suggestion_id}")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not suggestion:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
@@ -310,7 +343,7 @@ def reject_consolidation_suggestion_endpoint(
             status=AuditStatus.SUCCESS,
             target_type="consolidation_suggestion",
             target_id=updated.suggestion_id,
-            actor_user_id=current_user.get('id'),
+            actor_user_id=current_user.id,
             organization_id=org_id,
             metadata={
                 "group_id": str(updated.group_id) if getattr(updated, 'group_id', None) else None,
@@ -327,9 +360,34 @@ def reject_consolidation_suggestion_endpoint(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_consolidation_suggestion_endpoint(
-    suggestion_id: uuid.UUID, db: Session = Depends(get_db)
+    suggestion_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    """Delete a consolidation suggestion from the database."""
+    """Delete a consolidation suggestion from the database.
+
+    Auth: requires user (oauth2-proxy or PAT). Permission: superadmin OR
+    write-capability on every original memory block of the suggestion
+    (uses the existing _user_can_write_suggestion helper). PAT scope is
+    enforced via ensure_pat_allows_write on each owning org.
+    """
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
+
+    if not (current_user.is_superadmin or _user_can_write_suggestion(db, suggestion, current_user)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permission to delete suggestion")
+
+    # If a PAT is in use, also enforce org-scope match for any org touched
+    if current_user.pat is not None and current_user.pat.organization_id is not None:
+        ensure_pat_allows_write(current_user, str(current_user.pat.organization_id))
+
     success = crud.delete_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not success:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")

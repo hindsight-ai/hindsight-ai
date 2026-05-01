@@ -1,4 +1,5 @@
 import { apiFetch } from '../http';
+import { setScopeProvider, __resetScopeProviderForTests } from '../scopeProvider';
 
 describe('apiFetch scoping', () => {
   const originalFetch = global.fetch as any;
@@ -10,8 +11,9 @@ describe('apiFetch scoping', () => {
       value: new URL('http://localhost:3000/'),
       writable: true,
     });
-    // Clear sessionStorage
-    try { sessionStorage.clear(); } catch {}
+    // Reset scope provider + storage so test order doesn't leak
+    __resetScopeProviderForTests();
+    try { sessionStorage.clear(); localStorage.clear(); } catch {}
     // Mock fetch
     (global as any).fetch = jest.fn(async (input: any, init?: any) => {
       return {
@@ -25,14 +27,14 @@ describe('apiFetch scoping', () => {
 
   afterEach(() => {
     (global as any).fetch = originalFetch;
+    __resetScopeProviderForTests();
     if (originalLocation) {
       Object.defineProperty(window, 'location', { value: originalLocation, writable: true });
     }
   });
 
-  it('injects headers and query from session scope for writes', async () => {
-    sessionStorage.setItem('ACTIVE_SCOPE', 'organization');
-    sessionStorage.setItem('ACTIVE_ORG_ID', 'org-123');
+  it('injects headers and query from active scope for writes', async () => {
+    setScopeProvider(() => ({ scope: 'organization', orgId: 'org-123' }));
 
     await apiFetch('/test-endpoint', { method: 'POST' });
 
@@ -45,9 +47,8 @@ describe('apiFetch scoping', () => {
     expect(headers.get('X-Organization-Id')).toBe('org-123');
   });
 
-  it('scopeOverride wins over session scope', async () => {
-    sessionStorage.setItem('ACTIVE_SCOPE', 'organization');
-    sessionStorage.setItem('ACTIVE_ORG_ID', 'org-123');
+  it('scopeOverride wins over active scope', async () => {
+    setScopeProvider(() => ({ scope: 'organization', orgId: 'org-123' }));
 
     await apiFetch('/test-endpoint', { method: 'POST', scopeOverride: { scope: 'personal' } as any });
 

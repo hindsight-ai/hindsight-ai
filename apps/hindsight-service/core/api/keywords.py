@@ -35,19 +35,20 @@ def create_keyword_endpoint(
     user_context = Depends(get_current_user_context_or_pat),
     scope_ctx = Depends(get_scoped_user_and_context),
 ):
-    u, current_user = user_context
-    _user2, _current2, sc = scope_ctx
+    u = user_context.user
+    current_user = user_context.current
+    sc = scope_ctx.scope
     scope = sc.scope or SCOPE_PERSONAL
     org_id = sc.organization_id if scope == SCOPE_ORGANIZATION else None
     if scope == SCOPE_ORGANIZATION:
-        by_org = current_user.get('memberships_by_org', {})
+        by_org = current_user.memberships_by_org
         key = str(org_id) if org_id else None
         m = by_org.get(key) if key else None
         role = (m or {}).get('role') if m else None
         can_write_flag = bool((m or {}).get('can_write'))
         if not m or not (can_write_flag or role in ('owner', 'admin', 'editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
-    if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
+    if scope == SCOPE_PUBLIC and not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Only superadmin can create public keywords")
     existing = crud.get_scoped_keyword_by_text(
         db,
@@ -94,7 +95,9 @@ def get_all_keywords_endpoint(
     db: Session = Depends(get_db),
     scoped = Depends(get_scoped_user_and_context),
 ):
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, scope_ctx.organization_id)
     keywords = crud.get_keywords(
         db,
@@ -114,7 +117,9 @@ def get_keyword_endpoint(
     db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, getattr(db_keyword, 'organization_id', None))
     if not can_read(db_keyword, current_user):
         raise HTTPException(status_code=404, detail="Keyword not found")
@@ -130,7 +135,8 @@ def update_keyword_endpoint(
     existing = crud.get_keyword(db, keyword_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(existing, 'organization_id', None))
     if not can_write(existing, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -139,7 +145,7 @@ def update_keyword_endpoint(
         from core.audit import log_keyword, AuditAction, AuditStatus
         log_keyword(
             db,
-            actor_user_id=current_user.get('id') if current_user else existing.owner_user_id,
+            actor_user_id=current_user.id if current_user else existing.owner_user_id,
             organization_id=db_keyword.organization_id,
             keyword_id=db_keyword.keyword_id,
             action=AuditAction.KEYWORD_UPDATE,
@@ -163,7 +169,8 @@ def delete_keyword_endpoint(
     existing = crud.get_keyword(db, keyword_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(existing, 'organization_id', None))
     if not can_write(existing, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -173,7 +180,7 @@ def delete_keyword_endpoint(
             from core.audit import log_keyword, AuditAction, AuditStatus
             log_keyword(
                 db,
-                actor_user_id=current_user.get('id') if current_user else existing.owner_user_id,
+                actor_user_id=current_user.id if current_user else existing.owner_user_id,
                 organization_id=existing.organization_id,
                 keyword_id=existing.keyword_id,
                 action=AuditAction.KEYWORD_DELETE,
@@ -204,7 +211,9 @@ def get_keyword_memory_blocks_endpoint(
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
 
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, getattr(db_keyword, 'organization_id', None))
     if not can_read(db_keyword, current_user):
         raise HTTPException(status_code=404, detail="Keyword not found")
@@ -232,7 +241,9 @@ def get_keyword_memory_blocks_count_endpoint(
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
 
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, getattr(db_keyword, 'organization_id', None))
     if not can_read(db_keyword, current_user):
         raise HTTPException(status_code=404, detail="Keyword not found")

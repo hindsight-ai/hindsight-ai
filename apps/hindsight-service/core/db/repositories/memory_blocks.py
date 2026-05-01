@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 import logging
 
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, Text
+from sqlalchemy import or_, Text, func
 
 from core.db import models, schemas, scope_utils
 from core.services import get_embedding_service
 from core.utils.scopes import SCOPE_PERSONAL, SCOPE_ORGANIZATION
-from core.search import get_search_service
+from core.services.search_service import get_search_service
 
 logger = logging.getLogger(__name__)
 
@@ -336,3 +336,52 @@ def report_memory_feedback(
         db.commit()
         db.refresh(db_memory_block)
     return db_memory_block
+
+
+def get_memory_blocks_by_agent(db: Session, agent_id: uuid.UUID, skip: int = 0, limit: int = 100):
+    return db.query(models.MemoryBlock).filter(models.MemoryBlock.agent_id == agent_id).offset(skip).limit(limit).all()
+
+
+def get_memory_blocks_by_conversation(db: Session, conversation_id: uuid.UUID, skip: int = 0, limit: int = 100):
+    return db.query(models.MemoryBlock).filter(models.MemoryBlock.conversation_id == conversation_id).offset(skip).limit(limit).all()
+
+
+def get_unique_conversation_count(
+    db: Session,
+    *,
+    current_user: Optional[dict] = None,
+    scope_ctx=None,
+) -> int:
+    """Count distinct conversation_id values in non-archived memory blocks."""
+    q = db.query(func.count(func.distinct(models.MemoryBlock.conversation_id)))
+    q = q.filter(models.MemoryBlock.archived == False)
+    q = scope_utils.apply_scope_filter(q, current_user, models.MemoryBlock)
+    if scope_ctx is not None:
+        q = scope_utils.apply_optional_scope_narrowing(q, scope_ctx.scope, scope_ctx.organization_id, models.MemoryBlock)
+    return q.scalar()
+
+
+def get_feedback_log(db: Session, feedback_id: uuid.UUID):
+    return db.query(models.FeedbackLog).filter(models.FeedbackLog.feedback_id == feedback_id).first()
+
+
+def get_feedback_logs_by_memory_block(db: Session, memory_id: uuid.UUID, skip: int = 0, limit: int = 100):
+    return db.query(models.FeedbackLog).filter(models.FeedbackLog.memory_id == memory_id).offset(skip).limit(limit).all()
+
+
+def update_feedback_log(db: Session, feedback_id: uuid.UUID, feedback_log: schemas.FeedbackLogUpdate):
+    db_feedback_log = db.query(models.FeedbackLog).filter(models.FeedbackLog.feedback_id == feedback_id).first()
+    if db_feedback_log:
+        for key, value in feedback_log.model_dump(exclude_unset=True).items():
+            setattr(db_feedback_log, key, value)
+        db.commit()
+        db.refresh(db_feedback_log)
+    return db_feedback_log
+
+
+def delete_feedback_log(db: Session, feedback_id: uuid.UUID):
+    db_feedback_log = db.query(models.FeedbackLog).filter(models.FeedbackLog.feedback_id == feedback_id).first()
+    if db_feedback_log:
+        db.delete(db_feedback_log)
+        db.commit()
+    return db_feedback_log

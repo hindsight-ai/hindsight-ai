@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Portal from './Portal';
-import { getBuildInfo } from '../api/memoryService';
+import { getBuildInfo } from '../api/metaService';
 import memoryService from '../api/memoryService';
 import notificationService from '../services/notificationService';
 import { VITE_VERSION, VITE_BUILD_SHA, VITE_BUILD_TIMESTAMP, VITE_DASHBOARD_IMAGE_TAG } from '../lib/viteEnv';

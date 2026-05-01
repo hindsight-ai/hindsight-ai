@@ -20,7 +20,7 @@ jest.mock('../../context/AuthContext', () => ({
   }),
 }));
 
-jest.mock('../../api/memoryService', () => ({
+jest.mock('../../api/consolidationService', () => ({
   __esModule: true,
   default: {
     getConsolidationSuggestions: jest.fn(async () => ({ items: [], total_items: 0, total_pages: 0 })),
@@ -30,7 +30,7 @@ jest.mock('../../api/memoryService', () => ({
 
 describe('ConsolidationSuggestions reacts to org scope changes', () => {
   test('dispatching orgScopeChanged triggers data refresh', async () => {
-    const mod = await import('../../api/memoryService');
+    const mod = await import('../../api/consolidationService');
     const getConsolidationSuggestions = (mod.getConsolidationSuggestions || (mod.default as any).getConsolidationSuggestions) as jest.Mock;
 
     render(<MemoryRouter><ConsolidationSuggestions /></MemoryRouter>);

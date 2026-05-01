@@ -25,6 +25,7 @@ from core.utils.scopes import (
     SCOPE_PERSONAL,
 )
 from core.api.deps import (
+    CurrentUserContext,
     get_current_user_context,
     get_current_user_context_or_pat,
     get_or_create_user_for_request,
@@ -49,51 +50,6 @@ def parse_optional_uuid(value: Optional[str]) -> Optional[uuid.UUID]:
 ALLOWED_SEARCH_STRATEGIES = {"basic", "fulltext", "semantic", "hybrid"}
 
 
-def _resolve_search_user_context(
-    db: Session,
-    *,
-    authorization: Optional[str],
-    x_api_key: Optional[str],
-    x_auth_request_user: Optional[str],
-    x_auth_request_email: Optional[str],
-    x_forwarded_user: Optional[str],
-    x_forwarded_email: Optional[str],
-):
-    """Resolve user context for search endpoints (PAT first, headers fallback)."""
-    if authorization or x_api_key:
-        _, current_user = get_current_user_context_or_pat(
-            db=db,
-            authorization=authorization,
-            x_api_key=x_api_key,
-            x_auth_request_user=x_auth_request_user,
-            x_auth_request_email=x_auth_request_email,
-            x_forwarded_user=x_forwarded_user,
-            x_forwarded_email=x_forwarded_email,
-        )
-        return current_user
-
-    name, email = resolve_identity_from_headers(
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
-    if not email:
-        return None
-
-    user = get_or_create_user_for_request(db, email=email, name=name)
-    memberships = get_user_memberships(db, user.id)
-    memberships_by_org = {str(m["organization_id"]): m for m in memberships}
-    return {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "is_superadmin": bool(getattr(user, "is_superadmin", False)),
-        "memberships": memberships,
-        "memberships_by_org": memberships_by_org,
-    }
-
-
 def _strip_search_fields(memory: schemas.MemoryBlockWithScore) -> schemas.MemoryBlock:
     data = memory.model_dump()
     data.pop("search_score", None)
@@ -112,12 +68,13 @@ def create_memory_block_endpoint(
     agent = crud.get_agent(db, agent_id=memory_block.agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    u, current_user = user_context
-    _user2, _current2, sc = scope_ctx
-    memberships_by_org = current_user.get('memberships_by_org', {})
+    u = user_context.user
+    current_user = user_context.current
+    sc = scope_ctx.scope
+    memberships_by_org = current_user.memberships_by_org
     scope = sc.scope or SCOPE_PERSONAL
     org_id = str(sc.organization_id) if sc.organization_id and scope == SCOPE_ORGANIZATION else None
-    if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
+    if scope == SCOPE_PUBLIC and not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Only superadmin can create public data")
     if scope == SCOPE_ORGANIZATION:
         if not org_id or org_id not in memberships_by_org:
@@ -151,7 +108,9 @@ def get_all_memory_blocks_endpoint(
     db: Session = Depends(get_db),
     scoped = Depends(get_scoped_user_and_context),
 ):
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, scope_ctx.organization_id)
 
     # Convert empty string parameters to None to handle frontend behavior
@@ -207,7 +166,9 @@ def get_memory_block_keywords_endpoint(
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_read(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -233,7 +194,8 @@ def associate_keyword_with_memory_block_endpoint(
     ).first()
     if existing_association:
         raise HTTPException(status_code=409, detail="Association already exists")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     if not can_write(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     if db_memory_block.visibility_scope != db_keyword.visibility_scope:
@@ -254,7 +216,8 @@ def disassociate_keyword_from_memory_block_endpoint(
     db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     # If PAT present, enforce write scope and optional org restriction
     ensure_pat_allows_write(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_write(db_memory_block, current_user):
@@ -302,7 +265,9 @@ def get_archived_memory_blocks_endpoint(
     agent_uuid = parse_optional_uuid(agent_id)
     conversation_uuid = parse_optional_uuid(conversation_id)
 
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, scope_ctx.organization_id)
 
     # Get total count of archived items
@@ -354,7 +319,9 @@ def get_memory_block_endpoint(
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     # Enforce read scope and org restriction, if PAT present
     ensure_pat_allows_read(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_read(db_memory_block, current_user):
@@ -371,7 +338,8 @@ def update_memory_block_endpoint(
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     # Enforce PAT restrictions (if PAT present and resource is org-scoped)
     ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
@@ -381,7 +349,7 @@ def update_memory_block_endpoint(
         from core.audit import log_memory, AuditAction, AuditStatus
         log_memory(
             db,
-            actor_user_id=current_user.get("id"),
+            actor_user_id=current_user.id,
             organization_id=updated.organization_id,
             memory_block_id=updated.id,
             action=AuditAction.MEMORY_UPDATE,
@@ -404,7 +372,8 @@ def archive_memory_block_endpoint(
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -415,7 +384,7 @@ def archive_memory_block_endpoint(
         from core.audit import log_memory, AuditAction, AuditStatus
         log_memory(
             db,
-            actor_user_id=current_user.get("id"),
+            actor_user_id=current_user.id,
             organization_id=db_memory_block.organization_id,
             memory_block_id=db_memory_block.id,
             action=AuditAction.MEMORY_ARCHIVE,
@@ -438,7 +407,8 @@ def soft_delete_memory_block_endpoint(
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     # PAT restriction enforcement
     ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
@@ -449,7 +419,7 @@ def soft_delete_memory_block_endpoint(
             from core.audit import log_memory, AuditAction, AuditStatus
             log_memory(
                 db,
-                actor_user_id=current_user.get("id"),
+                actor_user_id=current_user.id,
                 organization_id=current.organization_id,
                 memory_block_id=current.id,
                 action=AuditAction.MEMORY_ARCHIVE,
@@ -472,7 +442,8 @@ def hard_delete_memory_block_endpoint(
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -483,7 +454,7 @@ def hard_delete_memory_block_endpoint(
         from core.audit import log_memory, AuditAction, AuditStatus
         log_memory(
             db,
-            actor_user_id=current_user.get("id"),
+            actor_user_id=current_user.id,
             organization_id=current.organization_id,
             memory_block_id=current.id,
             action=AuditAction.MEMORY_DELETE,
@@ -509,7 +480,8 @@ def report_memory_feedback_endpoint(
         raise HTTPException(status_code=404, detail="Memory block not found")
     if feedback.memory_id != memory_id:
         raise HTTPException(status_code=400, detail="Memory ID mismatch")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_write(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -531,15 +503,14 @@ def search_memory_blocks_endpoint(
     conversation_id: Optional[str] = Query(default=None),
     limit: int = Query(default=10, ge=1, le=200),
     include_archived: bool = False,
+    organization_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    authorization: Optional[str] = Header(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
-    x_auth_request_user: Optional[str] = Header(default=None),
-    x_auth_request_email: Optional[str] = Header(default=None),
-    x_forwarded_user: Optional[str] = Header(default=None),
-    x_forwarded_email: Optional[str] = Header(default=None),
+    scoped = Depends(get_scoped_user_and_context),
 ):
-    """Run keyword/basic queries through the unified SearchService."""
+    """Run keyword/basic queries through the unified SearchService.
+
+    Auth: optional. PAT scope-narrowing handled by get_scoped_user_and_context.
+    """
 
     agent_uuid = parse_optional_uuid(agent_id)
     conversation_uuid = parse_optional_uuid(conversation_id)
@@ -557,15 +528,11 @@ def search_memory_blocks_endpoint(
         allowed = ", ".join(sorted(ALLOWED_SEARCH_STRATEGIES))
         raise HTTPException(status_code=422, detail=f"Invalid strategy '{selected_strategy}'. Allowed values: [{allowed}]")
 
-    current_user = _resolve_search_user_context(
-        db,
-        authorization=authorization,
-        x_api_key=x_api_key,
-        x_auth_request_user=x_auth_request_user,
-        x_auth_request_email=x_auth_request_email,
-        x_forwarded_user=x_forwarded_user,
-        x_forwarded_email=x_forwarded_email,
-    )
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
+    if current_user is not None and organization_id:
+        ensure_pat_allows_read(current_user, organization_id)
 
     search_params = {"current_user": current_user}
     if raw_keywords:
@@ -612,4 +579,173 @@ def search_memory_blocks_endpoint(
 
     return sanitized_results
 
-# Slimmed scope change endpoint omitted for now (kept in main for backwards compat)
+
+
+# ---------------------------------------------------------------------------
+# Routes moved from main.py
+# ---------------------------------------------------------------------------
+
+@router.post("/{memory_id}/change-scope", response_model=schemas.MemoryBlock)
+def change_memory_block_scope(
+    memory_id: uuid.UUID,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user_context = Depends(get_current_user_context_or_pat),
+):
+    mb = crud.get_memory_block(db, memory_id)
+    if not mb:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    u = user_context.user
+    current_user = user_context.current
+
+    target_scope = (payload.get("visibility_scope") or '').lower()
+    if target_scope not in ALL_SCOPES:
+        raise HTTPException(status_code=422, detail="Invalid target visibility_scope")
+
+    target_org_id = payload.get("organization_id")
+    new_owner_user_id = payload.get("new_owner_user_id")
+
+    # Permission to move
+    from core.api.permissions import can_move_scope
+    if target_scope == SCOPE_ORGANIZATION:
+        if not target_org_id:
+            raise HTTPException(status_code=422, detail="organization_id required for organization scope")
+        try:
+            target_org_uuid = uuid.UUID(str(target_org_id))
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid organization_id")
+        # PAT org restriction (if applicable)
+        ensure_pat_allows_write(current_user, target_org_uuid)
+        # Consent check: moving personal -> organization requires owner consent unless superadmin
+        if mb.visibility_scope == SCOPE_PERSONAL and not (current_user.is_superadmin or mb.owner_user_id == current_user.id):
+            raise HTTPException(status_code=409, detail="Owner consent required to move personal data to organization")
+        if not can_move_scope(mb, SCOPE_ORGANIZATION, target_org_uuid, current_user):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == SCOPE_PERSONAL:
+        if not can_move_scope(mb, SCOPE_PERSONAL, None, current_user):
+            # Superadmin override allowed
+            if not current_user.is_superadmin:
+                raise HTTPException(status_code=403, detail="Forbidden")
+    elif target_scope == SCOPE_PUBLIC:
+        if not current_user.is_superadmin:
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+
+    # Determine new ownership fields (capture previous state first)
+    previous_scope = mb.visibility_scope
+    previous_org_id = mb.organization_id
+    previous_owner_id = mb.owner_user_id
+    if target_scope == SCOPE_ORGANIZATION:
+        mb.visibility_scope = SCOPE_ORGANIZATION
+        mb.organization_id = target_org_uuid
+        mb.owner_user_id = None
+    elif target_scope == SCOPE_PERSONAL:
+        owner_id = u.id
+        if new_owner_user_id:
+            try:
+                owner_uuid = uuid.UUID(str(new_owner_user_id))
+            except Exception:
+                raise HTTPException(status_code=422, detail="Invalid new_owner_user_id")
+            if not current_user.is_superadmin:
+                raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
+            owner_id = owner_uuid
+        mb.visibility_scope = SCOPE_PERSONAL
+        mb.owner_user_id = owner_id
+        mb.organization_id = None
+    else:  # public
+        if not current_user.is_superadmin:
+            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+        mb.visibility_scope = SCOPE_PUBLIC
+        mb.organization_id = None
+        mb.owner_user_id = None
+
+    db.commit()
+    db.refresh(mb)
+    # Audit log
+    try:
+        from core.audit import log, AuditAction, AuditStatus
+        log(
+            db,
+            action=AuditAction.MEMORY_SCOPE_CHANGE,
+            status=AuditStatus.SUCCESS,
+            target_type="memory_block",
+            target_id=mb.id,
+            actor_user_id=current_user.id,
+            organization_id=mb.organization_id or previous_org_id,
+            metadata={
+                "old_scope": previous_scope,
+                "new_scope": mb.visibility_scope,
+                "old_org_id": str(previous_org_id) if previous_org_id else None,
+                "new_org_id": str(mb.organization_id) if mb.organization_id else None,
+                "old_owner_user_id": str(previous_owner_id) if previous_owner_id else None,
+                "new_owner_user_id": str(mb.owner_user_id) if mb.owner_user_id else None,
+            },
+        )
+    except Exception:
+        pass
+    return mb
+    # Re-query keywords since relationship may not be loaded
+    current_keywords = mb.keywords
+    new_keyword_ids = []
+    for kw in current_keywords:
+        target_kw = crud._get_or_create_keyword(
+            db,
+            kw.keyword_text,
+            visibility_scope=mb.visibility_scope,
+            owner_user_id=mb.owner_user_id,
+            organization_id=mb.organization_id,
+        )
+        new_keyword_ids.append(target_kw.keyword_id)
+
+    # Update associations to point to target-scope keywords
+    # Delete existing associations and recreate to the new keyword ids
+    db.query(models.MemoryBlockKeyword).filter(models.MemoryBlockKeyword.memory_id == mb.id).delete(synchronize_session=False)
+    for kid in new_keyword_ids:
+        db.add(models.MemoryBlockKeyword(memory_id=mb.id, keyword_id=kid))
+
+    db.commit()
+    db.refresh(mb)
+    return mb
+
+
+@router.post("/{memory_id}/suggest-keywords", response_model=dict)
+def suggest_keywords_for_memory_block_endpoint(
+    memory_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    scoped = Depends(get_scoped_user_and_context),
+):
+    """Suggest keywords for a single memory block using the canonical
+    extraction service.
+
+    Closes the 404 bug surfaced in #82: the dashboard's
+    `memoryService.suggestKeywords` posts to this URL but no backend
+    endpoint existed pre-#82. The bulk-keyword flow uses the same
+    canonical service so the per-block and bulk paths cannot diverge.
+    """
+    from core.services.keyword_extraction_service import extract_keywords
+
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
+    if user is None or current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    memory_block = crud.get_memory_block(db, memory_id=memory_id)
+    if not memory_block:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+
+    if not can_read(memory_block, current_user):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    ensure_pat_allows_read(current_user, getattr(memory_block, "organization_id", None))
+
+    content_text = (memory_block.content or "") + " " + (memory_block.lessons_learned or "")
+    suggested = extract_keywords(content_text)
+
+    current = [kw.keyword_text for kw in (memory_block.keywords or [])]
+    return {
+        "memory_block_id": str(memory_id),
+        "suggested_keywords": suggested,
+        "current_keywords": current,
+    }
+
+

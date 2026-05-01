@@ -30,7 +30,8 @@ def get_organization_inventory(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -53,7 +54,8 @@ async def bulk_move(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
 
     # Validation first (tests expect 422 over 403 when payload malformed)
     dry_run = payload.get("dry_run", True)
@@ -79,7 +81,7 @@ async def bulk_move(
             )
         except Exception:
             raise HTTPException(status_code=422, detail="Invalid destination_owner_user_id")
-        if not current_user.get("is_superadmin"):
+        if not current_user.is_superadmin:
             if dest_user_uuid != getattr(user, "id", None):
                 raise HTTPException(
                     status_code=403,
@@ -94,7 +96,7 @@ async def bulk_move(
                 return True
             try:
                 sid = str(_org_id)
-                for m in (current_user.get("memberships") or []):
+                for m in (current_user.memberships or []):
                     oid = m.get("organization_id")
                     if oid and str(oid) == sid:
                         return True
@@ -158,8 +160,8 @@ async def bulk_move(
         # `memory_block_count`, `keyword_count`, and name conflicts of any
         # source org. When a destination org is specified, also require
         # destination-org membership.
-        is_super = bool(current_user.get("is_superadmin"))
-        memberships_by_org = current_user.get("memberships_by_org") or {}
+        is_super = bool(current_user.is_superadmin)
+        memberships_by_org = current_user.memberships_by_org or {}
         if not (is_super or memberships_by_org.get(str(org_id))):
             raise HTTPException(status_code=403, detail="Forbidden")
         if destination_organization_id:
@@ -264,17 +266,6 @@ async def bulk_move(
 
     return {"operation_id": bulk_operation.id, "status": "started"}
 
-@router.get("/admin/operations/{operation_id}")
-def get_bulk_operation_admin_status(
-    operation_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
-):
-    # Light implementation to satisfy tests expecting 403 for regular users
-    user, current_user = user_context
-    # Current test expectations: non-existent or unauthorized access -> 403 uniformly
-    raise HTTPException(status_code=403, detail="Forbidden")
-
 @router.post("/organizations/{org_id}/bulk-delete")
 async def bulk_delete(
     org_id: uuid.UUID,
@@ -284,15 +275,16 @@ async def bulk_delete(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     dry_run = payload.get("dry_run", True)
     # Both dry-run (planning) and execution require source-org membership;
     # execution additionally requires manage rights. Planning that bypasses
     # membership leaks per-resource counts to outsiders.
-    is_super = bool(current_user.get("is_superadmin"))
+    is_super = bool(current_user.is_superadmin)
     if dry_run:
         sid = str(org_id)
-        mem = (current_user.get("memberships_by_org") or {}).get(sid)
+        mem = (current_user.memberships_by_org or {}).get(sid)
         if not (is_super or mem):
             raise HTTPException(status_code=403, detail="Forbidden")
     else:
@@ -353,8 +345,9 @@ def get_operation_status(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
-    if not current_user.get("is_superadmin"):
+    user = user_context.user
+    current_user = user_context.current
+    if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     operation = crud.get_bulk_operation(db, bulk_operation_id=operation_id)
@@ -382,8 +375,9 @@ def get_operations_status(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
-    if not current_user.get("is_superadmin"):
+    user = user_context.user
+    current_user = user_context.current
+    if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     operations = crud.get_bulk_operations(db)
@@ -410,8 +404,9 @@ def cancel_operation(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
-    if not current_user.get("is_superadmin"):
+    user = user_context.user
+    current_user = user_context.current
+    if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     operation = crud.get_bulk_operation(db, bulk_operation_id=operation_id)

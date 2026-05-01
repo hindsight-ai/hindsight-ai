@@ -4,17 +4,26 @@ import logging
 import pytest
 
 from core.api import deps as deps_mod
+from core.api.deps import CurrentUserContext, PatContext
 
 
 def _fake_current_user_with_pat(scopes, org_id=None, can_write=True):
-    return {
-        "id": uuid.uuid4(),
-        "email": "audit@example.com",
-        "display_name": "AuditUser",
-        "memberships": [],
-        "memberships_by_org": {str(org_id): {"can_read": True, "can_write": can_write}} if org_id else {},
-        "pat": {"id": uuid.uuid4(), "token_id": "tid", "scopes": scopes, "organization_id": org_id},
-    }
+    return CurrentUserContext(
+        id=uuid.uuid4(),
+        email="audit@example.com",
+        display_name="AuditUser",
+        is_superadmin=False,
+        is_beta_access_admin=False,
+        memberships=[],
+        memberships_by_org={str(org_id): {"can_read": True, "can_write": can_write}} if org_id else {},
+        beta_access_status=None,
+        pat=PatContext(
+            id=uuid.uuid4(),
+            token_id="tid",
+            scopes=scopes,
+            organization_id=org_id,
+        ),
+    )
 
 
 def test_pat_denied_emits_audit(caplog):

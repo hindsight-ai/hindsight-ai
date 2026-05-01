@@ -1,9 +1,5 @@
 import agentService from '../agentService';
-
-jest.mock('../../services/notificationService', () => ({
-  __esModule: true,
-  default: { show401Error: jest.fn(), showWarning: jest.fn() },
-}));
+import { AuthenticationError } from '../errors';
 
 describe('agentService.getAgents', () => {
   beforeEach(() => { global.fetch.mockReset && global.fetch.mockReset(); });
@@ -20,11 +16,10 @@ describe('agentService.getAgents', () => {
     expect(url).toContain('q=x');
   });
 
-  test('401 triggers notification and throws', async () => {
-    const notification = require('../../services/notificationService').default;
+  test('401 throws AuthenticationError without calling notificationService', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 401 });
+    await expect(agentService.getAgents()).rejects.toThrow(AuthenticationError);
     await expect(agentService.getAgents()).rejects.toThrow('Authentication required');
-    expect(notification.show401Error).toHaveBeenCalled();
   });
 });
 

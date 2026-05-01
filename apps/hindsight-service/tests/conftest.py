@@ -135,7 +135,11 @@ _GLOBAL_SESSION = None
 # Reference: https://docs.sqlalchemy.org/en/20/orm/session_transaction.html
 #            #joining-a-session-into-an-external-transaction-such-as-for-test-suites
 @pytest.fixture(autouse=True)
-def db_session(_engine, _SessionLocal):
+def db_session(_migrated_db, _engine, _SessionLocal):
+    # Explicit `_migrated_db` dependency ensures the alembic schema
+    # migration runs BEFORE any test acquires a connection. Without it,
+    # autouse session-scoped resolution order is fragile and one test in
+    # isolation can hit `relation "users" does not exist`.
     connection = _engine.connect()
     trans = connection.begin()
     session = _SessionLocal(bind=connection, join_transaction_mode="create_savepoint")

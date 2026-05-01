@@ -41,10 +41,6 @@ jest.mock('../context/AuthContext', () => ({
 }));
 
 // Mock other contexts
-jest.mock('../context/OrgContext', () => ({
-  OrgProvider: ({ children }: { children: React.ReactNode }) => <div data-testid="org-provider">{children}</div>,
-}));
-
 jest.mock('../context/OrganizationContext', () => ({
   OrganizationProvider: ({ children }: { children: React.ReactNode }) => <div data-testid="organization-provider">{children}</div>,
 }));

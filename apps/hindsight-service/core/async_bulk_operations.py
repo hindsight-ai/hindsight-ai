@@ -35,12 +35,36 @@ class BulkOperationTask:
         self.errors = []
 
     async def execute(self) -> Dict[str, Any]:
-        """Execute the bulk operation asynchronously."""
+        """Execute the bulk operation asynchronously.
+
+        Correctness guarantee (#76): the DB row is ALWAYS transitioned to a
+        terminal state before this coroutine returns, even on uncaught
+        exceptions. Without this, a worker crash mid-operation left the DB
+        row stuck at "running" forever while the in-memory dict said "failed",
+        which is the SF-5 / SM-4 impossible-but-coded path that the
+        state-machine verifier flagged.
+        """
         try:
             async with get_async_db_session() as db:
                 return await self._execute_operation(db)
         except Exception as e:
             logger.error(f"Error executing bulk operation {self.operation_id}: {e}")
+            # Best-effort terminal-state write so the DB row converges.
+            # If the row is already in a terminal state (e.g. _execute_operation
+            # set "completed" then raised after commit), preserve it.
+            try:
+                async with get_async_db_session() as db:
+                    op = crud.get_bulk_operation(db, self.operation_id)
+                    if op and op.status not in ("completed", "failed", "cancelled"):
+                        op.status = "failed"
+                        op.finished_at = datetime.now(timezone.utc)
+                        op.error_log = {"errors": [str(e)]}
+                        db.commit()
+            except Exception as inner:
+                logger.error(
+                    "Failed to write terminal DB status for %s: %s",
+                    self.operation_id, inner,
+                )
             return {"status": "failed", "error": str(e)}
 
     async def _execute_operation(self, db: Session) -> Dict[str, Any]:
@@ -328,12 +352,23 @@ class AsyncBulkOperationsManager:
 
     def _on_task_complete(self, operation_id: uuid.UUID, task: asyncio.Task) -> None:
         """Handle task completion."""
+        # If cancel_task() already recorded "cancelled", preserve it — the
+        # task.result() call below would raise CancelledError and clobber it
+        # with "failed".
+        already_cancelled = (
+            self._task_results.get(operation_id, {}).get("status") == "cancelled"
+        )
         try:
             result = task.result()
-            self._task_results[operation_id] = result
+            if not already_cancelled:
+                self._task_results[operation_id] = result
+        except asyncio.CancelledError:
+            if not already_cancelled:
+                self._task_results[operation_id] = {"status": "cancelled"}
         except Exception as e:
             logger.error(f"Task {operation_id} failed with exception: {e}")
-            self._task_results[operation_id] = {"status": "failed", "error": str(e)}
+            if not already_cancelled:
+                self._task_results[operation_id] = {"status": "failed", "error": str(e)}
         finally:
             # Clean up completed task
             self._running_tasks.pop(operation_id, None)
@@ -349,10 +384,20 @@ class AsyncBulkOperationsManager:
         return None
 
     def cancel_task(self, operation_id: uuid.UUID) -> bool:
-        """Cancel a running bulk operation task."""
+        """Cancel a running bulk operation task.
+
+        Reconciles the in-memory state with the cancel intent:
+        - Cancels the asyncio task (the existing behavior).
+        - Records "cancelled" in `_task_results` so a subsequent
+          `get_task_status` returns the cancel state instead of "failed"
+          (the asyncio.CancelledError propagating through `_on_task_complete`
+          would otherwise classify it as failed).
+        Caller (the cancel endpoint) is responsible for the DB write.
+        """
         if operation_id in self._running_tasks:
             task = self._running_tasks[operation_id]
             task.cancel()
+            self._task_results[operation_id] = {"status": "cancelled"}
             return True
         return False
 

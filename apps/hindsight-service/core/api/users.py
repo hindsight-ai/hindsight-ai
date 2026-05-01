@@ -23,7 +23,8 @@ def update_me(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, _ctx = user_context
+    user = user_context.user
+    _ctx = user_context.current
     display_name = (payload.get("display_name") or None)
 
     if display_name is not None:
@@ -45,7 +46,8 @@ def list_tokens(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, _ctx = user_context
+    user = user_context.user
+    _ctx = user_context.current
     pats = token_repo.list_tokens(db, user_id=user.id)
     return pats
 
@@ -56,7 +58,8 @@ def create_token(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, _ctx = user_context
+    user = user_context.user
+    _ctx = user_context.current
     # Creation-time validation intentionally omitted: tokens may be created
     # with requested scopes; runtime enforcement ensures tokens cannot be
     # used to exceed the token owner's current rights. See PAT_REVISION_PLAN.
@@ -92,7 +95,8 @@ def revoke_token(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, _ctx = user_context
+    user = user_context.user
+    _ctx = user_context.current
     try:
         uuid_token = uuid.UUID(str(token_id))
     except Exception:
@@ -121,7 +125,8 @@ def rotate_token(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, _ctx = user_context
+    user = user_context.user
+    _ctx = user_context.current
     try:
         uuid_token = uuid.UUID(str(token_id))
     except Exception:
@@ -155,7 +160,8 @@ def update_token(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, _ctx = user_context
+    user = user_context.user
+    _ctx = user_context.current
     try:
         uuid_token = uuid.UUID(str(token_id))
     except Exception:

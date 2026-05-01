@@ -1,10 +1,5 @@
 import memoryService from '../memoryService';
 
-jest.mock('../../services/notificationService', () => ({
-  __esModule: true,
-  default: { show401Error: jest.fn(), showWarning: jest.fn() },
-}));
-
 describe('memoryService 401 branches', () => {
   beforeEach(() => {
     global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 401 });
@@ -49,7 +44,6 @@ describe('memoryService 401 branches', () => {
     await expectAuthRequired(() => m.bulkCompactMemoryBlocks(['mb']));
     await expectAuthRequired(() => m.bulkGenerateKeywords(['mb']));
     await expectAuthRequired(() => m.bulkApplyKeywords([{ memory_block_id: 'mb', keywords: ['x'] }]));
-    await expectAuthRequired(() => m.mergeMemoryBlocks(['mb'], 'content'));
   });
 });
 

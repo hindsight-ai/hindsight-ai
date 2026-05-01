@@ -50,7 +50,8 @@ async def support_contact(
     Accept a support contact request from an authenticated user and send
     an email to the configured support address with diagnostic context.
     """
-    user, _current_user_context = user_and_context
+    user = user_and_context.user
+    _current_user_context = user_and_context.current
 
     # Extract payload
     message = (payload or {}).get("message") or ""

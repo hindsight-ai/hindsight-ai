@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { getConsolidationSuggestionById, validateConsolidationSuggestion, rejectConsolidationSuggestion } from '../api/memoryService';
+import { getConsolidationSuggestionById, validateConsolidationSuggestion, rejectConsolidationSuggestion } from '../api/consolidationService';
+import type { ConsolidationSuggestion } from '../api/consolidationService';
 import memoryService from '../api/memoryService';
-import { ConsolidationSuggestion } from '../api/memoryService';
 import { UIMemoryBlock } from '../types/domain';
 
 // Props interface

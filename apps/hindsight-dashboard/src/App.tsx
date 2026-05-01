@@ -17,7 +17,6 @@ import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
 import DebugPanel from './components/DebugPanel';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { OrgProvider } from './context/OrgContext';
 import { OrganizationProvider } from './context/OrganizationContext';
 import { NotificationProvider } from './context/NotificationContext';
 import LoginPage from './components/LoginPage';
@@ -353,9 +352,7 @@ function App() {
       <AuthProvider>
         <NotificationProvider>
           <OrganizationProvider>
-            <OrgProvider>
-              <AppContent />
-            </OrgProvider>
+            <AppContent />
           </OrganizationProvider>
         </NotificationProvider>
       </AuthProvider>

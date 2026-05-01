@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getConsolidationSuggestions, validateConsolidationSuggestion, rejectConsolidationSuggestion, triggerConsolidation, deleteConsolidationSuggestion, ConsolidationSuggestion } from '../api/memoryService';
+import { getConsolidationSuggestions, validateConsolidationSuggestion, rejectConsolidationSuggestion, triggerConsolidation, deleteConsolidationSuggestion } from '../api/consolidationService';
+import type { ConsolidationSuggestion } from '../api/consolidationService';
 import notificationService from '../services/notificationService';
 import ConsolidationSuggestionModal from './ConsolidationSuggestionModal';
 import { useAuth } from '../context/AuthContext';

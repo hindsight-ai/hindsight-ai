@@ -1,5 +1,8 @@
 // Centralized HTTP helpers for consistent API URL handling
 
+import { getScope } from './scopeProvider';
+import { ApiError, AuthenticationError, AuthorizationError, NetworkError } from './errors';
+
 const getCookie = (name: string): string | null => {
   if (typeof document === 'undefined') return null;
   try {
@@ -35,14 +38,14 @@ const shouldUseLocalFallback = (): boolean => {
   }
 };
 
-// Resolve base path: '/api' or '/guest-api', or provided overrides
-export const apiBasePath = (): string => {
+// Internal: resolve relative base path ('/api' or '/guest-api', or env override).
+const resolveBasePath = (): string => {
   try {
     const runtime = (typeof window !== 'undefined' && (window as any).__ENV__?.HINDSIGHT_SERVICE_API_URL) || null;
     const build = (typeof process !== 'undefined' && (process as any).env?.VITE_HINDSIGHT_SERVICE_API_URL) || null;
     const base = runtime || build || '/api';
-    // If base is an absolute URL (http/https), keep it as-is for both guest and auth.
-    // Only switch to "/guest-api" when we're using relative, same-origin proxying.
+    // Absolute URL stays as-is for both guest and auth.
+    // Only switch to "/guest-api" when using relative, same-origin proxying.
     if (/^https?:\/\//i.test(base)) return base;
     return isGuest() ? '/guest-api' : base;
   } catch {
@@ -50,13 +53,12 @@ export const apiBasePath = (): string => {
   }
 };
 
-// Absolute base URL (no trailing slash), resolved against current origin
-export const apiBase = (): string => {
-  let basePath = apiBasePath();
-  
+// Internal: absolute base URL (no trailing slash), resolved against current origin.
+const resolveAbsoluteBase = (): string => {
+  let basePath = resolveBasePath();
   try {
     if (typeof window !== 'undefined') {
-      // If we have an absolute URL, upgrade http to https if the app is running on https
+      // Upgrade http→https on https origin to avoid mixed-content blocks.
       if (/^https?:\/\//i.test(basePath)) {
         const isHttps = window.location.protocol === 'https:';
         const url = new URL(basePath);
@@ -65,23 +67,19 @@ export const apiBase = (): string => {
           basePath = url.toString();
         }
       }
-      const result = new URL(basePath, window.location.origin).toString().replace(/\/$/, '');
-      return result;
+      return new URL(basePath, window.location.origin).toString().replace(/\/$/, '');
     }
   } catch {}
   return basePath.replace(/\/$/, '');
 };
 
-// Build absolute URL for a given path (ensures leading slash)
-export const apiUrl = (path: string): string => {
+// Canonical URL builder. Accepts paths with or without leading slash.
+// Pass `{ trailingSlash: true }` for list endpoints that must end in `/`.
+export const apiUrl = (path: string, opts?: { trailingSlash?: boolean }): string => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${apiBase()}${cleanPath}`;
-};
-
-// As above but ensures trailing slash (useful for list endpoints to avoid redirects)
-export const apiUrlDir = (path: string): string => {
-  const u = apiUrl(path);
-  return u.endsWith('/') ? u : `${u}/`;
+  const url = `${resolveAbsoluteBase()}${cleanPath}`;
+  if (opts?.trailingSlash && !url.endsWith('/')) return `${url}/`;
+  return url;
 };
 
 export type ApiFetchInit = RequestInit & {
@@ -93,7 +91,7 @@ export type ApiFetchInit = RequestInit & {
 
 export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<Response> => {
   const { searchParams, ensureTrailingSlash, noScope, scopeOverride, ...rest } = init;
-  let url = ensureTrailingSlash ? apiUrlDir(path) : apiUrl(path);
+  let url = apiUrl(path, { trailingSlash: ensureTrailingSlash });
 
   // Start with provided params
   const usp = searchParams instanceof URLSearchParams ? new URLSearchParams(searchParams.toString()) : new URLSearchParams();
@@ -116,9 +114,10 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
           activeOrgId = scopeOverride.organizationId || undefined;
         }
       } else {
-        activeScope = sessionStorage.getItem('ACTIVE_SCOPE') || undefined;
+        const snapshot = getScope();
+        activeScope = snapshot.scope;
         if (!activeScope && isGuest()) activeScope = 'public';
-        activeOrgId = sessionStorage.getItem('ACTIVE_ORG_ID') || undefined;
+        activeOrgId = snapshot.orgId;
       }
 
       // Add query params for compatibility
@@ -188,6 +187,12 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
 
   const allowLocalFallback = shouldUseLocalFallback();
 
+  const throwTypedError = (res: Response): never => {
+    if (res.status === 401) throw new AuthenticationError();
+    if (res.status === 403) throw new AuthorizationError();
+    throw new ApiError(res.status, `HTTP error ${res.status}`);
+  };
+
   try {
     const res = await fetch(url, req);
     // If backend is unreachable via proxy (/api) in local dev, try direct fallbacks.
@@ -195,7 +200,7 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
       allowLocalFallback &&
       !res.ok &&
       res.status === 502 &&
-      (apiBasePath() === '/api' || apiBasePath() === '/guest-api')
+      (resolveBasePath() === '/api' || resolveBasePath() === '/guest-api')
     ) {
       // Try localhost and host.docker.internal fallbacks
       const candidates = ['http://localhost:8000', 'http://127.0.0.1:8000', 'http://host.docker.internal:8000'];
@@ -203,26 +208,38 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
         try {
           const directUrl = (ensureTrailingSlash ? `${base}${path}`.replace(/([^/])$/, '$1/') : `${base}${path}`);
           const res2 = await fetch(directUrl, req);
-          if (res2.ok || res2.status !== 502) return res2;
-        } catch {}
+          if (res2.ok || res2.status !== 502) {
+            if (!res2.ok) throwTypedError(res2);
+            return res2;
+          }
+        } catch (fallbackErr) {
+          if (fallbackErr instanceof ApiError || fallbackErr instanceof AuthenticationError || fallbackErr instanceof AuthorizationError) throw fallbackErr;
+        }
       }
     }
+    if (!res.ok) throwTypedError(res);
     return res;
   } catch (e) {
     // Network error: attempt direct fallbacks in dev scenario
     if (
+      e instanceof TypeError &&
       allowLocalFallback &&
-      (apiBasePath() === '/api' || apiBasePath() === '/guest-api')
+      (resolveBasePath() === '/api' || resolveBasePath() === '/guest-api')
     ) {
       const candidates = ['http://localhost:8000', 'http://127.0.0.1:8000', 'http://host.docker.internal:8000'];
       for (const base of candidates) {
         try {
           const directUrl = (ensureTrailingSlash ? `${base}${path}`.replace(/([^/])$/, '$1/') : `${base}${path}`);
           const res2 = await fetch(directUrl, req);
+          if (!res2.ok) throwTypedError(res2);
           return res2;
-        } catch {}
+        } catch (fallbackErr) {
+          if (fallbackErr instanceof ApiError || fallbackErr instanceof AuthenticationError || fallbackErr instanceof AuthorizationError) throw fallbackErr;
+        }
       }
     }
-    throw e;
+    // Wrap raw TypeError fetch failures as NetworkError; re-throw typed errors as-is
+    if (e instanceof ApiError || e instanceof AuthenticationError || e instanceof AuthorizationError || e instanceof NetworkError) throw e;
+    throw new NetworkError(e instanceof Error ? e.message : 'Network error', e);
   }
 };
