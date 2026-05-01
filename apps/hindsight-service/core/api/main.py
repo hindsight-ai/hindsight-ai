@@ -162,6 +162,17 @@ app.include_router(compression_router)
 app.include_router(search_router)
 app.include_router(memory_blocks_bulk_router)
 
+# Test-fixtures router — ONLY mounted when E2E_TEST_HOOKS=true.
+# These endpoints seed DB state for the Playwright E2E suite and bypass
+# LLM-gated paths (e.g. consolidation suggestion creation). MUST NOT be
+# enabled in production. See `core/api/test_fixtures.py` for the security
+# model. The conditional import means the routes literally do not exist in
+# prod bytecode when the flag is unset.
+if os.getenv("E2E_TEST_HOOKS", "false").lower() == "true":
+    from core.api.test_fixtures import router as test_fixtures_router  # noqa: E402
+    app.include_router(test_fixtures_router)
+    logger.warning("E2E_TEST_HOOKS=true — test-fixtures endpoints mounted. NEVER enable in production.")
+
 # Include memory optimization router
 try:
     from core.api.memory_optimization import router as memory_optimization_router

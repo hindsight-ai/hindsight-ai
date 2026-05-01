@@ -30,6 +30,9 @@ env:
   # `e2e-admin@e2e.local`: provisions other test users via PATCH /beta-access/admin/users/{id}
   # `e2e-reference-owner@e2e.local`: owns the search-journey reference dataset (50 blocks)
   BETA_ACCESS_ADMINS: e2e-admin@e2e.local,e2e-reference-owner@e2e.local
+  # Mount /test-fixtures/* endpoints (gated module). NEVER set this in production.
+  # See apps/hindsight-service/core/api/test_fixtures.py for the security model.
+  E2E_TEST_HOOKS: 'true'
 
 jobs:
   smoke:
