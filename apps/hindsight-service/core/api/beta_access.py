@@ -261,6 +261,11 @@ def update_beta_access_user_status(
     request = beta_repo.get_beta_access_request_by_email(db, user.email)
     reviewer_email = admin_user.email
 
+    # Single-transaction atomicity (#89): the request-side write + user-row
+    # mirror used to be two separate commits; if the process died between
+    # them the request was 'accepted' but the user row still read 'pending'
+    # until the user's next login normalized things. Now both writes share
+    # one db.commit() — autocommit=False on the repo call defers to us.
     if desired in {"accepted", "denied"} and request:
         beta_repo.update_beta_access_request_status(
             db,
@@ -268,8 +273,8 @@ def update_beta_access_user_status(
             desired,
             reviewer_email,
             "Manual status update via beta access admin console",
+            autocommit=False,
         )
-        request = beta_repo.get_beta_access_request_by_email(db, user.email)
     elif desired in {"revoked", "not_requested"} and request and request.status != 'denied':
         beta_repo.update_beta_access_request_status(
             db,
@@ -277,11 +282,10 @@ def update_beta_access_user_status(
             'denied',
             reviewer_email,
             "Access manually revoked via beta access admin console",
+            autocommit=False,
         )
-        request = beta_repo.get_beta_access_request_by_email(db, user.email)
 
-    # Mirror the result to the user row only after the request-side write
-    # succeeded.
+    # Mirror the result to the user row in the same transaction.
     user.beta_access_status = desired
 
     try:
@@ -290,6 +294,8 @@ def update_beta_access_user_status(
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to persist beta access status update.") from exc
     db.refresh(user)
+    # Refresh the request snapshot we'll return in the audit log.
+    request = beta_repo.get_beta_access_request_by_email(db, user.email)
 
     audit_callable = getattr(sys.modules[__name__], "audit_log", audit_log)
     audit_callable(

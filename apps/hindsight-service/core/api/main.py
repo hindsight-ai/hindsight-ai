@@ -3,6 +3,7 @@ FastAPI app assembly: middleware and router wiring.
 """
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,10 +44,32 @@ from core.api.memory_blocks_bulk import router as memory_blocks_bulk_router
 
 # Database schema is managed by Alembic migrations.
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Startup / shutdown hooks.
+
+    On startup: reconcile bulk operations stuck in `running` state across
+    a process restart (#88). The check runs synchronously before the app
+    accepts traffic; failure to reconcile is logged but does not block
+    startup (better to serve traffic than to crash on a transient DB
+    glitch).
+    """
+    try:
+        from core.async_bulk_operations import reconcile_stuck_bulk_operations
+        reconciled = reconcile_stuck_bulk_operations(min_age_seconds=60)
+        if reconciled:
+            logger.info("startup: reconciled %d stuck bulk operations to 'failed'", reconciled)
+    except Exception as exc:  # pragma: no cover — defensive logging
+        logger.warning("startup: bulk-operation reconciliation failed: %s", exc)
+    yield
+
+
 app = FastAPI(
     title="Intelligent AI Agent Memory Service",
     description="API for managing AI agent memories, including creation, retrieval, and feedback.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Avoid implicit trailing-slash redirects for predictable URLs

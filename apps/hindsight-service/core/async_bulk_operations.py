@@ -430,6 +430,67 @@ async def execute_bulk_operation_async(operation_id: uuid.UUID, task_type: str,
     )
 
 
+def reconcile_stuck_bulk_operations(
+    min_age_seconds: int = 60,
+    session: Optional[Any] = None,
+) -> int:
+    """Mark abandoned `running` bulk operations as failed.
+
+    Closes the rolling-deploy gap from #88: when the API process is killed
+    (e.g. `docker stop`) while a bulk operation is mid-flight, the
+    in-memory task dict dies with the process but the DB row stays at
+    `status='running'` indefinitely. The status endpoint then reports the
+    operation as live forever.
+
+    Called from the FastAPI `lifespan` startup hook in `core/api/main.py`
+    BEFORE the new process accepts traffic. Reconciles any rows whose
+    `started_at` is older than `min_age_seconds` (default 60s) — that
+    grace window prevents a graceful-restart blue/green deploy from
+    falsely failing in-flight operations whose worker is still alive.
+
+    `session` is an optional injected SQLAlchemy session — used by tests
+    that seed rows in a SAVEPOINT-wrapped transaction (where a separate
+    `SessionLocal()` connection cannot see the uncommitted seeds). When
+    omitted, the function opens and closes its own session as in production.
+
+    Returns the number of rows reconciled.
+    """
+    from datetime import datetime, timedelta, timezone
+    from core.db import models
+    owns_session = session is None
+    if owns_session:
+        from core.db.database import SessionLocal
+        db = SessionLocal()
+    else:
+        db = session
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=min_age_seconds)
+        stuck = (
+            db.query(models.BulkOperation)
+            .filter(
+                models.BulkOperation.status == 'running',
+                models.BulkOperation.started_at != None,  # noqa: E711 — SQLAlchemy needs `!=` not `is not`
+                models.BulkOperation.started_at < cutoff,
+            )
+            .all()
+        )
+        for op in stuck:
+            op.status = 'failed'
+            op.finished_at = datetime.now(timezone.utc)
+            existing_log = op.error_log or {}
+            errors = list(existing_log.get('errors') or [])
+            errors.append('server restarted before operation could complete')
+            op.error_log = {**existing_log, 'errors': errors}
+        if stuck and owns_session:
+            db.commit()
+        elif stuck:
+            db.flush()
+        return len(stuck)
+    finally:
+        if owns_session:
+            db.close()
+
+
 def get_bulk_operation_status(operation_id: uuid.UUID) -> Optional[Dict[str, Any]]:
     """Get the status of a bulk operation."""
     return _bulk_operations_manager.get_task_status(operation_id)
