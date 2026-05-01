@@ -91,6 +91,7 @@ export async function seedReferenceDataset(ctx: APIRequestContext): Promise<{ ag
   const headers = {
     'x-auth-request-email': REFERENCE_OWNER_EMAIL,
     'x-auth-request-user': REFERENCE_OWNER_NAME,
+    'x-active-scope': 'personal',
   };
 
   // 1. Owner row
