@@ -51,12 +51,28 @@ async function clearAuth(page: Page): Promise<void> {
 /**
  * Authenticate the browser as a regular user via oauth2-proxy headers.
  * Hard-navigates to `/` so the frontend re-fetches user state under the new identity.
+ *
+ * Also seeds `localStorage.selectedScope='personal'` by default so the
+ * dashboard's first API call carries a scope filter — without this, the
+ * `scopeProvider` returns `scope=undefined`, the backend filters differently
+ * than journey tests expect, and data-display assertions see empty results.
+ * Tests that need org/public scope (or want to test the unset path) can
+ * call `page.evaluate(() => localStorage.setItem('selectedScope', '...'))`
+ * + `page.reload()` afterwards (e.g. journey 14 does this explicitly).
  */
 export async function asUser(page: Page, email: string, displayName?: string): Promise<void> {
   await clearAuth(page);
   await page.context().setExtraHTTPHeaders({
     'x-auth-request-email': email,
     'x-auth-request-user': displayName || email,
+  });
+  // Seed localStorage scope BEFORE navigation so the first data fetch has it.
+  await page.goto('about:blank');
+  await page.evaluate(() => {
+    try {
+      localStorage.setItem('selectedScope', 'personal');
+      localStorage.removeItem('selectedOrganizationId');
+    } catch {}
   });
   await page.goto(PROBE_PAGE);
 }
@@ -81,4 +97,36 @@ export async function asPAT(page: Page, patToken: string): Promise<void> {
 export async function asGuest(page: Page): Promise<void> {
   await clearAuth(page);
   await page.goto(PROBE_PAGE);
+}
+
+/**
+ * Construct scoped HTTP headers for direct API calls (Playwright's `request`
+ * fixture or `page.request`).
+ *
+ * The backend's `enforce_write_scope_metadata` middleware (see
+ * `core/api/middleware/scope.py`) returns 400 `scope_required` for any
+ * POST/PUT/PATCH/DELETE on `/agents`, `/keywords`, `/memory-blocks`,
+ * `/consolidation*` paths unless the request includes either an
+ * `X-Active-Scope` header or a `?scope=...` query param. This helper
+ * bundles the scope header alongside the auth headers so journey tests
+ * don't have to remember it for every write.
+ *
+ * For `scope='organization'`, `orgId` is required and produces an
+ * additional `X-Organization-Id` header.
+ */
+export function authedHeaders(
+  email: string,
+  scope: 'personal' | 'organization' | 'public' = 'personal',
+  orgId?: string,
+): Record<string, string> {
+  const h: Record<string, string> = {
+    'x-auth-request-email': email,
+    'x-auth-request-user': email,
+    'x-active-scope': scope,
+  };
+  if (scope === 'organization') {
+    if (!orgId) throw new Error("authedHeaders: 'organization' scope requires orgId");
+    h['x-organization-id'] = orgId;
+  }
+  return h;
 }
