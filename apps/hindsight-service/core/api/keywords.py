@@ -35,8 +35,9 @@ def create_keyword_endpoint(
     user_context = Depends(get_current_user_context_or_pat),
     scope_ctx = Depends(get_scoped_user_and_context),
 ):
-    u, current_user = user_context
-    _user2, _current2, sc = scope_ctx
+    u = user_context.user
+    current_user = user_context.current
+    sc = scope_ctx.scope
     scope = sc.scope or SCOPE_PERSONAL
     org_id = sc.organization_id if scope == SCOPE_ORGANIZATION else None
     if scope == SCOPE_ORGANIZATION:
@@ -94,7 +95,9 @@ def get_all_keywords_endpoint(
     db: Session = Depends(get_db),
     scoped = Depends(get_scoped_user_and_context),
 ):
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, scope_ctx.organization_id)
     keywords = crud.get_keywords(
         db,
@@ -114,7 +117,9 @@ def get_keyword_endpoint(
     db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, getattr(db_keyword, 'organization_id', None))
     if not can_read(db_keyword, current_user):
         raise HTTPException(status_code=404, detail="Keyword not found")
@@ -130,7 +135,8 @@ def update_keyword_endpoint(
     existing = crud.get_keyword(db, keyword_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(existing, 'organization_id', None))
     if not can_write(existing, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -163,7 +169,8 @@ def delete_keyword_endpoint(
     existing = crud.get_keyword(db, keyword_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(existing, 'organization_id', None))
     if not can_write(existing, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -204,7 +211,9 @@ def get_keyword_memory_blocks_endpoint(
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
 
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, getattr(db_keyword, 'organization_id', None))
     if not can_read(db_keyword, current_user):
         raise HTTPException(status_code=404, detail="Keyword not found")
@@ -232,7 +241,9 @@ def get_keyword_memory_blocks_count_endpoint(
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
 
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, getattr(db_keyword, 'organization_id', None))
     if not can_read(db_keyword, current_user):
         raise HTTPException(status_code=404, detail="Keyword not found")

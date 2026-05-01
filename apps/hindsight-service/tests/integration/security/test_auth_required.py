@@ -214,11 +214,13 @@ def test_pat_narrows_memberships_to_pat_org(db_session):
 
     # Resolve current_user via the canonical PAT entry point (mirrors what
     # FastAPI does at runtime).
-    from core.api.deps import get_current_user_context_or_pat
-    _u, current_user = get_current_user_context_or_pat(
+    from core.api.deps import get_current_user_context_or_pat, UserContext
+    _uctx = get_current_user_context_or_pat(
         db=db_session,
         authorization=f"Bearer {token}",
     )
+    _u = _uctx.user
+    current_user = _uctx.current
 
     # Sanity: pre-narrowing, the user has 2 org memberships.
     assert len(current_user.memberships) == 2, (
@@ -228,11 +230,13 @@ def test_pat_narrows_memberships_to_pat_org(db_session):
 
     # Now apply the unified scope dep manually. It should narrow.
     fake_scope = ScopeContext(scope="personal", organization_id=None)
-    user, narrowed_user, _scope = get_scoped_user_and_context(
+    scoped = get_scoped_user_and_context(
         scope_ctx=fake_scope,
-        user_ctx=(_u, current_user),
+        user_ctx=UserContext(user=_u, current=current_user),
         organization_id=None,
     )
+    user = scoped.user
+    narrowed_user = scoped.current
 
     assert len(narrowed_user.memberships) == 1, (
         f"REGRESSION (F6): get_scoped_user_and_context did not narrow "

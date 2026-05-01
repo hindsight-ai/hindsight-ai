@@ -32,7 +32,8 @@ def create_organization(
     if not name:
         raise HTTPException(status_code=422, detail="Organization name is required")
 
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
 
     # Unique checks
     if db.query(models.Organization).filter(models.Organization.name == name).first():
@@ -80,7 +81,8 @@ def list_organizations(
     user_context = Depends(get_current_user_context),
 ):
     """List organizations where the user has membership (for organization switcher)."""
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     # Always return only orgs where the user has membership, even for superadmins
     # This endpoint is used for the organization switcher dropdown
     raw_ids = [m.get("organization_id") for m in current_user.memberships]
@@ -118,7 +120,8 @@ def list_manageable_organizations(
     user_context = Depends(get_current_user_context),
 ):
     """List organizations that the user can manage (own/admin role) or all organizations for superadmins."""
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
 
     if current_user.is_superadmin:
         # Superadmins can manage all organizations
@@ -150,7 +153,8 @@ def list_organizations_admin(
     user_context = Depends(get_current_user_context),
 ):
     """List all organizations for administration purposes (superadmin only)."""
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
 
     # Only superadmins can access this endpoint
     if not current_user.is_superadmin:
@@ -177,7 +181,8 @@ def get_organization(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -195,7 +200,8 @@ def update_organization(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -250,7 +256,8 @@ def delete_organization(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")

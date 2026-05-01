@@ -46,7 +46,9 @@ def bulk_generate_keywords_endpoint(
     if not memory_block_ids:
         raise HTTPException(status_code=400, detail="No memory block IDs provided")
 
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if user is None or current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     ensure_pat_allows_write(current_user)
@@ -118,7 +120,9 @@ def bulk_apply_keywords_endpoint(
     if not applications:
         raise HTTPException(status_code=400, detail="No keyword applications provided")
 
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if user is None or current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     ensure_pat_allows_write(current_user)
@@ -205,7 +209,9 @@ async def bulk_compact_memory_blocks_endpoint(
     Bulk compact multiple memory blocks using AI compression.
     This endpoint processes multiple memory blocks for compaction with optional concurrency.
     """
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if user is None or current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     ensure_pat_allows_write(current_user)

@@ -26,7 +26,8 @@ def list_audit_logs(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
 
     if organization_id:
         if not can_manage_org(organization_id, current_user):

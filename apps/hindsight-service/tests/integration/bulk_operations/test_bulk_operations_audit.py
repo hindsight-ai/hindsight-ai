@@ -2,7 +2,7 @@ import uuid
 from fastapi.testclient import TestClient
 from unittest.mock import Mock
 from core.api.main import app
-from core.api.deps import get_current_user_context, CurrentUserContext
+from core.api.deps import get_current_user_context, CurrentUserContext, UserContext
 from core.db import models, crud
 from tests.conftest import _current_session
 
@@ -47,7 +47,7 @@ def test_bulk_move_audit_start():
         x_forwarded_user=None,
         x_forwarded_email=None,
     ):
-        return fake_user, fake_user_context
+        return UserContext(user=fake_user, current=fake_user_context)
     
     original_override = app.dependency_overrides.get(get_current_user_context)
     app.dependency_overrides[get_current_user_context] = mock_get_current_user_context

@@ -33,7 +33,8 @@ def get_notifications(
     - **unread_only**: If true, only return unread notifications
     - **limit**: Maximum number of notifications to return (default 50)
     """
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     
     service = NotificationService(db)
     notifications = service.get_user_notifications(
@@ -68,7 +69,8 @@ def mark_notification_read(
     """
     Mark a specific notification as read.
     """
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     
     service = NotificationService(db)
     success = service.mark_notification_read(notification_id, user.id)
@@ -88,7 +90,8 @@ def get_notification_stats(
     """
     Get notification statistics for the current user.
     """
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     
     service = NotificationService(db)
     unread_count = service.get_unread_count(user.id)
@@ -121,7 +124,8 @@ def get_notification_preferences(
     """
     Get notification preferences for the current user.
     """
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     
     service = NotificationService(db)
     preferences = service.get_user_preferences(user.id)
@@ -147,7 +151,8 @@ def update_notification_preference(
     - org_invitation_accepted
     - org_invitation_declined
     """
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     
     # Validate event type
     valid_event_types = {
@@ -201,7 +206,8 @@ def create_test_notification(
     Create a test notification for the current user.
     This endpoint is for development/testing purposes.
     """
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     
     service = NotificationService(db)
     notification = service.create_notification(
@@ -227,7 +233,8 @@ def cleanup_expired_notifications(
     Clean up expired notifications.
     This endpoint is for admin/maintenance purposes.
     """
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     
     # Basic admin check - in a real app you'd want proper role-based access
     if not user.is_superadmin:

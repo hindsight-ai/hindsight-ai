@@ -29,7 +29,8 @@ def list_members(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user) and not current_user.is_superadmin and str(org_id) not in current_user.memberships_by_org:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -59,7 +60,8 @@ def add_member(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -140,7 +142,8 @@ def update_member(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -214,7 +217,8 @@ def remove_member(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     deleted = db.query(models.OrganizationMembership).filter(

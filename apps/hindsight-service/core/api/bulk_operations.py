@@ -30,7 +30,8 @@ def get_organization_inventory(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -53,7 +54,8 @@ async def bulk_move(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
 
     # Validation first (tests expect 422 over 403 when payload malformed)
     dry_run = payload.get("dry_run", True)
@@ -273,7 +275,8 @@ async def bulk_delete(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     dry_run = payload.get("dry_run", True)
     # Both dry-run (planning) and execution require source-org membership;
     # execution additionally requires manage rights. Planning that bypasses
@@ -342,7 +345,8 @@ def get_operation_status(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -371,7 +375,8 @@ def get_operations_status(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -399,7 +404,8 @@ def cancel_operation(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden")
 

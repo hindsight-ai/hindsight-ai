@@ -46,7 +46,8 @@ def trigger_consolidation_endpoint(
     import os
     from core.workers.consolidation_worker import run_consolidation_analysis
 
-    user, current_user = user_ctx
+    user = user_ctx.user
+    current_user = user_ctx.current
     # Reject org-scoped PATs: global consolidation should not fan out under
     # an org-restricted token. (failure-mode-analyst F-trigger)
     if current_user and current_user.pat is not None and current_user.pat.organization_id is not None:
@@ -117,7 +118,9 @@ def get_consolidation_suggestions_endpoint(
         f"Fetching consolidation suggestions with filters: status={status}, group_id={group_id}"
     )
 
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     # Enforce PAT read permissions based on requested scope
     ensure_pat_allows_read(current_user, getattr(scope_ctx, 'organization_id', None))
 
@@ -177,7 +180,9 @@ def get_consolidation_suggestion_endpoint(
     scoped = Depends(get_scoped_user_and_context),
 ):
     """Retrieve a specific consolidation suggestion by ID."""
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not suggestion:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
@@ -198,7 +203,9 @@ def validate_consolidation_suggestion_endpoint(
 ):
     """Validate a consolidation suggestion and apply the consolidation."""
     logger.info(f"Validating consolidation suggestion {suggestion_id}")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not suggestion:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
@@ -288,7 +295,9 @@ def reject_consolidation_suggestion_endpoint(
 ):
     """Reject a consolidation suggestion, marking it as rejected."""
     logger.info(f"Rejecting consolidation suggestion {suggestion_id}")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     suggestion = crud.get_consolidation_suggestion(db, suggestion_id=suggestion_id)
     if not suggestion:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
@@ -362,7 +371,9 @@ def delete_consolidation_suggestion_endpoint(
     (uses the existing _user_can_write_suggestion helper). PAT scope is
     enforced via ensure_pat_allows_write on each owning org.
     """
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if user is None or current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 

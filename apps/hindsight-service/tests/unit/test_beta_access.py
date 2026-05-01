@@ -1219,7 +1219,9 @@ class TestAuthDepsBetaAccess:
 
         from core.api import deps
 
-        user, ctx = deps.get_current_user_context(db=db_session, x_auth_request_user='Dev', x_auth_request_email='dev@localhost')
+        result = deps.get_current_user_context(db=db_session, x_auth_request_user='Dev', x_auth_request_email='dev@localhost')
+        ctx = result.current
+        user = result.user
         assert ctx.beta_access_status == 'accepted'
         assert user.beta_access_status == 'accepted'
 
@@ -1237,7 +1239,9 @@ class TestAuthDepsBetaAccess:
 
         from core.api import deps
 
-        user_obj, ctx = deps.get_current_user_context(db=db_session, x_auth_request_user='Beta Sync', x_auth_request_email=email)
+        result = deps.get_current_user_context(db=db_session, x_auth_request_user='Beta Sync', x_auth_request_email=email)
+        user_obj = result.user
+        ctx = result.current
         assert ctx.beta_access_status == 'accepted'
         assert user_obj.beta_access_status == 'accepted'
 
@@ -1266,7 +1270,9 @@ class TestAuthDepsBetaAccess:
 
         from core.api import deps
 
-        user_obj, ctx = deps.get_current_user_context(db=db_session, x_auth_request_user='Stale', x_auth_request_email=email)
+        result = deps.get_current_user_context(db=db_session, x_auth_request_user='Stale', x_auth_request_email=email)
+        user_obj = result.user
+        ctx = result.current
         assert ctx.beta_access_status == 'not_requested'
         assert user_obj.beta_access_status == 'not_requested'
 

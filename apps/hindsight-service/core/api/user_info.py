@@ -79,7 +79,7 @@ def get_user_info(
     # If a PAT is provided, authenticate via PAT first
     if authorization or x_api_key:
         try:
-            user, current_user = get_current_user_context_or_pat(
+            _uctx = get_current_user_context_or_pat(
                 db=db,
                 authorization=authorization,
                 x_api_key=x_api_key,
@@ -88,6 +88,8 @@ def get_user_info(
                 x_forwarded_user=x_forwarded_user,
                 x_forwarded_email=x_forwarded_email,
             )
+            user = _uctx.user
+            current_user = _uctx.current
             memberships = current_user.memberships
             return {
                 "authenticated": True,

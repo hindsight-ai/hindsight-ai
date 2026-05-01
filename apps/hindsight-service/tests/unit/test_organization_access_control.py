@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from unittest.mock import patch
 
 from core.api.main import app
+from core.api.deps import UserContext, CurrentUserContext
 from core.db import models
 
 
@@ -190,15 +191,18 @@ class TestOrganizationEndpoints:
                     'display_name': 'Development User'
                 })()
                 
-                mock_auth.return_value = (
-                    mock_user,
-                    {
-                        "id": mock_user.id,
-                        "email": mock_user.email,
-                        "is_superadmin": True,
-                        "memberships": [],
-                        "memberships_by_org": {}
-                    }
+                mock_auth.return_value = UserContext(
+                    user=mock_user,
+                    current=CurrentUserContext(
+                        id=mock_user.id,
+                        email=mock_user.email,
+                        display_name=mock_user.display_name,
+                        is_superadmin=True,
+                        is_beta_access_admin=False,
+                        memberships=[],
+                        memberships_by_org={},
+                        beta_access_status=None,
+                    ),
                 )
                 
                 response = client.post("/organizations/", json={

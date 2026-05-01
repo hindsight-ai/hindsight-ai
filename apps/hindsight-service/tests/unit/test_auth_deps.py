@@ -47,7 +47,7 @@ def test_get_current_user_context_dev_mode(monkeypatch):
 
     @app.get("/me")
     def me(user_ctx = Depends(get_current_user_context)):
-        user, current = user_ctx
+        user, current = user_ctx.user, user_ctx.current
         return {"email": user.email, "is_superadmin": bool(getattr(user, "is_superadmin", False))}
 
     client = TestClient(app)
@@ -69,7 +69,7 @@ def test_admin_emails_elevation(monkeypatch):
 
     @app.get("/me")
     def me(user_ctx = Depends(get_current_user_context)):
-        user, current = user_ctx
+        user, current = user_ctx.user, user_ctx.current
         return {"email": user.email, "is_superadmin": bool(getattr(user, "is_superadmin", False))}
 
     client = TestClient(app)
@@ -91,7 +91,7 @@ def test_admin_emails_do_not_elevate_others(monkeypatch):
 
     @app.get("/me")
     def me(user_ctx = Depends(get_current_user_context)):
-        user, current = user_ctx
+        user, current = user_ctx.user, user_ctx.current
         return {"email": user.email, "is_superadmin": bool(getattr(user, "is_superadmin", False))}
 
     client = TestClient(app)

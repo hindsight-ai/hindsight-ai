@@ -105,7 +105,8 @@ def review_beta_access_request(
     db: Session = Depends(get_db),
     user_context = Depends(require_beta_access_admin),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     service = BetaAccessService(db)
     result = service.review_beta_access_request(request_id, decision, user.email, reason, user.id)
     if not result['success']:
@@ -133,7 +134,8 @@ def get_beta_access_status(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     service = BetaAccessService(db)
     status = service.get_beta_access_status(user.id)
     # Include latest request (if any) for transparency
@@ -152,7 +154,8 @@ def get_pending_requests(
     db: Session = Depends(get_db),
     user_context = Depends(require_beta_access_admin),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     service = BetaAccessService(db)
     requests = service.get_pending_requests(skip, limit)
     return {"requests": requests}
@@ -167,7 +170,8 @@ def get_stuck_pending_requests(
     """
     List pending requests older than the provided threshold (days).
     """
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     from datetime import datetime, timezone, timedelta
     threshold = datetime.now(timezone.utc) - timedelta(days=max(1, older_than_days))
     from core.db import models
@@ -188,7 +192,8 @@ def resend_review_token(
     """
     Re-send the review token email to admins for a specific pending request.
     """
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     request = beta_repo.get_beta_access_request(db, request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
@@ -208,7 +213,8 @@ def list_beta_access_users(
     db: Session = Depends(get_db),
     user_context = Depends(require_beta_access_admin),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     users = db.query(models.User).order_by(models.User.email).all()
     requests = db.query(models.BetaAccessRequest).all()
 
@@ -232,7 +238,8 @@ def update_beta_access_user_status(
     db: Session = Depends(get_db),
     user_context = Depends(require_beta_access_admin),
 ):
-    admin_user, current_user = user_context
+    admin_user = user_context.user
+    current_user = user_context.current
     desired = (payload.status or "").strip().lower()
     allowed_statuses = {"accepted", "denied", "revoked", "not_requested"}
     if desired not in allowed_statuses:

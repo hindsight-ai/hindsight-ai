@@ -33,7 +33,8 @@ def create_invitation(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -114,7 +115,8 @@ def decline_invitation(
     user_context = Depends(get_current_user_context),
     token: str | None = None,
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
 
     db_invitation = crud.get_organization_invitation(db, invitation_id=invitation_id)
     if not db_invitation or db_invitation.organization_id != org_id:
@@ -168,7 +170,8 @@ def list_invitations(
     user_context = Depends(get_current_user_context),
     status: Optional[str] = 'pending',
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -183,7 +186,8 @@ def resend_invitation(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -251,7 +255,8 @@ def revoke_invitation(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -281,7 +286,8 @@ def accept_invitation(
     user_context = Depends(get_current_user_context),
     token: str | None = None,
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
 
     db_invitation = crud.get_organization_invitation(db, invitation_id=invitation_id)
     if not db_invitation or db_invitation.organization_id != org_id:

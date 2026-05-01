@@ -37,8 +37,9 @@ def create_agent_endpoint(
     user_context = Depends(get_current_user_context_or_pat),
     scope_ctx = Depends(get_scoped_user_and_context),
 ):
-    u, current_user = user_context
-    _user2, _current2, sc = scope_ctx
+    u = user_context.user
+    current_user = user_context.current
+    sc = scope_ctx.scope
     # Derive effective scope from context (headers/query), ignore conflicting body hints
     scope = sc.scope or SCOPE_PERSONAL
     owner_user_id = u.id if scope == SCOPE_PERSONAL else None
@@ -100,7 +101,9 @@ def get_all_agents_endpoint(
     db: Session = Depends(get_db),
     scoped = Depends(get_scoped_user_and_context),
 ):
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     # Enforce PAT read scope/org (no-op if no PAT)
     ensure_pat_allows_read(current_user, scope_ctx.organization_id)
 
@@ -130,7 +133,7 @@ def get_agent_endpoint(
     current_user = None
     if authorization or x_api_key:
         try:
-            _u, current_user = get_current_user_context_or_pat(
+            _uctx = get_current_user_context_or_pat(
                 db=db,
                 authorization=authorization,
                 x_api_key=x_api_key,
@@ -139,6 +142,7 @@ def get_agent_endpoint(
                 x_forwarded_user=x_forwarded_user,
                 x_forwarded_email=x_forwarded_email,
             )
+            current_user = _uctx.current
         except HTTPException:
             raise
         # Enforce PAT read scope and optional org restriction
@@ -185,7 +189,7 @@ def search_agents_endpoint(
     current_user = None
     if authorization or x_api_key:
         try:
-            _u, current_user = get_current_user_context_or_pat(
+            _uctx = get_current_user_context_or_pat(
                 db=db,
                 authorization=authorization,
                 x_api_key=x_api_key,
@@ -194,6 +198,7 @@ def search_agents_endpoint(
                 x_forwarded_user=x_forwarded_user,
                 x_forwarded_email=x_forwarded_email,
             )
+            current_user = _uctx.current
         except HTTPException:
             raise
     else:
@@ -245,7 +250,8 @@ def delete_agent_endpoint(
     agent = crud.get_agent(db, agent_id=agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(agent, 'organization_id', None))
     if not can_write(agent, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -281,7 +287,8 @@ def update_agent_endpoint(
     agent = crud.get_agent(db, agent_id=agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(agent, 'organization_id', None))
     if not can_write(agent, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -308,7 +315,8 @@ def change_agent_scope(
     agent = crud.get_agent(db, agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     target_scope = (payload.get("visibility_scope") or '').lower()
     if target_scope not in ALL_SCOPES:
         raise HTTPException(status_code=422, detail="Invalid target visibility_scope")

@@ -170,7 +170,9 @@ def get_conversations_count_endpoint(
 ):
     """Get the count of unique conversations from memory blocks."""
     try:
-        user, current_user, scope_ctx = scoped
+        user = scoped.user
+        current_user = scoped.current
+        scope_ctx = scoped.scope
         ensure_pat_allows_read(current_user, scope_ctx.organization_id)
         count = get_unique_conversation_count(db, current_user=current_user, scope_ctx=scope_ctx)
         return {"count": count or 0}

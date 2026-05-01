@@ -48,7 +48,9 @@ def search_memory_blocks_fulltext_endpoint(
     if not query or query.strip() == "":
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if current_user is not None and organization_id:
         ensure_pat_allows_read(current_user, organization_id)
 
@@ -93,7 +95,9 @@ def search_memory_blocks_semantic_endpoint(
     if not query or query.strip() == "":
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if current_user is not None and organization_id:
         ensure_pat_allows_read(current_user, organization_id)
 
@@ -152,7 +156,9 @@ def search_memory_blocks_hybrid_endpoint(
     if abs(fulltext_weight + semantic_weight - 1.0) > 0.001:
         raise HTTPException(status_code=400, detail="Fulltext and semantic weights must sum to 1.0")
 
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if current_user is not None and organization_id:
         ensure_pat_allows_read(current_user, organization_id)
 

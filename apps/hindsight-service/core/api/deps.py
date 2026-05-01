@@ -5,6 +5,7 @@ Provides dependency-resolved user context and scope information for routes.
 """
 import uuid
 import logging
+import dataclasses as _dc
 from dataclasses import dataclass, field
 from typing import Optional, Tuple, Dict, Any, List
 from uuid import UUID
@@ -88,6 +89,21 @@ from core.db.schemas.tokens import TokenCreateRequest
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass(frozen=True)
+class UserContext:
+    """Result of get_current_user_context*() — pairs the ORM user row with the typed CurrentUserContext."""
+    user: models.User
+    current: CurrentUserContext
+
+
+@dataclass(frozen=True)
+class RequestContext:
+    """Result of get_scoped_user_and_context() — adds ScopeContext on top of UserContext."""
+    user: models.User
+    current: CurrentUserContext
+    scope: ScopeContext
+
 _DEV_MODE_PAT_CACHE: Optional[str] = None
 
 
@@ -138,8 +154,7 @@ def _ensure_dev_mode_defaults(db: Session, user: models.User) -> Optional[str]:
     return full_token
 
 # Contract:
-# Returns (sqlalchemy User model, current_user_context_dict)
-# Raises 401 if identity cannot be resolved.
+# Returns UserContext(user, current) — raises 401 if identity cannot be resolved.
 
 def get_current_user_context(
     db: Session = Depends(get_db),
@@ -147,7 +162,7 @@ def get_current_user_context(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
-) -> Tuple[Any, Dict[str, Any]]:
+) -> "UserContext":
     # Check for dev mode first
     try:
         is_dev_mode = dev_mode_active()
@@ -173,7 +188,7 @@ def get_current_user_context(
             pat=None,
             dev_mode_pat=dev_pat_token,
         )
-        return user, current_user
+        return UserContext(user=user, current=current_user)
 
     # Normal mode: resolve from OAuth2 proxy headers
     name, email = resolve_identity_from_headers(
@@ -232,7 +247,7 @@ def get_current_user_context(
         pat=None,
         dev_mode_pat=None,
     )
-    return user, current_user
+    return UserContext(user=user, current=current_user)
 
 # Internal alias used by some modules.
 _require_current_user = get_current_user_context
@@ -245,14 +260,14 @@ def get_current_user_or_oauth(
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, _ctx = get_current_user_context(
+    ctx = get_current_user_context(
         db=db,
         x_auth_request_user=x_auth_request_user,
         x_auth_request_email=x_auth_request_email,
         x_forwarded_user=x_forwarded_user,
         x_forwarded_email=x_forwarded_email,
     )
-    return user
+    return ctx.user
 
 
 def get_current_user_context_or_pat(
@@ -263,7 +278,7 @@ def get_current_user_context_or_pat(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
-) -> Tuple[Any, Dict[str, Any]]:
+) -> "UserContext":
     """Return current user context, accepting either oauth2-proxy headers or PAT.
 
     If a PAT is provided via Authorization: Bearer or X-API-Key, validate and
@@ -326,7 +341,7 @@ def get_current_user_context_or_pat(
             token_repo.mark_used_now(db, pat=pat)
         except Exception:
             pass
-        return user, current_user
+        return UserContext(user=user, current=current_user)
 
     # Fallback to oauth2-proxy headers (including DEV_MODE path inside)
     return get_current_user_context(
@@ -339,12 +354,13 @@ def get_current_user_context_or_pat(
 
 
 def require_beta_access_admin(
-    user_context = Depends(get_current_user_context),
+    user_context: "UserContext" = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not (current_user.is_beta_access_admin or current_user.is_superadmin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Beta access admin privileges required.")
-    return user, current_user
+    return UserContext(user=user, current=current_user)
 
 
 def ensure_pat_allows_write(current_user: Optional[CurrentUserContext], target_org_id=None):
@@ -471,7 +487,7 @@ def get_scope_context(
     # If PAT provided, derive from PAT (authoritative)
     if authorization or x_api_key:
         try:
-            user, current_user = get_current_user_context_or_pat(
+            _uctx = get_current_user_context_or_pat(
                 db=db,
                 authorization=authorization,
                 x_api_key=x_api_key,
@@ -484,6 +500,7 @@ def get_scope_context(
             # invalid PAT → bubble as unauthenticated scope (public)
             return ScopeContext(scope="public", organization_id=None)
 
+        current_user = _uctx.current
         pat = current_user.pat
         pat_org = pat.organization_id if pat else None
         if pat_org:
@@ -579,8 +596,8 @@ def get_current_user_context_or_guest(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_user: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
-):
-    """Return current user context if authenticated via PAT or oauth2 headers; otherwise (guest) return (None, None).
+) -> Optional["UserContext"]:
+    """Return UserContext if authenticated via PAT or oauth2 headers; otherwise (guest) return None.
 
     This is a permissive variant used for read endpoints that allow guest access.
     """
@@ -599,24 +616,25 @@ def get_current_user_context_or_guest(
         has_pat = bool(authorization or x_api_key)
         if has_pat:
             raise
-        return None, None
+        return None
 
 
 def get_scoped_user_and_context(
     scope_ctx: ScopeContext = Depends(get_scope_context),
-    user_ctx = Depends(get_current_user_context_or_guest),
+    user_ctx: Optional["UserContext"] = Depends(get_current_user_context_or_guest),
     # Also accept the raw query hint to enforce PAT/org mismatch when requested explicitly
     organization_id: Optional[str] = Query(default=None),
-):
-    """Return a tuple (user, current_user, scope_ctx) for endpoints.
+) -> "RequestContext":
+    """Return a RequestContext(user, current, scope) for endpoints.
 
     Enforces PAT-org mismatch when a conflicting organization_id query param is provided.
     Narrows current_user.memberships/memberships_by_org to the PAT's org when an
     org-scoped PAT is present, so downstream membership-based filters cannot
     accidentally leak data from other orgs the user is also a member of.
     """
-    import dataclasses
-    user, current_user = user_ctx
+    user = user_ctx.user if user_ctx is not None else None
+    current_user = user_ctx.current if user_ctx is not None else None
+
     # If PAT is present and request hinted a different org, raise 403
     if current_user and current_user.pat and current_user.pat.organization_id and organization_id:
         pat_org = str(current_user.pat.organization_id)  # store may be UUID or str
@@ -642,7 +660,7 @@ def get_scoped_user_and_context(
         pat_org_str = str(current_user.pat.organization_id)
         m = current_user.memberships_by_org.get(pat_org_str)
         if m:
-            current_user = dataclasses.replace(
+            current_user = _dc.replace(
                 current_user,
                 memberships=[m],
                 memberships_by_org={pat_org_str: m},
@@ -651,10 +669,10 @@ def get_scoped_user_and_context(
             # PAT references an org the user no longer belongs to: treat as
             # zero memberships (the PAT-token is still valid but the user
             # has been removed from the org).
-            current_user = dataclasses.replace(
+            current_user = _dc.replace(
                 current_user,
                 memberships=[],
                 memberships_by_org={},
             )
 
-    return user, current_user, scope_ctx
+    return RequestContext(user=user, current=current_user, scope=scope_ctx)

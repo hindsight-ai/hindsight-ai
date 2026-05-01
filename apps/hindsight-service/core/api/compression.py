@@ -36,7 +36,9 @@ def compress_memory_block_endpoint(
     if request is None:
         request = {}
 
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if user is None or current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     ensure_pat_allows_write(current_user)
@@ -95,7 +97,9 @@ def apply_memory_compression_endpoint(
     if not compressed_content:
         raise HTTPException(status_code=400, detail="Compressed content is required")
 
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if user is None or current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     ensure_pat_allows_write(current_user)

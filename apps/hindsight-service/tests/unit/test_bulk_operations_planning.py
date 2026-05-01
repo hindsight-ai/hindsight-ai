@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from core.api.main import app
 from core.db.database import SessionLocal, engine
 from core.db import models, crud, schemas
-from core.api.deps import CurrentUserContext
+from core.api.deps import CurrentUserContext, UserContext
 
 @pytest.fixture(scope="module")
 def db():
@@ -107,7 +107,7 @@ def test_bulk_move_conflict_detection(client, org_with_user, db):
         x_forwarded_user=None,
         x_forwarded_email=None,
     ):
-        return fake_user, fake_current_user
+        return UserContext(user=fake_user, current=fake_current_user)
     
     # Ensure override applies to the exact dependency object used by the router
     from core.api import bulk_operations as bo_mod
@@ -195,7 +195,7 @@ def test_bulk_delete_dry_run_counts(client, org_with_user, db):
         x_forwarded_user=None,
         x_forwarded_email=None,
     ):
-        return fake_user, fake_current_user
+        return UserContext(user=fake_user, current=fake_current_user)
     
     from core.api import bulk_operations as bo_mod
     print("[TEST-OVERRIDE ids] deps.get_current_user_context=", id(get_current_user_context))

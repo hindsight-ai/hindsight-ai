@@ -68,8 +68,9 @@ def create_memory_block_endpoint(
     agent = crud.get_agent(db, agent_id=memory_block.agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    u, current_user = user_context
-    _user2, _current2, sc = scope_ctx
+    u = user_context.user
+    current_user = user_context.current
+    sc = scope_ctx.scope
     memberships_by_org = current_user.memberships_by_org
     scope = sc.scope or SCOPE_PERSONAL
     org_id = str(sc.organization_id) if sc.organization_id and scope == SCOPE_ORGANIZATION else None
@@ -107,7 +108,9 @@ def get_all_memory_blocks_endpoint(
     db: Session = Depends(get_db),
     scoped = Depends(get_scoped_user_and_context),
 ):
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, scope_ctx.organization_id)
 
     # Convert empty string parameters to None to handle frontend behavior
@@ -163,7 +166,9 @@ def get_memory_block_keywords_endpoint(
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_read(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -189,7 +194,8 @@ def associate_keyword_with_memory_block_endpoint(
     ).first()
     if existing_association:
         raise HTTPException(status_code=409, detail="Association already exists")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     if not can_write(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     if db_memory_block.visibility_scope != db_keyword.visibility_scope:
@@ -210,7 +216,8 @@ def disassociate_keyword_from_memory_block_endpoint(
     db_keyword = crud.get_keyword(db, keyword_id=keyword_id)
     if not db_keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     # If PAT present, enforce write scope and optional org restriction
     ensure_pat_allows_write(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_write(db_memory_block, current_user):
@@ -258,7 +265,9 @@ def get_archived_memory_blocks_endpoint(
     agent_uuid = parse_optional_uuid(agent_id)
     conversation_uuid = parse_optional_uuid(conversation_id)
 
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, scope_ctx.organization_id)
 
     # Get total count of archived items
@@ -310,7 +319,9 @@ def get_memory_block_endpoint(
     db_memory_block = crud.get_memory_block(db, memory_id=memory_id)
     if not db_memory_block:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     # Enforce read scope and org restriction, if PAT present
     ensure_pat_allows_read(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_read(db_memory_block, current_user):
@@ -327,7 +338,8 @@ def update_memory_block_endpoint(
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     # Enforce PAT restrictions (if PAT present and resource is org-scoped)
     ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
@@ -360,7 +372,8 @@ def archive_memory_block_endpoint(
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -394,7 +407,8 @@ def soft_delete_memory_block_endpoint(
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     # PAT restriction enforcement
     ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
@@ -428,7 +442,8 @@ def hard_delete_memory_block_endpoint(
     current = crud.get_memory_block(db, memory_id)
     if not current:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(current, 'organization_id', None))
     if not can_write(current, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -465,7 +480,8 @@ def report_memory_feedback_endpoint(
         raise HTTPException(status_code=404, detail="Memory block not found")
     if feedback.memory_id != memory_id:
         raise HTTPException(status_code=400, detail="Memory ID mismatch")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_write(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -512,7 +528,9 @@ def search_memory_blocks_endpoint(
         allowed = ", ".join(sorted(ALLOWED_SEARCH_STRATEGIES))
         raise HTTPException(status_code=422, detail=f"Invalid strategy '{selected_strategy}'. Allowed values: [{allowed}]")
 
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if current_user is not None and organization_id:
         ensure_pat_allows_read(current_user, organization_id)
 
@@ -577,7 +595,8 @@ def change_memory_block_scope(
     mb = crud.get_memory_block(db, memory_id)
     if not mb:
         raise HTTPException(status_code=404, detail="Memory block not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
 
     target_scope = (payload.get("visibility_scope") or '').lower()
     if target_scope not in ALL_SCOPES:
@@ -704,7 +723,9 @@ def suggest_keywords_for_memory_block_endpoint(
     """
     from core.services.keyword_extraction_service import extract_keywords
 
-    user, current_user, _scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    _scope_ctx = scoped.scope
     if user is None or current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
