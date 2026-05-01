@@ -21,7 +21,13 @@ import type { Page } from '@playwright/test';
  * clear cookies + storage, and hard-reload to reset the frontend.
  */
 
-const PROBE_PAGE = '/'; // navigated to after each identity swap to drain React Query / localStorage
+// The dashboard's react-router does NOT have a route at '/'. Navigating
+// there produces 'No routes matched location "/"' console errors and renders
+// a fallback empty page that LOOKS like the dashboard chrome but never mounts
+// MemoryBlocksPage / KeywordManager / etc. — caused journeys 2/3a/4/8/12/14
+// to all fail with "data not visible in list" until this was discovered via
+// CI trace inspection. Use the actual home route.
+const PROBE_PAGE = '/dashboard';
 
 /**
  * Reset all auth-related state on the browser context:
