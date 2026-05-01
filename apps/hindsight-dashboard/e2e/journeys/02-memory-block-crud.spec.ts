@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { asUser } from '../helpers/auth';
 import { autoAcceptConfirm, expectConfirm } from '../helpers/dialogs';
+import { provisionUser } from '../helpers/provision';
 import { runId, temail, tname } from '../helpers/runId';
 
 /**
@@ -52,8 +53,9 @@ test.describe('Journey 2 — Memory block CRUD @smoke', () => {
     expect(blockResp.ok(), `block seed failed: ${await blockResp.text()}`).toBe(true);
     const block = await blockResp.json();
 
-    // ── 2. Auth and navigate ──────────────────────────────────────────────────
+    // ── 2. Provision beta-access, auth, and navigate ──────────────────────────
     autoAcceptConfirm(page);
+    await provisionUser(page, email, 'CRUD User');
     await asUser(page, email, 'CRUD User');
     await page.goto('/memory-blocks');
 
