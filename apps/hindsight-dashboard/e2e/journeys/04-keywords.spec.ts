@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { asUser } from '../helpers/auth';
-import { autoAcceptConfirm, expectConfirm } from '../helpers/dialogs';
+import { expectConfirm } from '../helpers/dialogs';
 import { provisionUser } from '../helpers/provision';
 import { temail, tname } from '../helpers/runId';
 
@@ -27,8 +27,10 @@ import { temail, tname } from '../helpers/runId';
 
 test.describe('Journey 4 — Keyword CRUD @smoke', () => {
   test('create, edit, then delete a keyword via the UI', async ({ page }) => {
-    autoAcceptConfirm(page);
-
+    // Note: do NOT register autoAcceptConfirm — `expectConfirm` registers its
+    // own one-shot dialog listener for the delete step, and Playwright errors
+    // with "dialog already handled" if both fire on the same event (same
+    // failure mode that bit journey 2 — see helpers/dialogs.ts comments).
     const email = temail('keywords');
     await provisionUser(page, email);
     await asUser(page, email);
@@ -37,60 +39,55 @@ test.describe('Journey 4 — Keyword CRUD @smoke', () => {
 
     // ── 1. Create ─────────────────────────────────────────────────────────────
     // The "Add Keyword" button (KeywordManager.tsx:269) opens an inline modal
-    // with `placeholder="Enter keyword..."`.
+    // with `placeholder="Enter keyword..."`. The modal contains a SECOND
+    // "Add Keyword" button (KeywordManager.tsx:494) which is the actual submit
+    // — pressing Enter inside the input does NOT submit (no form/keydown
+    // handler). Scope the submit click to the modal via its "Add New Keyword"
+    // heading to disambiguate from the page-header trigger button.
     await page.getByRole('button', { name: /^add keyword$/i }).first().click();
 
+    const modal = page.locator('div').filter({
+      has: page.getByRole('heading', { name: /add new keyword/i }),
+    }).first();
+    await expect(modal).toBeVisible({ timeout: 5_000 });
+
     const keywordText = tname('test-keyword');
-    await page.getByPlaceholder(/enter keyword/i).fill(keywordText);
+    await modal.getByPlaceholder(/enter keyword/i).fill(keywordText);
+    await modal.getByRole('button', { name: /^add keyword$/i }).click();
 
-    // The submit button inside the modal is also "Add Keyword".
-    // The first one was already clicked; locate the second (modal-scoped) variant.
-    // Fall back to pressing Enter inside the input.
-    await page.getByPlaceholder(/enter keyword/i).press('Enter');
-
-    // Verify the keyword is rendered in the list.
+    // Verify the keyword is rendered in the list (modal closes on success).
     await expect(page.getByText(keywordText, { exact: true })).toBeVisible({ timeout: 10_000 });
 
     // ── 2. Edit ───────────────────────────────────────────────────────────────
-    // KeywordManager has a per-row edit button (KeywordManager.tsx:391-412).
-    // Click on the row containing the keyword to open inline edit.
-    const row = page.locator('tr,li,div').filter({ hasText: keywordText }).first();
-    // Try multiple edit affordances: title="Edit", aria-label="Edit", or the
-    // pencil icon button. The component uses an `Edit` button per row.
-    const editBtn = row.getByRole('button', { name: /^edit$/i }).first();
-    if (await editBtn.count()) {
-      await editBtn.click();
-    } else {
-      // Fallback: click the row to enter edit mode (mobile path).
-      await row.click();
-    }
+    // KeywordManager has per-card SVG-only buttons — title attributes:
+    // "Edit" (the pencil button) / "Save" (the checkmark) / "Delete" (trash).
+    // `getByTitle('Edit')` would also match the keyword `<span title="Click
+    // to edit">`, so use `button[title="..."]` to disambiguate.
+    //
+    // The keyword card matches `div:has(span:has-text(keyword))` BEFORE edit,
+    // but during edit the span is replaced by an input, breaking that filter.
+    // Once edit mode is on, locate the input via `getByDisplayValue` (the
+    // input's value still equals the original text), and the Save button is
+    // unique on the page (no other `button[title="Save"]` while editing one
+    // card).
+    const card = page.locator('div').filter({ hasText: new RegExp(`^${keywordText}$`) }).first();
+    await card.locator('button[title="Edit"]').click();
 
-    // After entering edit mode, an input/textarea appears with the keyword.
-    // Find the editable input within the row context.
     const editedText = `${keywordText}-edited`;
-    const inputs = row.locator('input[type="text"], input:not([type]), textarea');
-    if (await inputs.count()) {
-      await inputs.first().fill(editedText);
-    } else {
-      // Fallback: any text input on the page after edit click
-      await page.locator('input[type="text"], input:not([type])').first().fill(editedText);
-    }
-
-    // Save — typically a "Save" button or pressing Enter
-    const saveBtn = page.getByRole('button', { name: /^save$/i }).first();
-    if (await saveBtn.count()) {
-      await saveBtn.click();
-    } else {
-      await page.keyboard.press('Enter');
-    }
+    // The edit input is autoFocused on mount (KeywordManager.tsx:374), so
+    // `:focus` reliably points at it. The Add modal is closed, the search
+    // box is not focused at this point.
+    const editInput = page.locator('input:focus');
+    await editInput.fill(editedText);
+    await page.locator('button[title="Save"]').first().click();
 
     await expect(page.getByText(editedText, { exact: true })).toBeVisible({ timeout: 10_000 });
 
     // ── 3. Delete (window.confirm) ────────────────────────────────────────────
     // KeywordManager.tsx:112 — `if (window.confirm('Are you sure you want to delete this keyword?'))`.
     // Use strict expectConfirm to defend against future regressions.
-    const editedRow = page.locator('tr,li,div').filter({ hasText: editedText }).first();
-    const deleteBtn = editedRow.getByRole('button', { name: /^delete$/i }).first();
+    const editedCard = page.locator('div').filter({ hasText: new RegExp(`^${editedText}$`) }).first();
+    const deleteBtn = editedCard.locator('button[title="Delete"]');
 
     const dialogPromise = expectConfirm(page, /Are you sure you want to delete this keyword/i);
     await deleteBtn.click();
