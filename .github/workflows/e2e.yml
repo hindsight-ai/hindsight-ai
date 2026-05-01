@@ -1,0 +1,196 @@
+name: E2E
+
+on:
+  pull_request:
+    branches: [main, staging]
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: hindsight_db
+  POSTGRES_HOST: localhost
+  POSTGRES_PORT: 5432
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hindsight_db
+  APP_BASE_URL: http://localhost:3000
+  DEV_MODE: 'false'
+  EMBEDDING_PROVIDER: mock
+  LLM_API_KEY: dummy
+  LLM_FEATURES_ENABLED: 'false'
+  FEATURE_CONSOLIDATION_ENABLED: 'true'
+  FEATURE_PRUNING_ENABLED: 'true'
+  FEATURE_ARCHIVED_ENABLED: 'true'
+  # Designated admin email for E2E tests — bootstraps beta-access approval.
+  # The `provisionUser` helper uses this identity to PATCH new test users to
+  # `beta_access_status='accepted'` so they aren't redirected to /beta-access/request.
+  BETA_ACCESS_ADMINS: e2e-admin@e2e.local
+
+jobs:
+  smoke:
+    # Per-PR: smoke tier only. Non-blocking initially (continue-on-error)
+    # until issue #105 promotes it to a required check after 1 week of green.
+    name: E2E smoke (@smoke)
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true # promote to required via #105 after 1 week green
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hindsight_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install backend deps
+        working-directory: apps/hindsight-service
+        run: uv sync --all-extras
+
+      - name: Run Alembic migrations
+        working-directory: apps/hindsight-service
+        run: uv run alembic upgrade head
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dashboard deps
+        working-directory: apps/hindsight-dashboard
+        run: bun install
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/hindsight-dashboard/bun.lock', 'apps/hindsight-dashboard/package.json') }}
+
+      - name: Install Playwright Chromium
+        working-directory: apps/hindsight-dashboard
+        run: bunx playwright install chromium --with-deps
+
+      - name: Run E2E smoke tests
+        working-directory: apps/hindsight-dashboard
+        run: bunx playwright test --grep @smoke
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-smoke
+          path: apps/hindsight-dashboard/playwright-report/
+          retention-days: 7
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-smoke
+          path: apps/hindsight-dashboard/test-results/
+          retention-days: 7
+
+  full:
+    # Push to staging: full tier (smoke + happy-path).
+    # This is the staging-promotion gate.
+    name: E2E full
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hindsight_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install backend deps
+        working-directory: apps/hindsight-service
+        run: uv sync --all-extras
+
+      - name: Run Alembic migrations
+        working-directory: apps/hindsight-service
+        run: uv run alembic upgrade head
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dashboard deps
+        working-directory: apps/hindsight-dashboard
+        run: bun install
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/hindsight-dashboard/bun.lock', 'apps/hindsight-dashboard/package.json') }}
+
+      - name: Install Playwright Chromium
+        working-directory: apps/hindsight-dashboard
+        run: bunx playwright install chromium --with-deps
+
+      - name: Run full E2E suite
+        working-directory: apps/hindsight-dashboard
+        run: bunx playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-full
+          path: apps/hindsight-dashboard/playwright-report/
+          retention-days: 14
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-full
+          path: apps/hindsight-dashboard/test-results/
+          retention-days: 14
