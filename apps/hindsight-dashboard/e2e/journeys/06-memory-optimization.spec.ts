@@ -26,7 +26,7 @@ test.describe('Journey 6 — Memory optimization @full', () => {
   test('seeded blocks produce heuristic suggestions; refresh analysis works', async ({ page, request }) => {
     const email = temail('opt-user');
     await provisionUser(page, email);
-    const headers = { 'x-auth-request-email': email, 'x-auth-request-user': email };
+    const headers = { 'x-auth-request-email': email, 'x-auth-request-user': email, 'x-active-scope': 'personal' };
 
     // ── 1. Seed: an agent + several memory blocks meeting the heuristic criteria ──
     const agentRes = await request.post(`${BACKEND}/agents/`, {
