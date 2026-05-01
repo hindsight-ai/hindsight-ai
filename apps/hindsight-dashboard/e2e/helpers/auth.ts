@@ -66,15 +66,41 @@ export async function asUser(page: Page, email: string, displayName?: string): P
     'x-auth-request-email': email,
     'x-auth-request-user': displayName || email,
   });
-  // Seed localStorage scope BEFORE navigation so the first data fetch has it.
-  await page.goto('about:blank');
-  await page.evaluate(() => {
-    try {
-      localStorage.setItem('selectedScope', 'personal');
-      localStorage.removeItem('selectedOrganizationId');
-    } catch {}
-  });
+
+  // Fetch user_id via /user-info so we can pre-populate the GetStarted-seen
+  // localStorage key (which uses user_id when authenticated). Without this,
+  // the onboarding modal blocks all journey UI interactions for fresh users.
+  let userId: string | undefined;
+  try {
+    const resp = await page.request.get('http://localhost:8000/user-info');
+    if (resp.ok()) {
+      const info = await resp.json();
+      userId = info.user_id;
+    }
+  } catch {
+    // best-effort
+  }
+
+  // Navigate to dashboard origin first — localStorage is per-origin, setting
+  // on about:blank wouldn't persist when navigating to localhost:3000.
   await page.goto(PROBE_PAGE);
+  await page.evaluate(
+    ({ uid, em }) => {
+      try {
+        localStorage.setItem('selectedScope', 'personal');
+        localStorage.removeItem('selectedOrganizationId');
+        const seenAt = new Date().toISOString();
+        // Cover all 3 fallback identifiers — dashboard's actual key uses
+        // user_id when authenticated, falls back to email then 'default'.
+        if (uid) localStorage.setItem(`hindsight.get-started.${uid}`, seenAt);
+        localStorage.setItem(`hindsight.get-started.${em}`, seenAt);
+        localStorage.setItem('hindsight.get-started.default', seenAt);
+      } catch {}
+    },
+    { uid: userId, em: email },
+  );
+  // Reload so the dashboard re-bootstraps reading the seeded localStorage.
+  await page.reload();
 }
 
 /**
