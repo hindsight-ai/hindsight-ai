@@ -1,4 +1,4 @@
-import { apiFetch, isGuest, apiUrl } from './http';
+import { apiFetch, isGuest } from './http';
 import { getScope } from './scopeProvider';
 
 export interface Agent {
