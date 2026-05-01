@@ -35,7 +35,14 @@ export const guardGuest = (action = 'Guest mode read-only'): void => {
 };
 
 // Tiny helper kept for symmetry: apiFetch already throws typed errors on non-ok responses.
-export const jsonOrThrow = async (resp: Response): Promise<unknown> => resp.json();
+// 204 No Content is a normal response for DELETE handlers (see deleteKeyword,
+// memberships removal, etc.) — calling resp.json() on an empty body throws
+// "Unexpected end of JSON input", which would surface as a misleading user
+// error toast on otherwise-successful operations.
+export const jsonOrThrow = async (resp: Response): Promise<unknown> => {
+  if (resp.status === 204) return null;
+  return resp.json();
+};
 
 const shouldUseLocalFallback = (): boolean => {
   if (typeof window === 'undefined') return false;

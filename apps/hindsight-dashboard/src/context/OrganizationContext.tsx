@@ -138,16 +138,23 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
     if (!authLoading && user?.authenticated) {
       refreshOrganizations();
     } else {
-      // Clear React state AND persisted scope when user logs out or auth is loading
+      // Clear React state when user logs out OR while auth is still loading.
       setCurrentOrganization(null);
       setUserOrganizations([]);
       setCurrentUserMembership(null);
       setIsPersonalMode(true);
       setIsPublicMode(false);
-      try {
-        localStorage.removeItem('selectedScope');
-        localStorage.removeItem('selectedOrganizationId');
-      } catch {}
+      // Only clear persisted scope on a DEFINITIVE logout (auth resolved AND
+      // user is unauthenticated). On the very first mount, `authLoading=true`
+      // and `user=null` — entering this branch and wiping localStorage at that
+      // moment destroys any preference the user (or an init script in tests)
+      // just wrote. Wait for auth to settle before deciding.
+      if (!authLoading) {
+        try {
+          localStorage.removeItem('selectedScope');
+          localStorage.removeItem('selectedOrganizationId');
+        } catch {}
+      }
     }
   }, [user?.authenticated, user?.email, authLoading]);
 
