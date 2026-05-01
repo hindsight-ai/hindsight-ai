@@ -1,13 +1,9 @@
-import { apiFetch, isGuest } from './http';
-
-const guardGuest = (action: string) => { if (isGuest()) throw new Error(action); };
+import { apiFetch, guardGuest, jsonOrThrow } from './http';
 
 export interface Keyword {
   keyword_id: string;
   keyword_text: string;
 }
-
-const jsonOrThrow = async (resp: Response) => resp.json();
 
 export const getKeywords = async (filters: Record<string, any> = {}) => {
   const params = new URLSearchParams(filters);

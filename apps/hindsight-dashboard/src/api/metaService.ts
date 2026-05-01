@@ -1,6 +1,4 @@
-import { apiFetch } from './http';
-
-const jsonOrThrow = async (resp: Response) => resp.json();
+import { apiFetch, jsonOrThrow } from './http';
 
 export const getBuildInfo = async () => {
   const resp = await apiFetch('/build-info');

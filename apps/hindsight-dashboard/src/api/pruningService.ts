@@ -1,6 +1,4 @@
-import { apiFetch } from './http';
-
-const jsonOrThrow = async (resp: Response) => resp.json();
+import { apiFetch, jsonOrThrow } from './http';
 
 export const generatePruningSuggestions = async (params: Record<string, any> = {}) => {
   const resp = await apiFetch('/memory/prune/suggest', {
