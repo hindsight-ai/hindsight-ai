@@ -26,7 +26,7 @@ test.describe('Journey 7 — Pruning @full', () => {
     autoAcceptConfirm(page);
     const email = temail('prune-user');
     await provisionUser(page, email);
-    const headers = { 'x-auth-request-email': email, 'x-auth-request-user': email };
+    const headers = { 'x-auth-request-email': email, 'x-auth-request-user': email, 'x-active-scope': 'personal' };
 
     // ── 1. Seed: agent + several memory blocks (need enough for the heuristic
     //         to score them) ──────────────────────────────────────────────────
