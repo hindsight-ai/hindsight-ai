@@ -28,7 +28,8 @@ test.describe('Journey 2 — Memory block CRUD @smoke', () => {
     const email = temail('crud');
     const headers = {
       'x-auth-request-email': email,
-      'x-auth-request-user': 'CRUD User',
+      'x-auth-request-user': email,
+      'x-active-scope': 'personal',
     };
 
     // ── 1. Seed: agent + memory block via API ─────────────────────────────────
@@ -55,8 +56,8 @@ test.describe('Journey 2 — Memory block CRUD @smoke', () => {
 
     // ── 2. Provision beta-access, auth, and navigate ──────────────────────────
     autoAcceptConfirm(page);
-    await provisionUser(page, email, 'CRUD User');
-    await asUser(page, email, 'CRUD User');
+    await provisionUser(page, email);
+    await asUser(page, email);
     await page.goto('/memory-blocks');
 
     // ── 3. View: block appears in the list ────────────────────────────────────
