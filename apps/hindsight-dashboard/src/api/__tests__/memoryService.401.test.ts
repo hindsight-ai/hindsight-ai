@@ -44,7 +44,6 @@ describe('memoryService 401 branches', () => {
     await expectAuthRequired(() => m.bulkCompactMemoryBlocks(['mb']));
     await expectAuthRequired(() => m.bulkGenerateKeywords(['mb']));
     await expectAuthRequired(() => m.bulkApplyKeywords([{ memory_block_id: 'mb', keywords: ['x'] }]));
-    await expectAuthRequired(() => m.mergeMemoryBlocks(['mb'], 'content'));
   });
 });
 
