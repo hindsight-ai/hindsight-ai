@@ -26,6 +26,10 @@ env:
   FEATURE_CONSOLIDATION_ENABLED: 'true'
   FEATURE_PRUNING_ENABLED: 'true'
   FEATURE_ARCHIVED_ENABLED: 'true'
+  # Designated admin email for E2E tests — bootstraps beta-access approval.
+  # The `provisionUser` helper uses this identity to PATCH new test users to
+  # `beta_access_status='accepted'` so they aren't redirected to /beta-access/request.
+  BETA_ACCESS_ADMINS: e2e-admin@e2e.local
 
 jobs:
   smoke:

@@ -45,15 +45,24 @@ already have them running, Playwright reuses them.
 
 ```ts
 import { asUser } from '../helpers/auth';
+import { provisionUser } from '../helpers/provision';
 import { temail } from '../helpers/runId';
 
-await asUser(page, temail('alice'), 'Alice');
+const email = temail('alice');
+await provisionUser(page, email, 'Alice');  // pre-approves beta access
+await asUser(page, email, 'Alice');
 // All subsequent requests on `page` carry x-auth-request-email + x-auth-request-user.
 ```
 
 The backend resolves these headers via the same code path the 875 backend tests use.
 **Do NOT enable `DEV_MODE=true`** — that hardcodes `dev@localhost` server-side and
 makes header injection silently no-op.
+
+`provisionUser` is needed because newly-created users default to
+`beta_access_status='not_requested'`, and the dashboard redirects such users to
+`/beta-access/request` instead of rendering the main app. The helper uses the
+admin email `e2e-admin@e2e.local` (configured via `BETA_ACCESS_ADMINS` env var
+in `.github/workflows/e2e.yml`) to PATCH new test users to `'accepted'` status.
 
 ### Authenticate via PAT
 
