@@ -31,7 +31,7 @@ test.describe('Journey 13 — Compaction trigger (LLM-disabled path) @full', () 
   test('clicking Compact when LLM is disabled shows toast, does not open modal', async ({ page, request }) => {
     const email = temail('compact-user');
     await provisionUser(page, email);
-    const headers = { 'x-auth-request-email': email, 'x-auth-request-user': email };
+    const headers = { 'x-auth-request-email': email, 'x-auth-request-user': email, 'x-active-scope': 'personal' };
 
     // ── 1. Seed a memory block with substantial content ──────────────────────
     const agentRes = await request.post(`${BACKEND}/agents/`, {
