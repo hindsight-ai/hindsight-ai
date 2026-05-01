@@ -20,20 +20,20 @@ import { temail } from '../helpers/runId';
 
 test.describe('Journey 1 — Auth + landing @smoke', () => {
   test('an authenticated user lands on the dashboard and sees their identity', async ({ page }) => {
+    // No displayName is passed — provisionUser/asUser default it to the email.
+    // This avoids `uq_users_external_subject` collisions when multiple parallel
+    // workers happen to share a display name (the backend stores display_name
+    // as external_subject, which has a UNIQUE constraint).
     const email = temail('alice');
-    await provisionUser(page, email, 'Alice E2E');
-    await asUser(page, email, 'Alice E2E');
+    await provisionUser(page, email);
+    await asUser(page, email);
 
     // After `asUser` we are on `/`. The dashboard fetches `/user-info` and
     // renders the email somewhere in the chrome (account button, sidebar, etc.).
-    // The exact location varies; we assert the email appears anywhere on the page.
     await expect(page.getByText(email, { exact: false })).toBeVisible({ timeout: 15_000 });
   });
 
   test('a fresh user is auto-provisioned by the backend on first request', async ({ page }) => {
-    // Use a never-before-seen email; backend's `get_or_create_user_for_request`
-    // creates the User row on first hit. provisionUser then approves their
-    // beta access so they can land on the dashboard instead of being redirected.
     const email = temail('newuser');
     await provisionUser(page, email);
     await asUser(page, email);
@@ -48,13 +48,13 @@ test.describe('Journey 1 — Auth + landing @smoke', () => {
     const aliceEmail = temail('alice-swap');
     const bobEmail = temail('bob-swap');
 
-    await provisionUser(page, aliceEmail, 'Alice');
-    await provisionUser(page, bobEmail, 'Bob');
+    await provisionUser(page, aliceEmail);
+    await provisionUser(page, bobEmail);
 
-    await asUser(page, aliceEmail, 'Alice');
+    await asUser(page, aliceEmail);
     await expect(page.getByText(aliceEmail, { exact: false })).toBeVisible({ timeout: 15_000 });
 
-    await asUser(page, bobEmail, 'Bob');
+    await asUser(page, bobEmail);
     await expect(page.getByText(bobEmail, { exact: false })).toBeVisible({ timeout: 15_000 });
     // Alice's email should NOT still be visible somewhere on the page.
     await expect(page.getByText(aliceEmail, { exact: true })).toHaveCount(0);

@@ -22,7 +22,9 @@ import type { Page } from '@playwright/test';
 
 const BACKEND = 'http://localhost:8000';
 const ADMIN_EMAIL = 'e2e-admin@e2e.local';
-const ADMIN_NAME = 'E2E Admin';
+// Must match the constant in `e2e/global-setup.ts` — both call /user-info as
+// this admin and the backend matches them on email + external_subject.
+const ADMIN_NAME = 'E2E Admin Account';
 
 /**
  * Pre-approve a test user's beta access. Idempotent — safe to call from beforeEach.
