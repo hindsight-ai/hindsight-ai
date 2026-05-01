@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { asUser, asGuest } from '../helpers/auth';
+import { provisionUser } from '../helpers/provision';
 import { temail } from '../helpers/runId';
 
 /**
@@ -9,8 +10,10 @@ import { temail } from '../helpers/runId';
  * 1. Playwright can start the backend + frontend via `webServer` config
  * 2. The auth helper successfully injects `x-auth-request-*` headers
  * 3. The backend resolves the headers (DEV_MODE=false) and creates/loads the user
- * 4. The frontend fetches `/user-info` and renders the user identity
- * 5. The hard-reload after `setExtraHTTPHeaders` correctly resets frontend state
+ * 4. `provisionUser` pre-approves the user's beta access via the admin endpoint
+ *    so the dashboard renders instead of redirecting to /beta-access/request
+ * 5. The frontend fetches `/user-info` and renders the user identity
+ * 6. The hard-reload after `setExtraHTTPHeaders` correctly resets frontend state
  *
  * Tagged @smoke — runs on every PR.
  */
@@ -18,6 +21,7 @@ import { temail } from '../helpers/runId';
 test.describe('Journey 1 — Auth + landing @smoke', () => {
   test('an authenticated user lands on the dashboard and sees their identity', async ({ page }) => {
     const email = temail('alice');
+    await provisionUser(page, email, 'Alice E2E');
     await asUser(page, email, 'Alice E2E');
 
     // After `asUser` we are on `/`. The dashboard fetches `/user-info` and
@@ -28,8 +32,10 @@ test.describe('Journey 1 — Auth + landing @smoke', () => {
 
   test('a fresh user is auto-provisioned by the backend on first request', async ({ page }) => {
     // Use a never-before-seen email; backend's `get_or_create_user_for_request`
-    // creates the User row on first hit. The dashboard should still render.
+    // creates the User row on first hit. provisionUser then approves their
+    // beta access so they can land on the dashboard instead of being redirected.
     const email = temail('newuser');
+    await provisionUser(page, email);
     await asUser(page, email);
 
     await expect(page.getByText(email, { exact: false })).toBeVisible({ timeout: 15_000 });
@@ -42,6 +48,9 @@ test.describe('Journey 1 — Auth + landing @smoke', () => {
     const aliceEmail = temail('alice-swap');
     const bobEmail = temail('bob-swap');
 
+    await provisionUser(page, aliceEmail, 'Alice');
+    await provisionUser(page, bobEmail, 'Bob');
+
     await asUser(page, aliceEmail, 'Alice');
     await expect(page.getByText(aliceEmail, { exact: false })).toBeVisible({ timeout: 15_000 });
 
@@ -53,6 +62,7 @@ test.describe('Journey 1 — Auth + landing @smoke', () => {
 
   test('asGuest clears auth and the page no longer shows the previous identity', async ({ page }) => {
     const email = temail('logout-test');
+    await provisionUser(page, email);
     await asUser(page, email);
     await expect(page.getByText(email, { exact: false })).toBeVisible({ timeout: 15_000 });
 
