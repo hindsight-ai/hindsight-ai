@@ -74,3 +74,77 @@ describe('showErrorToast — dispatches via INotificationService', () => {
     expect(() => showErrorToast(new Error('default-singleton'))).not.toThrow();
   });
 });
+
+describe('showErrorToast — class-hierarchy ordering', () => {
+  it('AuthenticationError dispatches to show401Error even though it extends ApiError', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast(new AuthenticationError(), fake);
+    expect(fake.calls.map(c => c.method)).toEqual(['show401Error']);
+  });
+
+  it('AuthorizationError dispatches to show403Error even though it extends ApiError', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast(new AuthorizationError(), fake);
+    expect(fake.calls.map(c => c.method)).toEqual(['show403Error']);
+  });
+
+  it('Plain ApiError (not a subclass) dispatches to showApiError', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast(new ApiError(404, 'not found'), fake);
+    expect(fake.calls.map(c => c.method)).toEqual(['showApiError']);
+  });
+});
+
+describe('showErrorToast — edge cases', () => {
+  it('null → showError("Unexpected error")', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast(null, fake);
+    expect(fake.calls).toEqual([{ method: 'showError', args: ['Unexpected error', undefined] }]);
+  });
+
+  it('undefined → showError("Unexpected error")', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast(undefined, fake);
+    expect(fake.calls).toEqual([{ method: 'showError', args: ['Unexpected error', undefined] }]);
+  });
+
+  it('plain object that looks like an error → showError("Unexpected error")', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast({ message: 'looks like an error', name: 'FakeError' }, fake);
+    expect(fake.calls).toEqual([{ method: 'showError', args: ['Unexpected error', undefined] }]);
+  });
+
+  it('TypeError (Error subclass not in our hierarchy) → showError(message)', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast(new TypeError('cannot read property of undefined'), fake);
+    expect(fake.calls).toEqual([
+      { method: 'showError', args: ['cannot read property of undefined', undefined] },
+    ]);
+  });
+
+  it('ApiError with empty message → showApiError(status, "")', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast(new ApiError(503, ''), fake);
+    expect(fake.calls).toEqual([{ method: 'showApiError', args: [503, '', undefined] }]);
+  });
+
+  it('ApiError 429 → routes through showApiError (no special handling in errorHandler)', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast(new ApiError(429, 'Too many requests'), fake);
+    expect(fake.calls).toEqual([
+      { method: 'showApiError', args: [429, 'Too many requests', undefined] },
+    ]);
+  });
+
+  it('multiple sequential dispatches accumulate on the same fake', () => {
+    const fake = new FakeNotificationService();
+    showErrorToast(new AuthenticationError(), fake);
+    showErrorToast(new NetworkError(), fake);
+    showErrorToast(new ApiError(500, 'fail'), fake);
+    expect(fake.calls.map(c => c.method)).toEqual([
+      'show401Error',
+      'showNetworkError',
+      'showApiError',
+    ]);
+  });
+});
