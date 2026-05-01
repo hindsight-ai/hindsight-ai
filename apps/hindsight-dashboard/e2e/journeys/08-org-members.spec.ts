@@ -55,27 +55,32 @@ test.describe('Journey 8 — Org admin members (multi-user) @smoke', () => {
     // ── 2. As owner: open Manage Organizations modal, verify alice listed ─────
     await asUser(page, ownerEmail);
 
-    // Click the avatar button (first letter of email, in chrome).
-    // It's the only visible-clickable affordance that opens the user dropdown.
-    await page.locator('button').filter({ hasText: ownerEmail.charAt(0).toUpperCase() }).first().click();
-    await page.getByText(/manage organizations/i).click();
+    // Click the avatar button to open the user dropdown.
+    // UserAccountButton renders the user's first letter as the button's only
+    // accessible text (UserAccountButton.tsx:55-57). A `hasText` filter would
+    // collide with sidebar items like "Open get started guide" or
+    // "Organizations" that all contain the letter — use exact-name match.
+    const initial = ownerEmail.charAt(0).toUpperCase();
+    await page.getByRole('button', { name: initial, exact: true }).first().click();
+    await page.getByRole('button', { name: /manage organizations/i }).click();
 
     // Modal opens with the org list. Click our org.
     await page.getByText(orgName).first().click();
 
-    // Members list should show alice's email.
-    await expect(page.getByText(aliceEmail, { exact: false })).toBeVisible({ timeout: 10_000 });
+    // Members list should show alice's email. Email appears in two columns
+    // (Email + Display Name, since `provisionUser` uses email as both) — use
+    // `.first()` to satisfy strict mode.
+    await expect(page.getByText(aliceEmail, { exact: false }).first()).toBeVisible({ timeout: 10_000 });
 
     // ── 3. Change alice's role from editor → viewer via UI ────────────────────
-    // Each member row has a role <select>. Find alice's row.
-    const aliceRow = page.locator('tr,div,li').filter({ hasText: aliceEmail }).first();
+    // Each member row has a role <select>. Scope to <tr> specifically — a
+    // looser `tr,div,li` filter matches the wrapping `<tbody>` div which
+    // contains BOTH the owner's row (disabled select, self-modification
+    // prevented) AND alice's row, and `.first()` then resolves to the
+    // owner's select, not alice's.
+    const aliceRow = page.locator('tr').filter({ hasText: aliceEmail }).first();
     const roleSelect = aliceRow.locator('select').first();
-    if (await roleSelect.count()) {
-      await roleSelect.selectOption('viewer');
-    } else {
-      // Fallback: any select dropdown that follows alice's email
-      throw new Error('role select not found in alice row');
-    }
+    await roleSelect.selectOption('viewer');
 
     // Verify via API (UI may not visibly re-render the role text immediately)
     const verifyResp = await request.get(`${BACKEND}/organizations/${org.id}/members`, { headers: ownerHeaders });
@@ -87,13 +92,7 @@ test.describe('Journey 8 — Org admin members (multi-user) @smoke', () => {
     expect(alice?.role).toBe('viewer');
 
     // ── 4. Remove alice from the org via UI ───────────────────────────────────
-    const removeBtn = aliceRow.getByRole('button', { name: /^remove$/i }).first();
-    if (await removeBtn.count()) {
-      await removeBtn.click();
-    } else {
-      // Fallback selector
-      await aliceRow.locator('button').filter({ hasText: /remove|delete/i }).first().click();
-    }
+    await aliceRow.getByRole('button', { name: /^remove$/i }).click();
     // window.confirm is auto-accepted by autoAcceptConfirm.
 
     // Verify removal via API (UI updates may need a refresh).
