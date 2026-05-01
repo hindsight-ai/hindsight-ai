@@ -67,9 +67,9 @@ export async function asUser(page: Page, email: string, displayName?: string): P
     'x-auth-request-user': displayName || email,
   });
 
-  // Fetch user_id via /user-info so we can pre-populate the GetStarted-seen
-  // localStorage key (which uses user_id when authenticated). Without this,
-  // the onboarding modal blocks all journey UI interactions for fresh users.
+  // Fetch user_id so we can suppress the GetStarted onboarding modal via
+  // localStorage. Without this the modal blocks all UI interactions for
+  // fresh test users.
   let userId: string | undefined;
   try {
     const resp = await page.request.get('http://localhost:8000/user-info');
@@ -81,17 +81,17 @@ export async function asUser(page: Page, email: string, displayName?: string): P
     // best-effort
   }
 
-  // Navigate to dashboard origin first — localStorage is per-origin, setting
-  // on about:blank wouldn't persist when navigating to localhost:3000.
-  await page.goto(PROBE_PAGE);
-  await page.evaluate(
+  // Inject localStorage seed via addInitScript so it runs BEFORE any page
+  // script on subsequent navigations. This avoids the reload-race that
+  // happened with goto(/) + evaluate + reload (in-flight requests aborted).
+  // addInitScript replaces previous init scripts, so re-installing on each
+  // asUser call is safe.
+  await page.addInitScript(
     ({ uid, em }) => {
       try {
         localStorage.setItem('selectedScope', 'personal');
         localStorage.removeItem('selectedOrganizationId');
         const seenAt = new Date().toISOString();
-        // Cover all 3 fallback identifiers — dashboard's actual key uses
-        // user_id when authenticated, falls back to email then 'default'.
         if (uid) localStorage.setItem(`hindsight.get-started.${uid}`, seenAt);
         localStorage.setItem(`hindsight.get-started.${em}`, seenAt);
         localStorage.setItem('hindsight.get-started.default', seenAt);
@@ -99,8 +99,7 @@ export async function asUser(page: Page, email: string, displayName?: string): P
     },
     { uid: userId, em: email },
   );
-  // Reload so the dashboard re-bootstraps reading the seeded localStorage.
-  await page.reload();
+  await page.goto(PROBE_PAGE);
 }
 
 /**
