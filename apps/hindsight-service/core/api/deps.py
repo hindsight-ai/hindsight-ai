@@ -2,11 +2,14 @@
 API dependency helpers.
 
 Provides dependency-resolved user context and scope information for routes.
+The typed dataclasses (PatContext, CurrentUserContext, UserContext,
+RequestContext) live in `core.api.context_types`; the dev-mode user
+provisioning lives in `core.api.dev_mode_setup`. This module owns only the
+FastAPI ``Depends``-decorated resolvers and the PAT-permission predicates.
 """
 import uuid
 import logging
 import dataclasses as _dc
-from dataclasses import dataclass, field
 from typing import Optional, Tuple, Dict, Any, List
 from uuid import UUID
 from fastapi import Query
@@ -16,35 +19,14 @@ import os
 from sqlalchemy import text as _sql_text
 from sqlalchemy.orm import Session
 
-
-@dataclass(frozen=True)
-class PatContext:
-    """Metadata about the PAT used to authenticate this request."""
-    id: Any
-    token_id: str
-    scopes: List[str]
-    organization_id: Optional[Any]
-
-
-@dataclass(frozen=True)
-class CurrentUserContext:
-    """Per-request user context.
-
-    Replaces the legacy Dict[str, Any] shape. Consumers should access via
-    attribute (`ctx.is_superadmin`) instead of dict get (`ctx.get('is_superadmin')`).
-    Mistyped attribute access fails loudly at the call site instead of
-    silently returning None — the entire reason this type exists.
-    """
-    id: Any
-    email: str
-    display_name: Optional[str]
-    is_superadmin: bool
-    is_beta_access_admin: bool
-    memberships: List[Dict[str, Any]]
-    memberships_by_org: Dict[str, Dict[str, Any]]
-    beta_access_status: Optional[str]
-    pat: Optional[PatContext] = None
-    dev_mode_pat: Optional[str] = None
+# Re-export the typed context dataclasses so the ~50 caller modules keep
+# importing them via `core.api.deps` unchanged.
+from core.api.context_types import (
+    PatContext,
+    CurrentUserContext,
+    UserContext,
+    RequestContext,
+)
 
 from core.db.database import get_db
 from core.api.auth import (
@@ -84,74 +66,10 @@ from core.db.scope_utils import ScopeContext
 from core.db.repositories import tokens as token_repo
 from core.utils.token_crypto import parse_token, verify_secret
 from core.utils.runtime import dev_mode_active
-from core.db.schemas.tokens import TokenCreateRequest
+from core.api.dev_mode_setup import ensure_dev_mode_defaults as _ensure_dev_mode_defaults
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class UserContext:
-    """Result of get_current_user_context*() — pairs the ORM user row with the typed CurrentUserContext."""
-    user: models.User
-    current: CurrentUserContext
-
-
-@dataclass(frozen=True)
-class RequestContext:
-    """Result of get_scoped_user_and_context() — adds ScopeContext on top of UserContext."""
-    user: models.User
-    current: CurrentUserContext
-    scope: ScopeContext
-
-_DEV_MODE_PAT_CACHE: Optional[str] = None
-
-
-def _ensure_dev_mode_defaults(db: Session, user: models.User) -> Optional[str]:
-    """Ensure dev@localhost has superadmin rights, beta access, and a PAT."""
-    global _DEV_MODE_PAT_CACHE
-
-    changed = False
-    if not getattr(user, "is_superadmin", False):
-        user.is_superadmin = True
-        changed = True
-    if getattr(user, "beta_access_status", "") != "accepted":
-        user.beta_access_status = "accepted"
-        changed = True
-
-    if changed:
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-        else:
-            db.refresh(user)
-
-    # Reuse cached PAT token when still valid for this user
-    token_value: Optional[str] = None
-    if _DEV_MODE_PAT_CACHE:
-        parsed = parse_token(_DEV_MODE_PAT_CACHE)
-        if parsed:
-            pat = token_repo.get_by_token_id(db, token_id=parsed.token_id)
-            if pat and pat.status == "active" and pat.user_id == user.id:
-                token_value = _DEV_MODE_PAT_CACHE
-
-    if token_value is not None:
-        return token_value
-
-    active_tokens = [pat for pat in token_repo.list_tokens(db, user_id=user.id) if pat.status == "active"]
-    full_token: Optional[str] = None
-    if active_tokens:
-        rotated = token_repo.rotate_token(db, token_db_id=active_tokens[0].id, user_id=user.id)
-        if rotated:
-            _pat, full_token = rotated
-    if not full_token:
-        payload = TokenCreateRequest(name="Dev Mode Default PAT", scopes=["read", "write"])
-        _pat, full_token = token_repo.create_token(db, user_id=user.id, payload=payload)
-
-    _DEV_MODE_PAT_CACHE = full_token
-    logger.info("DEV_MODE PAT token issued for %s: %s", user.email, full_token)
-    return full_token
 
 # Contract:
 # Returns UserContext(user, current) — raises 401 if identity cannot be resolved.
