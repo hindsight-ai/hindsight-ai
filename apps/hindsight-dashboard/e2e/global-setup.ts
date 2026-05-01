@@ -73,6 +73,31 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
       );
     }
 
+    // Beta-admin status only grants the ability to APPROVE other users — the
+    // reference owner's own beta_access_status is still 'not_requested' which
+    // would redirect them to /beta-access/request when they try to view the
+    // dashboard. PATCH them to 'accepted' so they can access their own
+    // reference dataset for search journey assertions.
+    if (refInfo.beta_access_status !== 'accepted') {
+      const patchResp = await ctx.patch(
+        `${BACKEND}/beta-access/admin/users/${refInfo.user_id}`,
+        {
+          headers: {
+            'x-auth-request-email': ADMIN_EMAIL,
+            'x-auth-request-user': ADMIN_NAME,
+            'content-type': 'application/json',
+          },
+          data: { status: 'accepted' },
+        },
+      );
+      if (!patchResp.ok()) {
+        throw new Error(
+          `[global-setup] failed to approve reference owner beta-access: ` +
+            `${patchResp.status()} ${await patchResp.text()}`,
+        );
+      }
+    }
+
     // ── 3. Seed the reference dataset (idempotent) ───────────────────────────
     const result = await seedReferenceDataset(ctx);
     // eslint-disable-next-line no-console
