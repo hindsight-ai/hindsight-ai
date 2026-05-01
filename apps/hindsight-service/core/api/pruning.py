@@ -42,7 +42,12 @@ def generate_pruning_suggestions_endpoint(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     ensure_pat_allows_write(current_user)
 
-    if not llm_features_enabled():
+    # Bypass the LLM gate when E2E_TEST_HOOKS=true — the pruning service
+    # already has a deterministic `_fallback_scoring` path (sklearn-based)
+    # that runs when LLM_API_KEY is unset, producing repeatable scores
+    # suitable for E2E. The gate is preserved for production where
+    # LLM-quality scoring is the product expectation.
+    if not llm_features_enabled() and os.getenv("E2E_TEST_HOOKS", "false").lower() != "true":
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="LLM features are currently disabled")
 
     batch_size = request.get("batch_size", 50)
