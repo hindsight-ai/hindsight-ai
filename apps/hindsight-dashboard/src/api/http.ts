@@ -27,6 +27,16 @@ export const isGuest = (): boolean => {
   }
 };
 
+// Throws a user-facing error message if the session is in guest mode.
+// Lifted out of the 9 domain service files in #90 — single source of truth.
+// The `action` parameter becomes the error message (e.g. 'Sign in to create memory blocks.').
+export const guardGuest = (action = 'Guest mode read-only'): void => {
+  if (isGuest()) throw new Error(action);
+};
+
+// Tiny helper kept for symmetry: apiFetch already throws typed errors on non-ok responses.
+export const jsonOrThrow = async (resp: Response): Promise<unknown> => resp.json();
+
 const shouldUseLocalFallback = (): boolean => {
   if (typeof window === 'undefined') return false;
   try {
@@ -151,15 +161,25 @@ export const apiFetch = async (path: string, init: ApiFetchInit = {}): Promise<R
     }
   }
 
-  // In dev mode, attach oauth2-proxy header shim so backend treats requests as authenticated.
+  // In dev mode on localhost, attach oauth2-proxy header shim so backend treats requests as authenticated.
+  // Inlined from former utils/devMode.ts (#86) — single call site, no tree-shake benefit from a separate module.
   if (typeof window !== 'undefined') {
-    const { devModeHeaders } = await import('../utils/devMode');
-    const implicitHeaders = devModeHeaders();
-    if (Object.keys(implicitHeaders).length > 0 && typeof console !== 'undefined' && console.debug) {
-      console.debug('[apiFetch] attaching dev auth headers', implicitHeaders);
-    }
-    for (const key of Object.keys(implicitHeaders)) {
-      if (!headersObj[key]) headersObj[key] = implicitHeaders[key];
+    const hostname = window.location.hostname?.toLowerCase() || '';
+    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'host.docker.internal' || hostname === '::1';
+    if (isLocalHost) {
+      let viteEnv: any = {};
+      try { viteEnv = (Function('return import.meta.env')()) || {}; } catch {}
+      const runtimeEnv = (window as any).__ENV__ || {};
+      const devEnabled = viteEnv.DEV === true || viteEnv.VITE_DEV_MODE === 'true' || runtimeEnv.DEV_MODE === 'true';
+      if (devEnabled) {
+        const email = runtimeEnv.DEV_LOCAL_EMAIL || viteEnv.VITE_DEV_LOCAL_EMAIL || 'dev@localhost';
+        const name = runtimeEnv.DEV_LOCAL_NAME || viteEnv.VITE_DEV_LOCAL_NAME || 'Development User';
+        if (typeof console !== 'undefined' && console.debug) {
+          console.debug('[apiFetch] attaching dev auth headers', { email, name, hostname });
+        }
+        if (!headersObj['X-Auth-Request-Email']) headersObj['X-Auth-Request-Email'] = email;
+        if (!headersObj['X-Auth-Request-User']) headersObj['X-Auth-Request-User'] = name;
+      }
     }
   }
 

@@ -1,9 +1,5 @@
-import { apiFetch, isGuest } from './http';
+import { apiFetch, guardGuest, jsonOrThrow } from './http';
 import { getScope } from './scopeProvider';
-
-const guardGuest = (action: string) => { if (isGuest()) throw new Error(action); };
-
-const jsonOrThrow = async (resp: Response) => resp.json();
 
 export const getMemoryOptimizationSuggestions = async (filters: Record<string, any> = {}) => {
   const params = new URLSearchParams();

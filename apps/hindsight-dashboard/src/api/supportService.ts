@@ -1,9 +1,5 @@
-import { apiFetch, isGuest } from './http';
+import { apiFetch, guardGuest, jsonOrThrow } from './http';
 import { ApiError } from './errors';
-
-const guardGuest = (action: string) => { if (isGuest()) throw new Error(action); };
-
-const jsonOrThrow = async (resp: Response) => resp.json();
 
 export const contactSupport = async (payload: Record<string, any>) => {
   guardGuest('Sign in to contact support.');

@@ -1,7 +1,5 @@
-import { apiFetch, isGuest } from './http';
+import { apiFetch, guardGuest, jsonOrThrow } from './http';
 import { getScope } from './scopeProvider';
-
-const guardGuest = (action: string) => { if (isGuest()) throw new Error(action); };
 
 export interface ConsolidationSuggestion {
   suggestion_id: string;
@@ -12,8 +10,6 @@ export interface ConsolidationSuggestion {
 }
 
 type AbortOpt = { signal?: AbortSignal };
-
-const jsonOrThrow = async (resp: Response) => resp.json();
 
 export const getConsolidationSuggestions = async (filters: Record<string, any> = {}, signal?: AbortSignal) => {
   const { skip, limit, status, group_id, start_date, end_date, sort_by, sort_order } = filters;

@@ -1,6 +1,4 @@
-import { apiFetch, isGuest } from './http';
-
-const guardGuest = (action: string) => { if (isGuest()) throw new Error(action); };
+import { apiFetch, guardGuest, jsonOrThrow } from './http';
 
 export interface MemoryBlock {
   id: string;
@@ -9,8 +7,6 @@ export interface MemoryBlock {
   visibility_scope?: string;
   organization_id?: string | null;
 }
-
-const jsonOrThrow = async (resp: Response) => resp.json();
 
 export const getMemoryBlocks = async (filters: Record<string, any> = {}) => {
   const { per_page, include_archived = false, ...rest } = filters;

@@ -1,8 +1,4 @@
-import { apiFetch, isGuest } from './http';
-
-const guardGuest = (action: string) => { if (isGuest()) throw new Error(action); };
-
-const jsonOrThrow = async (resp: Response) => resp.json();
+import { apiFetch, guardGuest, jsonOrThrow } from './http';
 
 export const compressMemoryBlock = async (memoryBlockId: string, userInstructions: Record<string, any> = {}) => {
   guardGuest('Sign in to compress memory blocks.');
