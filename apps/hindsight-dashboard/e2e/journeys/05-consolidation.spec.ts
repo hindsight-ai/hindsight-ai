@@ -22,7 +22,7 @@ test.describe('Journey 5 — Consolidation validate / reject @full', () => {
   test('seeded suggestions can be validated and rejected via the UI', async ({ page, request }) => {
     const email = temail('consolidation-user');
     await provisionUser(page, email);
-    const headers = { 'x-auth-request-email': email, 'x-auth-request-user': email };
+    const headers = { 'x-auth-request-email': email, 'x-auth-request-user': email, 'x-active-scope': 'personal' };
 
     // ── 1. Seed agent + 2 source memory blocks ───────────────────────────────
     const agentRes = await request.post(`${BACKEND}/agents/`, {
