@@ -1,8 +1,13 @@
 @import "tailwindcss";
 
 @layer base {
+  /*
+    Document is the scroller (RFC 0002 M1). Don't pin html/body to 100%
+    height or set overflow:hidden — that would clip the page to the
+    viewport and re-break iOS status-bar tap-to-top, scroll restoration,
+    and mouse-wheel-over-header.
+  */
   html, body, #root {
-    height: 100%;
     width: 100%;
   }
 
@@ -14,7 +19,6 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background-color: #f3f4f6; /* bg-gray-100 */
-    overflow: hidden; /* Page height equals viewport; internal panes handle scroll on ≥sm */
   }
 
   * { box-sizing: border-box; }
@@ -184,9 +188,6 @@
 
 /* Responsive adjustments */
 @media (max-width: 640px) {
-  /* Allow natural document scrolling on small screens to avoid nested scroll issues */
-  html, body { overflow: auto; }
-
   .notification-container {
     bottom: calc(10px + env(safe-area-inset-bottom));
     right: calc(10px + env(safe-area-inset-right));

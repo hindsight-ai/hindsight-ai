@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 from core.db import models, crud, schemas
+from core.api.deps import CurrentUserContext
 
 
 def _make_user_agent(db, scope="personal", org=None):
@@ -27,7 +28,16 @@ def test_memory_block_filters_and_archive(db_session):
     db.add_all([mb1, mb2, mb3]); db.commit(); [db.refresh(x) for x in [mb1, mb2, mb3]]
 
     # Current user context (personal + org membership)
-    ctx = {"id": user_p.id, "memberships": [{"organization_id": str(org.id)}]}
+    ctx = CurrentUserContext(
+        id=user_p.id,
+        email=user_p.email,
+        display_name=user_p.display_name,
+        is_superadmin=False,
+        is_beta_access_admin=False,
+        memberships=[{"organization_id": str(org.id)}],
+        memberships_by_org={str(org.id): {"organization_id": str(org.id)}},
+        beta_access_status=None,
+    )
     # Filter by search term
     res = crud.get_all_memory_blocks(db, search_query="Alpha", current_user=ctx)
     assert len(res) == 1 and res[0].id == mb1.id
@@ -56,6 +66,9 @@ def test_memory_block_filters_and_archive(db_session):
     )
     assert kw_blocks
 
-    # Retrieval by keywords simple function
-    retrieved = crud.retrieve_relevant_memories(db, ["alpha"], agent_id=agent_p.agent_id)
+    # Retrieval by keywords simple function — pass current_user so the
+    # search service applies the correct scope filter for the owner.
+    retrieved = crud.retrieve_relevant_memories(
+        db, ["alpha"], agent_id=agent_p.agent_id, current_user=ctx
+    )
     assert any("alpha".lower() in (r.content.lower()) for r in retrieved)

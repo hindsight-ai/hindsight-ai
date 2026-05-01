@@ -3,6 +3,7 @@ import pytest
 from core.db.database import SessionLocal, engine
 from core.db import models, schemas
 from core.db import crud
+from core.api.deps import CurrentUserContext
 
 
 @pytest.fixture(scope="module")
@@ -67,7 +68,16 @@ def test_get_agents_scope_filtering(db):
     assert {a.agent_name for a in unauth} == {"PublicA"}
 
     # Authenticated user with membership sees public + personal + org
-    current_user = {"id": owner.id, "is_superadmin": False, "memberships": [{"organization_id": str(org.id)}]}
+    current_user = CurrentUserContext(
+        id=owner.id,
+        email=owner.email,
+        display_name=owner.display_name,
+        is_superadmin=False,
+        is_beta_access_admin=False,
+        memberships=[{"organization_id": str(org.id)}],
+        memberships_by_org={str(org.id): {"organization_id": str(org.id)}},
+        beta_access_status=None,
+    )
     visible = crud.get_agents(db, current_user=current_user)
     assert {a.agent_name for a in visible} == {"PublicA", "PersA", "OrgA"}
 

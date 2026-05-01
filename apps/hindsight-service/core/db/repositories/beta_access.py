@@ -83,8 +83,19 @@ def update_beta_access_request_status(
     request_id: uuid.UUID,
     status: str,
     reviewer_email: Optional[str] = None,
-    decision_reason: Optional[str] = None
+    decision_reason: Optional[str] = None,
+    autocommit: bool = True,
 ) -> Optional[models.BetaAccessRequest]:
+    """Update a beta-access request row.
+
+    When `autocommit=True` (default) the change is committed immediately —
+    backward-compatible behavior preserved for the many existing callers.
+
+    Pass `autocommit=False` when the caller needs to commit several writes
+    atomically in one transaction (e.g. the admin-override flow that also
+    mirrors the result to `User.beta_access_status`). The caller becomes
+    responsible for invoking `db.commit()` and any `db.refresh(...)`.
+    """
     db_request = db.query(models.BetaAccessRequest).filter(models.BetaAccessRequest.id == request_id).first()
     if db_request:
         db_request.status = status
@@ -93,8 +104,11 @@ def update_beta_access_request_status(
         db_request.decision_reason = decision_reason
         db_request.review_token = None
         db_request.token_expires_at = None
-        db.commit()
-        db.refresh(db_request)
+        if autocommit:
+            db.commit()
+            db.refresh(db_request)
+        else:
+            db.flush()
     return db_request
 
 

@@ -3,6 +3,7 @@ import pytest
 
 from core.utils import token_crypto
 from core.api import deps as deps_mod
+from core.api.deps import CurrentUserContext, PatContext
 
 
 def test_generate_and_parse_token_format():
@@ -43,24 +44,36 @@ def test_derive_display_parts_has_prefix_and_last4():
 
 
 def _fake_current_user_with_pat(scopes, org_id=None):
-    return {
-        "id": uuid.uuid4(),
-        "email": "user@example.com",
-        "display_name": "User",
-        "memberships": [],
-        "memberships_by_org": {},
-        "pat": {
-            "id": uuid.uuid4(),
-            "token_id": "tid",
-            "scopes": scopes,
-            "organization_id": org_id,
-        },
-    }
+    return CurrentUserContext(
+        id=uuid.uuid4(),
+        email="user@example.com",
+        display_name="User",
+        is_superadmin=False,
+        is_beta_access_admin=False,
+        memberships=[],
+        memberships_by_org={},
+        beta_access_status=None,
+        pat=PatContext(
+            id=uuid.uuid4(),
+            token_id="tid",
+            scopes=scopes,
+            organization_id=org_id,
+        ),
+    )
 
 
 def test_ensure_pat_allows_read_scope_rules():
     # No PAT -> no-op
-    deps_mod.ensure_pat_allows_read({})
+    deps_mod.ensure_pat_allows_read(CurrentUserContext(
+        id=uuid.uuid4(),
+        email="",
+        display_name=None,
+        is_superadmin=False,
+        is_beta_access_admin=False,
+        memberships=[],
+        memberships_by_org={},
+        beta_access_status=None,
+    ))
 
     # read present -> ok
     cu = _fake_current_user_with_pat(["read"], None)

@@ -33,10 +33,12 @@ def test_dep_accepts_valid_pat(db_session: Session):
     user = _mk_user(db_session)
     _pat, token = _mk_pat(db_session, user)
 
-    u, ctx = deps.get_current_user_context_or_pat(db=db_session, authorization=f"Bearer {token}")
-    assert str(u.id) == str(ctx["id"])  # shape aligns
-    assert ctx.get("pat") is not None
-    assert "read" in set(ctx["pat"].get("scopes") or [])
+    result = deps.get_current_user_context_or_pat(db=db_session, authorization=f"Bearer {token}")
+    u = result.user
+    ctx = result.current
+    assert str(u.id) == str(ctx.id)  # shape aligns
+    assert ctx.pat is not None
+    assert "read" in set(ctx.pat.scopes or [])
 
 
 def test_dep_rejects_bad_secret(db_session: Session):

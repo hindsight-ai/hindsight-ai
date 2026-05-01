@@ -1219,8 +1219,10 @@ class TestAuthDepsBetaAccess:
 
         from core.api import deps
 
-        user, ctx = deps.get_current_user_context(db=db_session, x_auth_request_user='Dev', x_auth_request_email='dev@localhost')
-        assert ctx['beta_access_status'] == 'accepted'
+        result = deps.get_current_user_context(db=db_session, x_auth_request_user='Dev', x_auth_request_email='dev@localhost')
+        ctx = result.current
+        user = result.user
+        assert ctx.beta_access_status == 'accepted'
         assert user.beta_access_status == 'accepted'
 
     def test_get_current_user_context_syncs_request_status(self, db_session: Session, monkeypatch):
@@ -1237,8 +1239,10 @@ class TestAuthDepsBetaAccess:
 
         from core.api import deps
 
-        user_obj, ctx = deps.get_current_user_context(db=db_session, x_auth_request_user='Beta Sync', x_auth_request_email=email)
-        assert ctx['beta_access_status'] == 'accepted'
+        result = deps.get_current_user_context(db=db_session, x_auth_request_user='Beta Sync', x_auth_request_email=email)
+        user_obj = result.user
+        ctx = result.current
+        assert ctx.beta_access_status == 'accepted'
         assert user_obj.beta_access_status == 'accepted'
 
     def test_get_current_user_context_requires_email(self, db_session: Session, monkeypatch):
@@ -1266,8 +1270,10 @@ class TestAuthDepsBetaAccess:
 
         from core.api import deps
 
-        user_obj, ctx = deps.get_current_user_context(db=db_session, x_auth_request_user='Stale', x_auth_request_email=email)
-        assert ctx['beta_access_status'] == 'not_requested'
+        result = deps.get_current_user_context(db=db_session, x_auth_request_user='Stale', x_auth_request_email=email)
+        user_obj = result.user
+        ctx = result.current
+        assert ctx.beta_access_status == 'not_requested'
         assert user_obj.beta_access_status == 'not_requested'
 
     def test_get_user_memberships_handles_non_iterable_results(self, db_session: Session, monkeypatch):

@@ -1,4 +1,5 @@
 import memoryService from '../memoryService';
+import bulkOperationsService from '../bulkOperationsService';
 
 jest.mock('../../services/notificationService', () => ({
   __esModule: true,
@@ -7,6 +8,7 @@ jest.mock('../../services/notificationService', () => ({
 
 describe('memoryService optimization and bulk endpoints', () => {
   beforeEach(() => { global.fetch.mockReset && global.fetch.mockReset(); });
+  afterEach(() => jest.restoreAllMocks());
 
   test('getMemoryOptimizationSuggestions builds params', async () => {
     const payload = { items: [], total_items: 0 };
@@ -77,27 +79,16 @@ describe('memoryService optimization and bulk endpoints', () => {
     const body = JSON.parse(opts.body);
     expect(body.applications).toEqual(apps);
   });
-
-  test('mergeMemoryBlocks POSTs ids and content', async () => {
-    const resp = { merged: true };
-    jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => resp });
-    const ids = ['m1', 'm2'];
-    const res = await memoryService.mergeMemoryBlocks(ids, 'merged-content');
-    expect(res).toEqual(resp);
-    const [url, opts] = global.fetch.mock.calls[0];
-    expect(url).toContain('/memory-blocks/merge');
-    const body = JSON.parse(opts.body);
-    expect(body.memory_block_ids).toEqual(ids);
-    expect(body.merged_content).toBe('merged-content');
-  });
 });
 
 describe('memoryService batched helpers', () => {
   test('bulkGenerateKeywordsBatched aggregates batches and progress', async () => {
     const ids = Array.from({ length: 5 }, (_, i) => `m${i+1}`);
     const onProgress = jest.fn();
-    jest.spyOn(memoryService, 'bulkGenerateKeywords').mockResolvedValueOnce({ suggestions: ['a'], successful_count: 2, failed_count: 0, total_processed: 2 })
-      .mockResolvedValueOnce({ suggestions: ['b','c'], successful_count: 3, failed_count: 0, total_processed: 3 });
+    jest.spyOn(bulkOperationsService, 'bulkGenerateKeywords')
+      .mockResolvedValueOnce({ suggestions: ['a'], successful_count: 2, failed_count: 0, total_processed: 2 })
+      .mockResolvedValueOnce({ suggestions: ['b','c'], successful_count: 3, failed_count: 0, total_processed: 3 })
+      .mockResolvedValue({ suggestions: [], successful_count: 0, failed_count: 0, total_processed: 1 });
     const res = await memoryService.bulkGenerateKeywordsBatched(ids, { batchSize: 2, onProgress });
     expect(res.successful_count).toBe(5);
     expect(res.suggestions).toEqual(['a','b','c']);
@@ -107,7 +98,7 @@ describe('memoryService batched helpers', () => {
   test('bulkApplyKeywordsBatched aggregates results and progress', async () => {
     const apps = Array.from({ length: 4 }, (_, i) => ({ memory_block_id: `m${i+1}`, keywords: ['x'] }));
     const onProgress = jest.fn();
-    jest.spyOn(memoryService, 'bulkApplyKeywords').mockResolvedValueOnce({ results: ['r1'], successful_count: 2, failed_count: 0 })
+    jest.spyOn(bulkOperationsService, 'bulkApplyKeywords').mockResolvedValueOnce({ results: ['r1'], successful_count: 2, failed_count: 0 })
       .mockResolvedValueOnce({ results: ['r2','r3'], successful_count: 2, failed_count: 0 });
     const res = await memoryService.bulkApplyKeywordsBatched(apps, { batchSize: 2, onProgress });
     expect(res.successful_count).toBe(4);
@@ -115,4 +106,3 @@ describe('memoryService batched helpers', () => {
     expect(onProgress).toHaveBeenCalledTimes(2);
   });
 });
-

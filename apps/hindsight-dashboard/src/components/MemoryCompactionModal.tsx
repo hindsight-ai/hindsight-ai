@@ -138,14 +138,14 @@ const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-6">
           {!compactionResult ? (
             /* Initial State - Show original content and compaction options */
             <div className="space-y-6">
               {/* Original Content */}
               <div>
                 <h3 className="text-lg font-medium text-gray-800 mb-3">Current Memory Content</h3>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-64 overflow-y-auto">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-64 overflow-y-auto overscroll-contain">
                   <div className="space-y-4">
                     {memoryBlock.content && (
                       <div>
@@ -255,7 +255,7 @@ const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
                     <span className="w-3 h-3 bg-orange-500 rounded-full mr-2"></span>
                     Current Version
                   </h3>
-                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 max-h-96 overflow-y-auto overscroll-contain">
                     <div className="space-y-4">
                       {compactionResult.original_content && (
                         <div>
@@ -283,7 +283,7 @@ const MemoryCompactionModal: React.FC<MemoryCompactionModalProps> = ({
                     <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
                     Compacted Version
                   </h3>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-h-96 overflow-y-auto overscroll-contain">
                     <div className="space-y-4">
                       {compactionResult.compressed_content && (
                         <div>

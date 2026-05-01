@@ -43,8 +43,7 @@ This will start the FastAPI application, typically accessible at `http://localho
 
 -   `core/api/`: Contains the FastAPI application entry point and API routes.
 -   `core/db/`: Houses database models (SQLAlchemy ORM), database session management, and CRUD operations.
--   `core/core/`: Legacy/back-compat shims and select long-running workers.
--   `core/workers/`: Background/long-running tasks (e.g., consolidation worker, async bulk operations shim).
+-   `core/workers/`: Background/long-running tasks (e.g., consolidation worker).
 -   `core/utils/`: Lightweight utilities (e.g., keyword extraction heuristics, role/scope constants).
 
 ## 🔎 Keyword Extraction

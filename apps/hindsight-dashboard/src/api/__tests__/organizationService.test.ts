@@ -1,17 +1,5 @@
 import organizationService from '../organizationService';
-
-// Mock notificationService to verify 401 handling
-jest.mock('../../services/notificationService', () => ({
-  __esModule: true,
-  default: { 
-    show401Error: jest.fn(), 
-    showWarning: jest.fn(),
-    showError: jest.fn(),
-    showSuccess: jest.fn(),
-    showNetworkError: jest.fn(),
-    showApiError: jest.fn()
-  },
-}));
+import { AuthenticationError } from '../errors';
 
 describe('organizationService', () => {
   afterEach(() => { jest.restoreAllMocks(); });
@@ -29,13 +17,14 @@ describe('organizationService', () => {
     });
 
     test('handles HTTP errors correctly', async () => {
-      jest.spyOn(global, 'fetch').mockResolvedValue({ 
-        ok: false, 
-        status: 401, 
-        text: jest.fn().mockResolvedValue('Unauthorized') 
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: jest.fn().mockResolvedValue('Unauthorized')
       } as any);
-      
-      await expect(organizationService.getOrganizations()).rejects.toThrow('HTTP error 401');
+
+      await expect(organizationService.getOrganizations()).rejects.toThrow(AuthenticationError);
+      await expect(organizationService.getOrganizations()).rejects.toThrow('Authentication required');
     });
   });
 

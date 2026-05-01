@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 import uuid
-from core.core.consolidation_worker import (
+from core.workers.consolidation_worker import (
     fetch_memory_blocks,
     analyze_duplicates_with_fallback,
     store_consolidation_suggestions,
@@ -12,7 +12,7 @@ from core.core.consolidation_worker import (
 
 class TestConsolidationWorker:
 
-    @patch('core.core.consolidation_worker.get_all_memory_blocks')
+    @patch('core.workers.consolidation_worker.get_all_memory_blocks')
     def test_fetch_memory_blocks_success(self, mock_get_all):
         # Mock memory blocks as objects with __dict__
         class MockBlock:
@@ -34,7 +34,7 @@ class TestConsolidationWorker:
         assert 'content' in result[0]
         mock_get_all.assert_called_once_with(db, skip=0, limit=100)
 
-    @patch('core.core.consolidation_worker.get_all_memory_blocks')
+    @patch('core.workers.consolidation_worker.get_all_memory_blocks')
     def test_fetch_memory_blocks_empty(self, mock_get_all):
         mock_get_all.return_value = []
 
@@ -84,7 +84,7 @@ class TestConsolidationWorker:
         # Should find no groups
         assert len(result) == 0
 
-    @patch('core.core.consolidation_worker.create_consolidation_suggestion')
+    @patch('core.workers.consolidation_worker.create_consolidation_suggestion')
     @patch('core.db.models.ConsolidationSuggestion')
     def test_store_consolidation_suggestions_success(self, mock_suggestion_model, mock_create):
         db = Mock()
@@ -111,7 +111,7 @@ class TestConsolidationWorker:
         mock_create.assert_called_once()
         db.commit.assert_called_once()
 
-    @patch('core.core.consolidation_worker.create_consolidation_suggestion')
+    @patch('core.workers.consolidation_worker.create_consolidation_suggestion')
     @patch('core.db.models.ConsolidationSuggestion')
     def test_store_consolidation_suggestions_overlap(self, mock_suggestion_model, mock_create):
         db = Mock()
@@ -142,7 +142,7 @@ class TestConsolidationWorker:
         assert result == 0
         mock_create.assert_not_called()
 
-    @patch('core.core.consolidation_worker.create_consolidation_suggestion')
+    @patch('core.workers.consolidation_worker.create_consolidation_suggestion')
     @patch('core.db.models.ConsolidationSuggestion')
     def test_store_consolidation_suggestions_missing_content(self, mock_suggestion_model, mock_create):
         db = Mock()
@@ -168,10 +168,10 @@ class TestConsolidationWorker:
         assert result == 0
         mock_create.assert_not_called()
 
-    @patch('core.core.consolidation_worker.fetch_memory_blocks')
-    @patch('core.core.consolidation_worker.analyze_duplicates_with_llm')
-    @patch('core.core.consolidation_worker.store_consolidation_suggestions')
-    @patch('core.core.consolidation_worker.get_db')
+    @patch('core.workers.consolidation_worker.fetch_memory_blocks')
+    @patch('core.workers.consolidation_worker.analyze_duplicates_with_llm')
+    @patch('core.workers.consolidation_worker.store_consolidation_suggestions')
+    @patch('core.workers.consolidation_worker.get_db')
     def test_run_consolidation_analysis_full_cycle(self, mock_get_db, mock_store, mock_analyze, mock_fetch):
         # Mock database
         db = Mock()
@@ -205,10 +205,10 @@ class TestConsolidationWorker:
         mock_store.assert_called_once()
         db.close.assert_called_once()
 
-    @patch('core.core.consolidation_worker.fetch_memory_blocks')
-    @patch('core.core.consolidation_worker.analyze_duplicates_with_llm')
-    @patch('core.core.consolidation_worker.store_consolidation_suggestions')
-    @patch('core.core.consolidation_worker.get_db')
+    @patch('core.workers.consolidation_worker.fetch_memory_blocks')
+    @patch('core.workers.consolidation_worker.analyze_duplicates_with_llm')
+    @patch('core.workers.consolidation_worker.store_consolidation_suggestions')
+    @patch('core.workers.consolidation_worker.get_db')
     def test_run_consolidation_analysis_no_blocks(self, mock_get_db, mock_store, mock_analyze, mock_fetch):
         # Mock database
         db = Mock()
@@ -233,7 +233,7 @@ class TestConsolidationWorker:
         mock_client.models.generate_content.return_value = mock_response
         
         memory_blocks = [{"id": "1", "content": "test", "lessons_learned": "lesson", "keywords": []}]
-        with patch('core.core.consolidation_worker.analyze_duplicates_with_fallback', return_value=[{"group_id": "test-group", "memory_ids": ["1"]}]):
+        with patch('core.workers.consolidation_worker.analyze_duplicates_with_fallback', return_value=[{"group_id": "test-group", "memory_ids": ["1"]}]):
             with patch.dict('os.environ', {'LLM_MODEL_NAME': 'test-model'}):
                 result = analyze_duplicates_with_llm(memory_blocks, "fake_key")
                 assert len(result) == 1
@@ -242,7 +242,7 @@ class TestConsolidationWorker:
     @patch('google.genai.Client')
     def test_analyze_duplicates_with_llm_no_model_name(self, mock_client_class):
         memory_blocks = [{"id": "1", "content": "test"}]
-        with patch('core.core.consolidation_worker.analyze_duplicates_with_fallback', return_value=[{"group_id": "test", "memory_ids": ["1"]}]):
+        with patch('core.workers.consolidation_worker.analyze_duplicates_with_fallback', return_value=[{"group_id": "test", "memory_ids": ["1"]}]):
             with patch.dict('os.environ', {}, clear=True):
                 result = analyze_duplicates_with_llm(memory_blocks, "fake_key")
                 # Should return the original groups without LLM suggestions

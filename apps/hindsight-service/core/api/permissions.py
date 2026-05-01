@@ -27,18 +27,18 @@ def get_org_membership(org_id, current_user: Optional[Dict[str, Any]]):
     """Get organization membership for a user with proper error handling."""
     if not current_user:
         return None
-    
+
     if org_id is None:
         return None
-    
+
     try:
         str_id = str(org_id)
-        by_org = current_user.get("memberships_by_org", {}) or {}
+        by_org = current_user.memberships_by_org or {}
         m = by_org.get(str_id) or by_org.get(org_id)
         if m:
             return m
-            
-        for item in current_user.get("memberships", []) or []:
+
+        for item in current_user.memberships or []:
             try:
                 if item and item.get("organization_id") in (str_id, org_id, getattr(org_id, "hex", None)):
                     return item
@@ -62,14 +62,14 @@ def can_read(resource, current_user: Optional[Dict[str, Any]]) -> bool:
         # Public data is always readable
         if getattr(resource, "visibility_scope", None) == SCOPE_PUBLIC:
             return True
-            
+
         if current_user is None:
             return False
-            
-        if current_user.get("is_superadmin"):
+
+        if current_user.is_superadmin:
             return True
 
-        uid = current_user.get("id")
+        uid = current_user.id
         visibility_scope = getattr(resource, "visibility_scope", None)
         
         if visibility_scope == SCOPE_PERSONAL:
@@ -95,12 +95,12 @@ def can_write(resource, current_user: Optional[Dict[str, Any]]) -> bool:
     """Check if user can write to a resource with proper validation."""
     if resource is None or current_user is None:
         return False
-    
+
     try:
-        if current_user.get("is_superadmin"):
+        if current_user.is_superadmin:
             return True
-            
-        uid = current_user.get("id")
+
+        uid = current_user.id
         visibility_scope = getattr(resource, "visibility_scope", None)
         
         if visibility_scope == SCOPE_PERSONAL:
@@ -132,9 +132,9 @@ def is_member_of_org(org_id, current_user: Optional[Dict[str, Any]], *, db=None,
     """Return True if user is member of org. Simplified with optional DB fallback."""
     if not current_user or org_id is None:
         return False
-    
+
     # Superadmin bypass - superadmins are considered members of all orgs
-    if current_user.get("is_superadmin"):
+    if current_user.is_superadmin:
         return True
         
     # Check in-memory membership first
@@ -159,9 +159,9 @@ def can_manage_org_effective(org_id, current_user: Optional[Dict[str, Any]], *, 
     """Check if user can manage organization with optional DB fallback. Replaces can_manage_org for all uses."""
     if current_user is None or org_id is None:
         return False
-        
+
     try:
-        if current_user.get("is_superadmin"):
+        if current_user.is_superadmin:
             return True
             
         # Check in-memory membership first
@@ -189,20 +189,20 @@ def can_move_scope(resource, target_scope: str, target_org_id, current_user: Opt
     """Check if user can move a resource to a target scope with proper validation."""
     if current_user is None or resource is None or not target_scope:
         return False
-        
+
     try:
-        if current_user.get("is_superadmin"):
+        if current_user.is_superadmin:
             return True
-            
+
         if target_scope == SCOPE_ORGANIZATION:
             if target_org_id is None:
                 return False
             # Require admin (or owner) of target org
             return can_manage_org(target_org_id, current_user)
-            
+
         if target_scope == SCOPE_PERSONAL:
             # Only the resource owner can move to personal scope
-            return getattr(resource, "owner_user_id", None) == current_user.get("id")
+            return getattr(resource, "owner_user_id", None) == current_user.id
             
         if target_scope == SCOPE_PUBLIC:
             # Only superadmin can move to public (handled above)

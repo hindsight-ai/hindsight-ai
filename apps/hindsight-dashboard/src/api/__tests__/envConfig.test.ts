@@ -24,7 +24,7 @@ describe('API base URL config and https upgrade', () => {
 
     // Trigger a GET to confirm that upgraded URL was used
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
-    await mod.getBuildInfo();
+    await mod.default.getBuildInfo();
     const calledUrl = global.fetch.mock.calls[0][0];
     expect(calledUrl.startsWith('https://')).toBe(true);
   });
@@ -49,7 +49,7 @@ describe('API base URL config and https upgrade', () => {
     jest.resetModules();
     const mod = await import('../memoryService');
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
-    await mod.getBuildInfo();
+    await mod.default.getBuildInfo();
     const calledUrl = global.fetch.mock.calls[0][0];
     expect(calledUrl).toContain('https://env-api2.example.com');
   });

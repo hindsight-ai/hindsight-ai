@@ -3,7 +3,13 @@ import Portal from './Portal';
 
 interface GetStartedModalProps {
   isOpen: boolean;
+  // Transient close: X button, Escape, backdrop click. Does NOT mark
+  // the guide as seen — so an accidental Esc on first load doesn't
+  // permanently silence the modal for that user.
   onClose: () => void;
+  // Acknowledged dismiss: "Got it" button. Caller is expected to mark
+  // the guide as seen so it doesn't auto-open again.
+  onAcknowledge: () => void;
 }
 
 type ClientStatus = 'ready' | 'comingSoon';
@@ -54,7 +60,7 @@ interface WorkflowGroup {
 
 const codexConfigSnippet = `[mcp_servers.hindsight-mcp]
 command = "hindsight-mcp"
-env = { "HINDSIGHT_API_TOKEN" = "<yourtoken>", "DEFAULT_AGENT_ID" = "<youragentid>", "DEFAULT_CONVERSATION_ID" = "f47ac10b-58cc-4372-a567-0123456789ab" }`;
+env = { "HINDSIGHT_API_TOKEN" = "<yourtoken>", "DEFAULT_AGENT_ID" = "<youragentid>" }`;
 
 const workflowExample = `# Workflow Guidance
 
@@ -70,8 +76,7 @@ const geminiConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       }
     }
   }
@@ -82,8 +87,7 @@ const claudeConfigSnippet = `claude mcp add-json hindsight-mcp '{
   "command": "hindsight-mcp",
   "env": {
     "HINDSIGHT_API_TOKEN": "<yourtoken>",
-    "DEFAULT_AGENT_ID": "<youragentid>",
-    "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+    "DEFAULT_AGENT_ID": "<youragentid>"
   }
 }'`;
 
@@ -93,8 +97,7 @@ const clineConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       },
       "disabled": false
     }
@@ -109,8 +112,7 @@ const roocodeConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       }
     }
   ]
@@ -123,8 +125,7 @@ const copilotConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       }
     }
   }
@@ -136,8 +137,7 @@ const forgecodeConfigSnippet = `{
       "command": "hindsight-mcp",
       "env": {
         "HINDSIGHT_API_TOKEN": "<yourtoken>",
-        "DEFAULT_AGENT_ID": "<youragentid>",
-        "DEFAULT_CONVERSATION_ID": "f47ac10b-58cc-4372-a567-0123456789ab"
+        "DEFAULT_AGENT_ID": "<youragentid>"
       }
     }
   }
@@ -145,7 +145,7 @@ const forgecodeConfigSnippet = `{
 
 const openhandsConfigSnippet = `[mcp]
 stdio_servers = [
-  {name = "hindsight-mcp", command = "hindsight-mcp", env = { HINDSIGHT_API_TOKEN = "<yourtoken>", DEFAULT_AGENT_ID = "<youragentid>", DEFAULT_CONVERSATION_ID = "f47ac10b-58cc-4372-a567-0123456789ab" }}
+  {name = "hindsight-mcp", command = "hindsight-mcp", env = { HINDSIGHT_API_TOKEN = "<yourtoken>", DEFAULT_AGENT_ID = "<youragentid>" }}
 ]`;
 
 const sharedMarkdownDetail = 'Document retrieval-first and reflection-last workflow rules using the template below so teammates stay in parity.';
@@ -216,7 +216,19 @@ const workflowGroups: WorkflowGroup[] = [
   },
 ];
 
-const GetStartedModal: React.FC<GetStartedModalProps> = ({ isOpen, onClose }) => {
+const GetStartedModal: React.FC<GetStartedModalProps> = ({ isOpen, onClose, onAcknowledge }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   const clientOptions = useMemo((): ClientInfo[] => {
     const clients: ClientInfo[] = [
       {
@@ -466,12 +478,6 @@ const GetStartedModal: React.FC<GetStartedModalProps> = ({ isOpen, onClose }) =>
     }
   };
 
-  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-      onClose();
-    }
-  };
-
   const renderSnippet = (snippet: Snippet) => (
     <div key={snippet.id} className="mt-4">
       <div className="flex items-center justify-between gap-3">
@@ -575,8 +581,12 @@ const GetStartedModal: React.FC<GetStartedModalProps> = ({ isOpen, onClose }) =>
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-50 flex items-center justify-center px-4" onClick={handleBackdropClick}>
-        <div className="absolute inset-0 bg-gray-900/70" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div
+          className="absolute inset-0 bg-gray-900/70"
+          onClick={onClose}
+          aria-hidden="true"
+        />
         <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden">
           <header className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-500/10 to-blue-500/10">
             <div>
@@ -595,7 +605,7 @@ const GetStartedModal: React.FC<GetStartedModalProps> = ({ isOpen, onClose }) =>
             </button>
           </header>
 
-          <div className="px-6 py-6 space-y-8 overflow-y-auto max-h-[80vh]">
+          <div className="px-6 py-6 space-y-8 overflow-y-auto overscroll-contain max-h-[80vh]">
             <section>
               <h3 className="text-lg font-semibold text-gray-900">Prepare your Hindsight workspace</h3>
               <ol className="mt-4 space-y-4 text-sm text-gray-700 list-decimal list-inside">
@@ -647,7 +657,7 @@ const GetStartedModal: React.FC<GetStartedModalProps> = ({ isOpen, onClose }) =>
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={onAcknowledge}
                 className="inline-flex items-center justify-center rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition"
               >
                 Got it

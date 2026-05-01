@@ -1,10 +1,5 @@
 import agentService from '../agentService';
 
-jest.mock('../../services/notificationService', () => ({
-  __esModule: true,
-  default: { show401Error: jest.fn(), showWarning: jest.fn() },
-}));
-
 describe('agentService full coverage', () => {
   beforeEach(() => { global.fetch.mockReset && global.fetch.mockReset(); });
 

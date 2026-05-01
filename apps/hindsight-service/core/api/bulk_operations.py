@@ -30,7 +30,8 @@ def get_organization_inventory(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     if not can_manage_org(org_id, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -53,7 +54,8 @@ async def bulk_move(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
 
     # Validation first (tests expect 422 over 403 when payload malformed)
     dry_run = payload.get("dry_run", True)
@@ -68,6 +70,24 @@ async def bulk_move(
     if destination_organization_id and destination_owner_user_id:
         raise HTTPException(status_code=422, detail="Cannot specify both destination_organization_id and destination_owner_user_id")
 
+    # Recipient consent: a non-superadmin actor may only move data to *their own*
+    # personal scope. Otherwise the bulk-move endpoint can be used to dump org
+    # data into an unrelated user's personal scope without that user's knowledge.
+    if destination_owner_user_id:
+        try:
+            dest_user_uuid = (
+                destination_owner_user_id if isinstance(destination_owner_user_id, uuid.UUID)
+                else uuid.UUID(str(destination_owner_user_id))
+            )
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid destination_owner_user_id")
+        if not current_user.is_superadmin:
+            if dest_user_uuid != getattr(user, "id", None):
+                raise HTTPException(
+                    status_code=403,
+                    detail="destination_owner_user_id must match the requesting user (only superadmins may move to a different user's personal scope)",
+                )
+
     # Helper: robust membership check that tolerates different shapes and definitively verifies via DB.
     def _has_membership(_org_id) -> bool:
         try:
@@ -76,7 +96,7 @@ async def bulk_move(
                 return True
             try:
                 sid = str(_org_id)
-                for m in (current_user.get("memberships") or []):
+                for m in (current_user.memberships or []):
                     oid = m.get("organization_id")
                     if oid and str(oid) == sid:
                         return True
@@ -135,21 +155,19 @@ async def bulk_move(
         _pytest_mode = False
 
     if dry_run:
-        # For planning, enforce destination membership when destination org is specified;
-        # otherwise require source org membership. Use only the provided current_user context
-        # to avoid cross-session DB flakiness.
-        is_super = bool(current_user.get("is_superadmin"))
+        # Planning requires source-org membership unconditionally — otherwise an
+        # outsider with dest-org membership could probe `agent_count`,
+        # `memory_block_count`, `keyword_count`, and name conflicts of any
+        # source org. When a destination org is specified, also require
+        # destination-org membership.
+        is_super = bool(current_user.is_superadmin)
+        memberships_by_org = current_user.memberships_by_org or {}
+        if not (is_super or memberships_by_org.get(str(org_id))):
+            raise HTTPException(status_code=403, detail="Forbidden")
         if destination_organization_id:
             dest_id = uuid.UUID(str(destination_organization_id)) if not isinstance(destination_organization_id, uuid.UUID) else destination_organization_id
-            sid = str(dest_id)
-            mem = (current_user.get("memberships_by_org") or {}).get(sid)
-            if not (is_super or mem):
+            if not (is_super or memberships_by_org.get(str(dest_id))):
                 raise HTTPException(status_code=403, detail="Forbidden to move resources to the destination organization")
-        else:
-            sid = str(org_id)
-            mem = (current_user.get("memberships_by_org") or {}).get(sid)
-            if not (is_super or mem):
-                raise HTTPException(status_code=403, detail="Forbidden")
     else:
         # For actual execution, we require manage rights.
         if not can_manage_org_effective(org_id, current_user, db=db, user_id=user.id, allow_db_fallback=True):
@@ -248,17 +266,6 @@ async def bulk_move(
 
     return {"operation_id": bulk_operation.id, "status": "started"}
 
-@router.get("/admin/operations/{operation_id}")
-def get_bulk_operation_admin_status(
-    operation_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    user_context = Depends(get_current_user_context),
-):
-    # Light implementation to satisfy tests expecting 403 for regular users
-    user, current_user = user_context
-    # Current test expectations: non-existent or unauthorized access -> 403 uniformly
-    raise HTTPException(status_code=403, detail="Forbidden")
-
 @router.post("/organizations/{org_id}/bulk-delete")
 async def bulk_delete(
     org_id: uuid.UUID,
@@ -268,13 +275,18 @@ async def bulk_delete(
     x_auth_request_email: Optional[str] = Header(default=None),
     x_forwarded_email: Optional[str] = Header(default=None),
 ):
-    user, current_user = user_context
+    user = user_context.user
+    current_user = user_context.current
     dry_run = payload.get("dry_run", True)
-    # Allow dry-run for members; require manage rights for execution
+    # Both dry-run (planning) and execution require source-org membership;
+    # execution additionally requires manage rights. Planning that bypasses
+    # membership leaks per-resource counts to outsiders.
+    is_super = bool(current_user.is_superadmin)
     if dry_run:
-        # Allow planning without strict membership enforcement to enable safe previews.
-        # Execution (non-dry-run) remains protected below.
-        pass
+        sid = str(org_id)
+        mem = (current_user.memberships_by_org or {}).get(sid)
+        if not (is_super or mem):
+            raise HTTPException(status_code=403, detail="Forbidden")
     else:
         if not can_manage_org_effective(org_id, current_user, db=db, user_id=user.id, allow_db_fallback=True):
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -333,8 +345,9 @@ def get_operation_status(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
-    if not current_user.get("is_superadmin"):
+    user = user_context.user
+    current_user = user_context.current
+    if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     operation = crud.get_bulk_operation(db, bulk_operation_id=operation_id)
@@ -362,8 +375,9 @@ def get_operations_status(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
-    if not current_user.get("is_superadmin"):
+    user = user_context.user
+    current_user = user_context.current
+    if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     operations = crud.get_bulk_operations(db)
@@ -390,8 +404,9 @@ def cancel_operation(
     db: Session = Depends(get_db),
     user_context = Depends(get_current_user_context),
 ):
-    user, current_user = user_context
-    if not current_user.get("is_superadmin"):
+    user = user_context.user
+    current_user = user_context.current
+    if not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     operation = crud.get_bulk_operation(db, bulk_operation_id=operation_id)

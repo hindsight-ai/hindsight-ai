@@ -136,7 +136,7 @@ const MemoryBlockDetailModal: React.FC<MemoryBlockDetailModalProps> = ({ blockId
 
   return createPortal(
     <div 
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm overflow-y-auto h-full w-full z-[9999] flex items-start justify-center p-4"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm overflow-y-auto overscroll-contain h-full w-full z-[9999] flex items-start justify-center p-4"
       onClick={handleBackdropClick}
     >
       <div className="relative mt-8 mx-auto p-5 border border-gray-200 w-11/12 max-w-4xl shadow-xl rounded-lg bg-white animate-in fade-in-0 zoom-in-95 duration-200"
@@ -157,7 +157,7 @@ const MemoryBlockDetailModal: React.FC<MemoryBlockDetailModalProps> = ({ blockId
           </div>
 
           {/* Content */}
-          <div className="max-h-[70vh] overflow-y-auto"
+          <div className="max-h-[70vh] overflow-y-auto overscroll-contain"
                style={{ maxHeight: 'calc(90vh - 200px)' }}
           >
             {loading ? (
@@ -231,7 +231,7 @@ const MemoryBlockDetailModal: React.FC<MemoryBlockDetailModalProps> = ({ blockId
                       
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Keywords</label>
-                        <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2">
+                        <div className="space-y-2 max-h-32 overflow-y-auto overscroll-contain border border-gray-200 rounded-md p-2">
                           {availableKeywords.map(keyword => (
                             <label key={keyword.id} className="flex items-center">
                               <input

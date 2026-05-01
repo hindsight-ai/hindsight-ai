@@ -3,6 +3,7 @@ import uuid
 
 from core.search.evaluation import evaluate_cases, load_cases_from_file
 from core.db import models
+from core.api.deps import CurrentUserContext
 
 
 def _create_agent(client):
@@ -42,12 +43,16 @@ def test_query_expansion_evaluation_improves_recall(db_session, client, tmp_path
     dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
 
     user = db_session.query(models.User).filter(models.User.email == "expander@example.com").one()
-    current_user = {
-        "id": user.id,
-        "is_superadmin": bool(user.is_superadmin),
-        "memberships": [],
-        "memberships_by_org": {},
-    }
+    current_user = CurrentUserContext(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        is_superadmin=bool(user.is_superadmin),
+        is_beta_access_admin=False,
+        memberships=[],
+        memberships_by_org={},
+        beta_access_status=None,
+    )
 
     cases = load_cases_from_file(str(dataset_path))
     summary = evaluate_cases(db_session, cases, current_user=current_user)

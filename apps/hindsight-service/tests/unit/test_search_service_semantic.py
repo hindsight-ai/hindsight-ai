@@ -5,6 +5,7 @@ import pytest
 
 from core.services.search_service import SearchService
 from core.services import search_service
+from core.services.search import semantic_strategy
 
 
 @pytest.fixture(scope="session")
@@ -28,9 +29,9 @@ def _fake_basic_results(*args, **kwargs):
 
 def test_semantic_search_falls_back_when_embedding_disabled(monkeypatch):
     service = SearchService()
-    monkeypatch.setattr(service, "_basic_search_fallback", MagicMock(side_effect=_fake_basic_results))
+    monkeypatch.setattr(service._semantic._basic, "search", MagicMock(side_effect=_fake_basic_results))
     fake_embed_service = SimpleNamespace(is_enabled=False)
-    monkeypatch.setattr(search_service, "get_embedding_service", lambda: fake_embed_service)
+    monkeypatch.setattr(semantic_strategy, "get_embedding_service", lambda: fake_embed_service)
 
     results, meta = service.search_memory_blocks_semantic(db=SimpleNamespace(), query="hello")
 
@@ -41,10 +42,10 @@ def test_semantic_search_falls_back_when_embedding_disabled(monkeypatch):
 
 def test_semantic_search_falls_back_when_embedding_missing(monkeypatch):
     service = SearchService()
-    monkeypatch.setattr(service, "_basic_search_fallback", MagicMock(side_effect=_fake_basic_results))
+    monkeypatch.setattr(service._semantic._basic, "search", MagicMock(side_effect=_fake_basic_results))
 
     fake_embed_service = SimpleNamespace(is_enabled=True, embed_text=lambda text: None)
-    monkeypatch.setattr(search_service, "get_embedding_service", lambda: fake_embed_service)
+    monkeypatch.setattr(semantic_strategy, "get_embedding_service", lambda: fake_embed_service)
 
     results, meta = service.search_memory_blocks_semantic(db=SimpleNamespace(), query="hello")
 
@@ -54,10 +55,10 @@ def test_semantic_search_falls_back_when_embedding_missing(monkeypatch):
 
 def test_semantic_search_falls_back_for_non_postgres(monkeypatch):
     service = SearchService()
-    monkeypatch.setattr(service, "_basic_search_fallback", MagicMock(side_effect=_fake_basic_results))
+    monkeypatch.setattr(service._semantic._basic, "search", MagicMock(side_effect=_fake_basic_results))
 
     fake_embed_service = SimpleNamespace(is_enabled=True, embed_text=lambda text: [0.1, 0.2])
-    monkeypatch.setattr(search_service, "get_embedding_service", lambda: fake_embed_service)
+    monkeypatch.setattr(semantic_strategy, "get_embedding_service", lambda: fake_embed_service)
 
     fake_db = SimpleNamespace(bind=SimpleNamespace(dialect=SimpleNamespace(name="sqlite")))
 
@@ -69,10 +70,10 @@ def test_semantic_search_falls_back_for_non_postgres(monkeypatch):
 
 def test_semantic_search_handles_query_failure(monkeypatch):
     service = SearchService()
-    monkeypatch.setattr(service, "_basic_search_fallback", MagicMock(side_effect=_fake_basic_results))
+    monkeypatch.setattr(service._semantic._basic, "search", MagicMock(side_effect=_fake_basic_results))
 
     fake_embed_service = SimpleNamespace(is_enabled=True, embed_text=lambda text: [0.1, 0.2])
-    monkeypatch.setattr(search_service, "get_embedding_service", lambda: fake_embed_service)
+    monkeypatch.setattr(semantic_strategy, "get_embedding_service", lambda: fake_embed_service)
 
     class FakeQuery:
         def filter(self, *args, **kwargs):
@@ -93,7 +94,7 @@ def test_semantic_search_handles_query_failure(monkeypatch):
     )
 
     # Ensure SQLAlchemy cast is a no-op to simplify the test
-    monkeypatch.setattr(search_service, "cast", lambda expr, typ: expr)
+    monkeypatch.setattr(semantic_strategy, "cast", lambda expr, typ: expr)
 
     results, meta = service.search_memory_blocks_semantic(db=fake_db, query="hello")
 
@@ -106,7 +107,7 @@ def test_semantic_search_interprets_threshold(monkeypatch):
 
     # bypass embed service to reach threshold logic
     fake_embed_service = SimpleNamespace(is_enabled=True, embed_text=lambda text: [0.1, 0.2])
-    monkeypatch.setattr(search_service, "get_embedding_service", lambda: fake_embed_service)
+    monkeypatch.setattr(semantic_strategy, "get_embedding_service", lambda: fake_embed_service)
 
     # build a minimal in-memory setup that returns a single result with distance 0.2
     class FakeQuery:
@@ -151,8 +152,8 @@ def test_semantic_search_interprets_threshold(monkeypatch):
         query=lambda *args, **kwargs: FakeQuery(),
     )
 
-    monkeypatch.setattr(search_service, "cast", lambda expr, typ: expr)
-    monkeypatch.setattr(search_service, "_create_memory_block_with_score", lambda block, score, search_type, explanation, extras: {"score": score, "extras": extras})
+    monkeypatch.setattr(semantic_strategy, "cast", lambda expr, typ: expr)
+    monkeypatch.setattr(semantic_strategy, "_create_memory_block_with_score", lambda block, score, search_type, explanation, extras: {"score": score, "extras": extras})
 
     results, meta = service.search_memory_blocks_semantic(db=fake_db, query="hello", similarity_threshold=0.7)
 

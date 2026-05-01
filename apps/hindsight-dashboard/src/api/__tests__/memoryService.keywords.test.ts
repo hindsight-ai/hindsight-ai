@@ -1,9 +1,5 @@
 import memoryService from '../memoryService';
-
-jest.mock('../../services/notificationService', () => ({
-  __esModule: true,
-  default: { show401Error: jest.fn(), showWarning: jest.fn() },
-}));
+import { AuthenticationError } from '../errors';
 
 describe('memoryService keyword endpoints', () => {
   beforeEach(() => { global.fetch.mockReset && global.fetch.mockReset(); });
@@ -18,11 +14,10 @@ describe('memoryService keyword endpoints', () => {
     expect(opts.credentials).toBe('include');
   });
 
-  test('getKeywords 401 triggers notification', async () => {
-    const notification = require('../../services/notificationService').default;
+  test('getKeywords 401 throws AuthenticationError', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 401 });
+    await expect(memoryService.getKeywords()).rejects.toThrow(AuthenticationError);
     await expect(memoryService.getKeywords()).rejects.toThrow('Authentication required');
-    expect(notification.show401Error).toHaveBeenCalled();
   });
 
   test('createKeyword POSTs JSON', async () => {

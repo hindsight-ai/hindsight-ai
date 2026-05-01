@@ -1,19 +1,21 @@
 import uuid
 import itertools
 from core.db import models, crud
+from core.api.deps import CurrentUserContext
 
-# Helper to build current_user dict
 
 def _user_ctx(user, memberships=None, is_superadmin=False):
     memberships = memberships or []
-    return {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "is_superadmin": is_superadmin,
-        "memberships": memberships,
-        "memberships_by_org": {m["organization_id"]: m for m in memberships},
-    }
+    return CurrentUserContext(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        is_superadmin=is_superadmin,
+        is_beta_access_admin=False,
+        memberships=memberships,
+        memberships_by_org={m["organization_id"]: m for m in memberships},
+        beta_access_status=None,
+    )
 
 
 

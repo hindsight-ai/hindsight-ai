@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import organizationService, { Organization, OrganizationMember } from '../api/organizationService';
 import { useAuth } from './AuthContext';
+import { setScopeProvider } from '../api/scopeProvider';
 
 interface OrganizationContextType {
   currentOrganization: Organization | null;
@@ -76,10 +77,6 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
     setIsPublicMode(false);
     localStorage.removeItem('selectedOrganizationId');
     localStorage.setItem('selectedScope', 'personal');
-    try {
-      sessionStorage.setItem('ACTIVE_SCOPE', 'personal');
-      sessionStorage.removeItem('ACTIVE_ORG_ID');
-    } catch {}
     try { window.dispatchEvent(new Event('orgScopeChanged')); } catch {}
   };
 
@@ -106,10 +103,6 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
       setIsPublicMode(false);
       localStorage.setItem('selectedOrganizationId', orgId);
       localStorage.setItem('selectedScope', 'organization');
-      try {
-        sessionStorage.setItem('ACTIVE_SCOPE', 'organization');
-        sessionStorage.setItem('ACTIVE_ORG_ID', orgId);
-      } catch {}
       try { window.dispatchEvent(new Event('orgScopeChanged')); } catch {}
     } catch (err) {
       console.error('Failed to switch to organization:', err);
@@ -120,19 +113,59 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
     }
   };
 
-  // Load organizations when user authenticates and auth is not loading
+  // Track previous user email so we can detect user swaps (auth swap without
+  // an explicit logout, e.g. dev-mode header change). Surfaced by failure-mode
+  // analysis: without this the previous user's localStorage scope leaks into
+  // the next user's session.
+  const previousUserEmailRef = useRef<string | undefined>(undefined);
+
+  // Load organizations when user authenticates and auth is not loading.
+  // Also clear persisted scope on logout OR user-swap to avoid scope leak
+  // between users.
   useEffect(() => {
+    const previousEmail = previousUserEmailRef.current;
+    const currentEmail = user?.email;
+    const userSwapped = previousEmail !== undefined && currentEmail !== undefined && previousEmail !== currentEmail;
+    previousUserEmailRef.current = currentEmail;
+
+    if (userSwapped) {
+      try {
+        localStorage.removeItem('selectedScope');
+        localStorage.removeItem('selectedOrganizationId');
+      } catch {}
+    }
+
     if (!authLoading && user?.authenticated) {
       refreshOrganizations();
     } else {
-      // Clear everything when user logs out or auth is loading
+      // Clear React state when user logs out OR while auth is still loading.
       setCurrentOrganization(null);
       setUserOrganizations([]);
       setCurrentUserMembership(null);
       setIsPersonalMode(true);
       setIsPublicMode(false);
+      // Only clear persisted scope on a DEFINITIVE logout (auth resolved AND
+      // user is unauthenticated). On the very first mount, `authLoading=true`
+      // and `user=null` — entering this branch and wiping localStorage at that
+      // moment destroys any preference the user (or an init script in tests)
+      // just wrote. Wait for auth to settle before deciding.
+      if (!authLoading) {
+        try {
+          localStorage.removeItem('selectedScope');
+          localStorage.removeItem('selectedOrganizationId');
+        } catch {}
+      }
     }
-  }, [user?.authenticated, authLoading]);
+  }, [user?.authenticated, user?.email, authLoading]);
+
+  // Wire the scope provider so HTTP services can read live scope without
+  // touching storage directly. Fires on every scope-affecting state change.
+  useEffect(() => {
+    setScopeProvider(() => ({
+      scope: isPublicMode ? 'public' : isPersonalMode ? 'personal' : 'organization',
+      orgId: currentOrganization?.id ?? undefined,
+    }));
+  }, [isPublicMode, isPersonalMode, currentOrganization?.id]);
 
   const switchToPublic = () => {
     setCurrentOrganization(null);
@@ -141,10 +174,6 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
     setIsPublicMode(true);
     localStorage.removeItem('selectedOrganizationId');
     localStorage.setItem('selectedScope', 'public');
-    try {
-      sessionStorage.setItem('ACTIVE_SCOPE', 'public');
-      sessionStorage.removeItem('ACTIVE_ORG_ID');
-    } catch {}
     try { window.dispatchEvent(new Event('orgScopeChanged')); } catch {}
   };
 

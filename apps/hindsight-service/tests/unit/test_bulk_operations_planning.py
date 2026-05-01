@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from core.api.main import app
 from core.db.database import SessionLocal, engine
 from core.db import models, crud, schemas
+from core.api.deps import CurrentUserContext, UserContext
 
 @pytest.fixture(scope="module")
 def db():
@@ -87,12 +88,16 @@ def test_bulk_move_conflict_detection(client, org_with_user, db):
         {"organization_id": str(org.id), "role": "owner", "can_read": True, "can_write": True},
         {"organization_id": str(dest.id), "role": "owner", "can_read": True, "can_write": True}
     ]
-    fake_current_user = {
-        "id": user.id,
-        "is_superadmin": False,
-        "memberships": fake_memberships,
-        "memberships_by_org": {str(org.id): fake_memberships[0], str(dest.id): fake_memberships[1]},
-    }
+    fake_current_user = CurrentUserContext(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        is_superadmin=False,
+        is_beta_access_admin=False,
+        memberships=fake_memberships,
+        memberships_by_org={str(org.id): fake_memberships[0], str(dest.id): fake_memberships[1]},
+        beta_access_status=None,
+    )
     
     # Override dependency instead of patching
     def mock_get_current_user_context(
@@ -102,7 +107,7 @@ def test_bulk_move_conflict_detection(client, org_with_user, db):
         x_forwarded_user=None,
         x_forwarded_email=None,
     ):
-        return fake_user, fake_current_user
+        return UserContext(user=fake_user, current=fake_current_user)
     
     # Ensure override applies to the exact dependency object used by the router
     from core.api import bulk_operations as bo_mod
@@ -166,17 +171,21 @@ def test_bulk_delete_dry_run_counts(client, org_with_user, db):
     agent = crud.create_agent(db, schemas.AgentCreate(agent_name="mbagent", visibility_scope="organization", organization_id=org.id))
     crud.create_memory_block(db, schemas.MemoryBlockCreate(content="m1", visibility_scope="organization", organization_id=org.id, agent_id=agent.agent_id, conversation_id=uuid.uuid4()))
     
-    # Create mock user context 
+    # Create mock user context
     fake_user = user
     fake_memberships = [
         {"organization_id": str(org.id), "role": "owner", "can_read": True, "can_write": True},
     ]
-    fake_current_user = {
-        "id": user.id,
-        "is_superadmin": False,
-        "memberships": fake_memberships,
-        "memberships_by_org": {str(org.id): fake_memberships[0]},
-    }
+    fake_current_user = CurrentUserContext(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        is_superadmin=False,
+        is_beta_access_admin=False,
+        memberships=fake_memberships,
+        memberships_by_org={str(org.id): fake_memberships[0]},
+        beta_access_status=None,
+    )
     
     # Override dependency instead of patching
     def mock_get_current_user_context(
@@ -186,7 +195,7 @@ def test_bulk_delete_dry_run_counts(client, org_with_user, db):
         x_forwarded_user=None,
         x_forwarded_email=None,
     ):
-        return fake_user, fake_current_user
+        return UserContext(user=fake_user, current=fake_current_user)
     
     from core.api import bulk_operations as bo_mod
     print("[TEST-OVERRIDE ids] deps.get_current_user_context=", id(get_current_user_context))

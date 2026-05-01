@@ -13,6 +13,10 @@ services:
       APP_BASE_URL: ${APP_BASE_URL}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
       DEV_MODE: ${DEV_MODE}
+      # Local-dev fallback in /user-info now defaults OFF in production. The dev
+      # stack still wants it on so a fresh `docker-compose -f docker-compose.dev.yml up`
+      # can serve the dashboard without an oauth2-proxy round-trip.
+      ALLOW_LOCAL_DEV_AUTH: ${ALLOW_LOCAL_DEV_AUTH:-true}
       BUILD_SHA: ${BACKEND_BUILD_SHA}
       BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}
       IMAGE_TAG: ${BACKEND_IMAGE_TAG}
@@ -42,6 +46,14 @@ services:
   # Override the hindsight-dashboard to expose port 3000 directly
   hindsight-dashboard:
     restart: unless-stopped
+    build:
+      context: ./apps/hindsight-dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_VERSION: ${VITE_VERSION:-${FRONTEND_VERSION:-dev}}
+        VITE_BUILD_SHA: ${VITE_BUILD_SHA:-${FRONTEND_BUILD_SHA:-unknown}}
+        VITE_BUILD_TIMESTAMP: ${VITE_BUILD_TIMESTAMP:-${BUILD_TIMESTAMP:-unknown}}
+        VITE_DASHBOARD_IMAGE_TAG: ${VITE_DASHBOARD_IMAGE_TAG:-hindsight-dashboard:local}
     ports:
       - "3000:80"
     environment:

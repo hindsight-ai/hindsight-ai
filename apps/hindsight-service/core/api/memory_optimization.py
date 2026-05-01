@@ -156,7 +156,9 @@ async def get_memory_optimization_suggestions(
     db: Session = Depends(get_db),
     scoped = Depends(get_scoped_user_and_context),
 ):
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     ensure_pat_allows_read(current_user, scope_ctx.organization_id)
     return _compute_suggestions(db, current_user=current_user, scope_ctx=scope_ctx)
 
@@ -175,7 +177,9 @@ async def execute_optimization_suggestion(
     
     try:
         # First, re-analyze to get current suggestions and find the suggestion by ID
-        user, current_user, scope_ctx = scoped
+        user = scoped.user
+        current_user = scoped.current
+        scope_ctx = scoped.scope
         response = _compute_suggestions(db, current_user=current_user, scope_ctx=scope_ctx)
         suggestions = response.get("suggestions", [])
         
@@ -198,7 +202,7 @@ async def execute_optimization_suggestion(
         if suggestion["type"] == "keywords":
             # Execute keyword generation directly using the bulk keyword generation function
             try:
-                from core.api.main import extract_keywords_enhanced
+                from core.services.keyword_extraction_service import extract_keywords_enhanced
                 
                 suggestions_list = []
                 successful_count = 0

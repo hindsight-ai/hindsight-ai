@@ -12,7 +12,10 @@ class User(Base):
     is_superadmin = Column(Boolean, nullable=False, default=False)
     auth_provider = Column(String, nullable=True)
     external_subject = Column(String, nullable=True)
-    # Beta access status: 'not_requested'|'pending'|'accepted'|'denied'
+    # Beta access status (denormalized cache of BetaAccessRequest.status; the
+    # request record is the source of truth for accepted/denied/revoked
+    # transitions — see #77 / docs/system-models/02-behavioral.md §SM-2).
+    # Allowed values: 'not_requested' | 'pending' | 'accepted' | 'denied' | 'revoked'.
     beta_access_status = Column(String, nullable=False, default='not_requested')
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)

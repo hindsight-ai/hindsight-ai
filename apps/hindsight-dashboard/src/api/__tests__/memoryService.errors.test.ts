@@ -44,6 +44,5 @@ describe('memoryService non-401 error branches', () => {
     await expectReject(() => m.bulkCompactMemoryBlocks(['mb']));
     await expectReject(() => m.bulkGenerateKeywords(['mb']));
     await expectReject(() => m.bulkApplyKeywords([{ memory_block_id: 'mb', keywords: ['x'] }]));
-    await expectReject(() => m.mergeMemoryBlocks(['mb'], 'content'));
   });
 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Portal from './Portal';
 import agentService from '../api/agentService';
-import { useOrg } from '../context/OrgContext';
+import { useOrganization } from '../context/OrganizationContext';
 
 interface AddAgentModalProps {
   isOpen: boolean;
@@ -13,7 +13,10 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
   const [agentName, setAgentName] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const { activeScope, activeOrgId } = useOrg() as any;
+  const { isPersonalMode, isPublicMode, currentOrganization } = useOrganization();
+  const activeScope: 'personal' | 'organization' | 'public' =
+    isPublicMode ? 'public' : isPersonalMode ? 'personal' : 'organization';
+  const activeOrgId = currentOrganization?.id ?? null;
   const [snapshotScope, setSnapshotScope] = useState<'personal' | 'organization' | 'public'>('personal');
   const [snapshotOrgId, setSnapshotOrgId] = useState<string | null>(null);
 
@@ -21,11 +24,10 @@ const AddAgentModal: React.FC<AddAgentModalProps> = ({ isOpen, onClose, onSucces
     if (isOpen) {
       setAgentName('');
       setError(null);
-      // Snapshot scope at open time
-      try {
-        setSnapshotScope((activeScope as any) || (sessionStorage.getItem('ACTIVE_SCOPE') as any) || 'personal');
-        setSnapshotOrgId(activeOrgId || sessionStorage.getItem('ACTIVE_ORG_ID'));
-      } catch {}
+      // Snapshot live scope at open time. useOrganization() provides current
+      // state directly; no sessionStorage fallback needed.
+      setSnapshotScope(activeScope);
+      setSnapshotOrgId(activeOrgId);
     }
   }, [isOpen]);
 

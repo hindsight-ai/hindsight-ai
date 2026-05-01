@@ -44,7 +44,7 @@ class TestSearchService:
         assert result.keywords[0].keyword_text == "test"
         assert result.score_components == {}
 
-    @patch('core.services.search_service.func')
+    @patch('core.services.search.fulltext_strategy.func')
     def test_search_memory_blocks_fulltext_empty_query(self, mock_func):
         db = Mock()
         service = SearchService()
@@ -66,7 +66,7 @@ class TestSearchService:
             assert len(results) == 1
             assert meta["search_type"] == "fulltext"
 
-    @patch('core.services.search_service.get_embedding_service')
+    @patch('core.services.search.semantic_strategy.get_embedding_service')
     def test_search_memory_blocks_semantic_disabled_provider_falls_back(self, mock_get_service):
         db = Mock()
         service = SearchService()
@@ -75,7 +75,7 @@ class TestSearchService:
         mock_embed_service.is_enabled = False
         mock_get_service.return_value = mock_embed_service
 
-        with patch.object(service, '_basic_search_fallback', return_value=(['fallback'], {"search_type": "basic"})) as fallback:
+        with patch.object(service._semantic._basic, 'search', return_value=(['fallback'], {"search_type": "basic"})) as fallback:
             results, metadata = service.search_memory_blocks_semantic(db, "semantic query")
 
         fallback.assert_called_once()
@@ -83,7 +83,7 @@ class TestSearchService:
         assert metadata["search_type"] == "semantic_fallback"
         assert metadata["fallback_reason"] == "embedding_provider_disabled"
 
-    @patch('core.services.search_service.get_embedding_service')
+    @patch('core.services.search.semantic_strategy.get_embedding_service')
     def test_search_memory_blocks_semantic_query_embedding_missing(self, mock_get_service):
         db = Mock()
         service = SearchService()
@@ -93,7 +93,7 @@ class TestSearchService:
         mock_embed_service.embed_text.return_value = None
         mock_get_service.return_value = mock_embed_service
 
-        with patch.object(service, '_basic_search_fallback', return_value=([], {"search_type": "basic"})) as fallback:
+        with patch.object(service._semantic._basic, 'search', return_value=([], {"search_type": "basic"})) as fallback:
             results, metadata = service.search_memory_blocks_semantic(db, "semantic query")
 
         fallback.assert_called_once()
@@ -101,7 +101,7 @@ class TestSearchService:
         assert metadata["search_type"] == "semantic_fallback"
         assert metadata["fallback_reason"] == "query_embedding_unavailable"
 
-    @patch('core.services.search_service.get_embedding_service')
+    @patch('core.services.search.semantic_strategy.get_embedding_service')
     def test_search_memory_blocks_semantic_non_postgres_fallback(self, mock_get_service):
         db = Mock()
         db.bind = Mock()
@@ -114,7 +114,7 @@ class TestSearchService:
         mock_embed_service.embed_text.return_value = [0.1, 0.2, 0.3]
         mock_get_service.return_value = mock_embed_service
 
-        with patch.object(service, '_basic_search_fallback', return_value=(['fallback'], {"search_type": "basic"})) as fallback:
+        with patch.object(service._semantic._basic, 'search', return_value=(['fallback'], {"search_type": "basic"})) as fallback:
             results, metadata = service.search_memory_blocks_semantic(db, "semantic query")
 
         fallback.assert_called_once()
@@ -122,7 +122,7 @@ class TestSearchService:
         assert metadata["fallback_reason"] == "dialect_sqlite_unsupported"
         assert metadata["search_type"] == "semantic_fallback"
 
-    @patch('core.services.search_service.get_embedding_service')
+    @patch('core.services.search.semantic_strategy.get_embedding_service')
     def test_search_memory_blocks_semantic_success(self, mock_get_service):
         db = MagicMock()
         db.bind = MagicMock()
@@ -143,8 +143,8 @@ class TestSearchService:
 
         service = SearchService()
 
-        with patch('core.services.search_service._create_memory_block_with_score', return_value='converted') as converter, \
-             patch.object(service, '_basic_search_fallback') as fallback:
+        with patch('core.services.search.semantic_strategy._create_memory_block_with_score', return_value='converted') as converter, \
+             patch.object(service._semantic._basic, 'search') as fallback:
             results, metadata = service.search_memory_blocks_semantic(db, "semantic query", limit=5)
 
         fallback.assert_not_called()
@@ -158,10 +158,10 @@ class TestSearchService:
         db = Mock()
         service = SearchService()
         # Patch underlying methods the hybrid path would call
-        with patch.object(service, 'search_memory_blocks_fulltext', return_value=([], {"fulltext_results_count": 0, "search_time": 0.01})), \
-             patch.object(service, 'search_memory_blocks_semantic', return_value=([], {"semantic_results_count": 0, "search_time": 0.01})), \
-             patch.object(service, '_basic_search_fallback', return_value=([], {"basic_results_count": 0})), \
-             patch('core.services.search_service.time') as mock_time:
+        with patch.object(service._fulltext, 'search', return_value=([], {"fulltext_results_count": 0, "search_time": 0.01})), \
+             patch.object(service._semantic, 'search', return_value=([], {"semantic_results_count": 0, "search_time": 0.01})), \
+             patch.object(service._basic, 'search', return_value=([], {"basic_results_count": 0})), \
+             patch('core.services.search.semantic_strategy.time') as mock_time:
             mock_time.time.return_value = 1000.0
             results, metadata = service.search_memory_blocks_hybrid(db, "")
             assert results == []

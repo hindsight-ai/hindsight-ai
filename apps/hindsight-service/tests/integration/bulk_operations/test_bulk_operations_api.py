@@ -7,6 +7,7 @@ from core.db import models
 from core.db.database import get_db
 from core.api.main import app
 from core.api import bulk_operations
+from core.api.deps import CurrentUserContext, UserContext
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 
@@ -92,10 +93,13 @@ def test_bulk_delete_dry_run(client):
 
 
 def test_get_operation_status_forbidden_and_not_found(client):
-    # call with non-superadmin (regular user)
-    client.get("/keywords/", headers=auth())
+    # Use a fresh non-superadmin email — admin@example.com gets is_superadmin
+    # promoted by earlier tests in the suite; we need a clean caller here.
+    fresh_email = f"plain-{uuid.uuid4().hex[:8]}@example.com"
+    fresh_auth = {"x-auth-request-email": fresh_email, "x-auth-request-user": fresh_email.split("@")[0]}
+    client.get("/keywords/", headers=fresh_auth)
     fake_id = str(uuid.uuid4())
-    r = client.get(f"/bulk-operations/admin/operations/{fake_id}", headers=auth())
+    r = client.get(f"/bulk-operations/admin/operations/{fake_id}", headers=fresh_auth)
     # Should be forbidden because user not superadmin
     assert r.status_code == 403
 
@@ -167,6 +171,18 @@ def test_get_operation_status_not_found_for_superadmin(db):
         bulk_operations.get_operation_status(
             uuid.uuid4(),
             db=db,
-            user_context=(dummy_user, {"is_superadmin": True, "memberships": [], "memberships_by_org": {}}),
+            user_context=UserContext(
+                user=dummy_user,
+                current=CurrentUserContext(
+                    id=dummy_user.id,
+                    email="",
+                    display_name=None,
+                    is_superadmin=True,
+                    is_beta_access_admin=False,
+                    memberships=[],
+                    memberships_by_org={},
+                    beta_access_status=None,
+                ),
+            ),
         )
     assert exc.value.status_code == 404

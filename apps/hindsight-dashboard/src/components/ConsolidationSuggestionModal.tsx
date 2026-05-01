@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { getConsolidationSuggestionById, validateConsolidationSuggestion, rejectConsolidationSuggestion } from '../api/memoryService';
+import { getConsolidationSuggestionById, validateConsolidationSuggestion, rejectConsolidationSuggestion } from '../api/consolidationService';
+import type { ConsolidationSuggestion } from '../api/consolidationService';
 import memoryService from '../api/memoryService';
-import { ConsolidationSuggestion } from '../api/memoryService';
 import { UIMemoryBlock } from '../types/domain';
 
 // Props interface
@@ -119,7 +119,7 @@ const ConsolidationSuggestionModal: React.FC<ConsolidationSuggestionModalProps> 
         </div>
 
         {/* Content - Scrollable */}
-        <div className="p-6 overflow-y-auto flex-1 min-h-0">
+        <div className="p-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">

@@ -19,8 +19,10 @@ from core.utils.scopes import (
     SCOPE_PERSONAL,
 )
 from core.api.deps import (
+    CurrentUserContext,
     get_current_user_context,
     get_current_user_context_or_pat,
+    get_or_create_user_for_request,
     ensure_pat_allows_write,
     ensure_pat_allows_read,
     get_scoped_user_and_context,
@@ -35,21 +37,22 @@ def create_agent_endpoint(
     user_context = Depends(get_current_user_context_or_pat),
     scope_ctx = Depends(get_scoped_user_and_context),
 ):
-    u, current_user = user_context
-    _user2, _current2, sc = scope_ctx
+    u = user_context.user
+    current_user = user_context.current
+    sc = scope_ctx.scope
     # Derive effective scope from context (headers/query), ignore conflicting body hints
     scope = sc.scope or SCOPE_PERSONAL
     owner_user_id = u.id if scope == SCOPE_PERSONAL else None
     org_id = sc.organization_id if scope == SCOPE_ORGANIZATION else None
     if scope == SCOPE_ORGANIZATION:
-        by_org = current_user.get('memberships_by_org', {})
+        by_org = current_user.memberships_by_org
         key = str(org_id) if org_id else None
         m = by_org.get(key) if key else None
         role = (m or {}).get('role') if m else None
         can_write = bool((m or {}).get('can_write'))
         if not m or not (can_write or role in ('owner', 'admin', 'editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
-    if scope == SCOPE_PUBLIC and not current_user.get('is_superadmin'):
+    if scope == SCOPE_PUBLIC and not current_user.is_superadmin:
         raise HTTPException(status_code=403, detail="Only superadmin can create public agents")
 
     existing = crud.get_agent_by_name(
@@ -98,7 +101,9 @@ def get_all_agents_endpoint(
     db: Session = Depends(get_db),
     scoped = Depends(get_scoped_user_and_context),
 ):
-    user, current_user, scope_ctx = scoped
+    user = scoped.user
+    current_user = scoped.current
+    scope_ctx = scoped.scope
     # Enforce PAT read scope/org (no-op if no PAT)
     ensure_pat_allows_read(current_user, scope_ctx.organization_id)
 
@@ -128,7 +133,7 @@ def get_agent_endpoint(
     current_user = None
     if authorization or x_api_key:
         try:
-            _u, current_user = get_current_user_context_or_pat(
+            _uctx = get_current_user_context_or_pat(
                 db=db,
                 authorization=authorization,
                 x_api_key=x_api_key,
@@ -137,6 +142,7 @@ def get_agent_endpoint(
                 x_forwarded_user=x_forwarded_user,
                 x_forwarded_email=x_forwarded_email,
             )
+            current_user = _uctx.current
         except HTTPException:
             raise
         # Enforce PAT read scope and optional org restriction
@@ -149,14 +155,18 @@ def get_agent_endpoint(
             x_forwarded_email=x_forwarded_email,
         )
         if email:
-            u = get_or_create_user(db, email=email, display_name=name)
+            u = get_or_create_user_for_request(db, email=email, name=name)
             memberships = get_user_memberships(db, u.id)
-            current_user = {
-                "id": u.id,
-                "is_superadmin": bool(u.is_superadmin),
-                "memberships": memberships,
-                "memberships_by_org": {m["organization_id"]: m for m in memberships},
-            }
+            current_user = CurrentUserContext(
+                id=u.id,
+                email=u.email,
+                display_name=u.display_name,
+                is_superadmin=bool(u.is_superadmin),
+                is_beta_access_admin=False,
+                memberships=memberships,
+                memberships_by_org={m["organization_id"]: m for m in memberships},
+                beta_access_status=None,
+            )
     if not can_read(db_agent, current_user):
         raise HTTPException(status_code=404, detail="Agent not found")
     return db_agent
@@ -179,7 +189,7 @@ def search_agents_endpoint(
     current_user = None
     if authorization or x_api_key:
         try:
-            _u, current_user = get_current_user_context_or_pat(
+            _uctx = get_current_user_context_or_pat(
                 db=db,
                 authorization=authorization,
                 x_api_key=x_api_key,
@@ -188,6 +198,7 @@ def search_agents_endpoint(
                 x_forwarded_user=x_forwarded_user,
                 x_forwarded_email=x_forwarded_email,
             )
+            current_user = _uctx.current
         except HTTPException:
             raise
     else:
@@ -198,18 +209,22 @@ def search_agents_endpoint(
             x_forwarded_email=x_forwarded_email,
         )
         if email:
-            u = get_or_create_user(db, email=email, display_name=name)
+            u = get_or_create_user_for_request(db, email=email, name=name)
             memberships = get_user_memberships(db, u.id)
-            current_user = {
-                "id": u.id,
-                "is_superadmin": bool(u.is_superadmin),
-                "memberships": memberships,
-                "memberships_by_org": {m["organization_id"]: m for m in memberships},
-            }
+            current_user = CurrentUserContext(
+                id=u.id,
+                email=u.email,
+                display_name=u.display_name,
+                is_superadmin=bool(u.is_superadmin),
+                is_beta_access_admin=False,
+                memberships=memberships,
+                memberships_by_org={m["organization_id"]: m for m in memberships},
+                beta_access_status=None,
+            )
 
     effective_org_id = organization_id
-    if current_user and current_user.get("pat") and current_user["pat"].get("organization_id"):
-        pat_org = current_user["pat"]["organization_id"]
+    if current_user and current_user.pat and current_user.pat.organization_id:
+        pat_org = current_user.pat.organization_id
         if organization_id and str(organization_id) != str(pat_org):
             raise HTTPException(status_code=403, detail="Token organization restriction mismatch")
         effective_org_id = pat_org
@@ -235,7 +250,8 @@ def delete_agent_endpoint(
     agent = crud.get_agent(db, agent_id=agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(agent, 'organization_id', None))
     if not can_write(agent, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -248,7 +264,7 @@ def delete_agent_endpoint(
             status=AuditStatus.SUCCESS,
             target_type="agent",
             target_id=str(agent_id),
-            actor_user_id=current_user.get("id") if current_user else None,
+            actor_user_id=current_user.id if current_user else None,
             organization_id=agent.organization_id,
             metadata={
                 "agent_name": agent.agent_name,
@@ -271,7 +287,8 @@ def update_agent_endpoint(
     agent = crud.get_agent(db, agent_id=agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     ensure_pat_allows_write(current_user, getattr(agent, 'organization_id', None))
     if not can_write(agent, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -298,7 +315,8 @@ def change_agent_scope(
     agent = crud.get_agent(db, agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    u, current_user = user_context
+    u = user_context.user
+    current_user = user_context.current
     target_scope = (payload.get("visibility_scope") or '').lower()
     if target_scope not in ALL_SCOPES:
         raise HTTPException(status_code=422, detail="Invalid target visibility_scope")
@@ -312,16 +330,16 @@ def change_agent_scope(
             target_org_uuid = uuid.UUID(str(target_org_id))
         except Exception:
             raise HTTPException(status_code=422, detail="Invalid organization_id")
-        if agent.visibility_scope == SCOPE_PERSONAL and not (current_user.get('is_superadmin') or agent.owner_user_id == current_user.get('id')):
+        if agent.visibility_scope == SCOPE_PERSONAL and not (current_user.is_superadmin or agent.owner_user_id == current_user.id):
             raise HTTPException(status_code=409, detail="Owner consent required to move personal agent to organization")
         if not can_move_scope(agent, SCOPE_ORGANIZATION, target_org_uuid, current_user):
             raise HTTPException(status_code=403, detail="Forbidden")
     elif target_scope == SCOPE_PERSONAL:
         if not can_move_scope(agent, SCOPE_PERSONAL, None, current_user):
-            if not current_user.get("is_superadmin"):
+            if not current_user.is_superadmin:
                 raise HTTPException(status_code=403, detail="Forbidden")
     elif target_scope == SCOPE_PUBLIC:
-        if not current_user.get("is_superadmin"):
+        if not current_user.is_superadmin:
             raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
     owner_id = None
     org_uuid = None
@@ -334,7 +352,7 @@ def change_agent_scope(
                 owner_uuid = uuid.UUID(str(new_owner_user_id))
             except Exception:
                 raise HTTPException(status_code=422, detail="Invalid new_owner_user_id")
-            if not current_user.get("is_superadmin"):
+            if not current_user.is_superadmin:
                 raise HTTPException(status_code=403, detail="Only superadmin can set a different personal owner")
             owner_id = owner_uuid
     # PAT scope enforcement (if PAT present and target is org, require match)
@@ -365,7 +383,7 @@ def change_agent_scope(
             status=AuditStatus.SUCCESS,
             target_type="agent",
             target_id=str(agent.agent_id),
-            actor_user_id=current_user.get("id"),
+            actor_user_id=current_user.id,
             organization_id=agent.organization_id or previous_org_id,
             metadata={
                 "old_scope": previous_scope,

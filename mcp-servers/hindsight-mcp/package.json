@@ -1,6 +1,6 @@
 {
   "name": "hindsight-mcp",
-  "version": "1.0.0",
+  "version": "1.1.3",
   "description": "Model Context Protocol server for the Hindsight AI memory service",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -60,7 +60,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
-    "axios": "^1.7.2",
-    "hindsight-mcp": "^0.1.0"
+    "axios": "^1.7.2"
   }
 }

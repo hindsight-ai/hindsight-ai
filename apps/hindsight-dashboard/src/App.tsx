@@ -17,7 +17,6 @@ import AboutModal from './components/AboutModal';
 import NotificationContainer from './components/NotificationContainer';
 import DebugPanel from './components/DebugPanel';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { OrgProvider } from './context/OrgContext';
 import { OrganizationProvider } from './context/OrganizationContext';
 import { NotificationProvider } from './context/NotificationContext';
 import LoginPage from './components/LoginPage';
@@ -78,6 +77,13 @@ function AppContent() {
   }, []);
 
   const handleCloseGetStarted = useCallback(() => {
+    // Transient close (X button, Escape, backdrop) — do NOT mark seen.
+    // An accidental Esc on first load shouldn't permanently silence the
+    // guide for that user.
+    setShowGetStarted(false);
+  }, []);
+
+  const handleAcknowledgeGetStarted = useCallback(() => {
     markGetStartedSeen();
     setShowGetStarted(false);
   }, [markGetStartedSeen]);
@@ -287,6 +293,7 @@ function AppContent() {
     const routeMap: Record<string, string> = {
       '/dashboard': 'Dashboard',
       '/profile': 'Profile',
+      '/tokens': 'Tokens',
       '/memory-blocks': 'Memory Blocks',
       '/keywords': 'Keywords',
       '/agents': 'Agents',
@@ -294,6 +301,7 @@ function AppContent() {
       '/consolidation-suggestions': 'Consolidation',
       '/archived-memory-blocks': 'Archived',
       '/pruning-suggestions': 'Pruning',
+      '/memory-optimization-center': 'AI Optimization',
       '/support': 'Support'
     };
     if (pathname.startsWith('/memory-blocks/')) return 'Memory Block Detail';
@@ -329,7 +337,11 @@ function AppContent() {
         </Routes>
       </Layout>
       <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} />
-      <GetStartedModal isOpen={showGetStarted} onClose={handleCloseGetStarted} />
+      <GetStartedModal
+        isOpen={showGetStarted}
+        onClose={handleCloseGetStarted}
+        onAcknowledge={handleAcknowledgeGetStarted}
+      />
     </div>
   );
 }
@@ -340,9 +352,7 @@ function App() {
       <AuthProvider>
         <NotificationProvider>
           <OrganizationProvider>
-            <OrgProvider>
-              <AppContent />
-            </OrgProvider>
+            <AppContent />
           </OrganizationProvider>
         </NotificationProvider>
       </AuthProvider>

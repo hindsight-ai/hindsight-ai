@@ -51,11 +51,17 @@ cd /absolute/path/to/hindsight-ai/mcp-servers/hindsight-mcp
 npm install && npm run build && npm link
 ```
 
+Verify the binary resolves on your `PATH` and report its version:
+
+```bash
+hindsight-mcp --version
+```
+
 ## Available Tools
 
 | Tool | Description |
 | --- | --- |
-| `create_memory_block` | Create a new memory block. Requires `content` **and** `lessons_learned`. `agent_id` must reference an existing agent¹; `conversation_id` can be any UUID². Falls back to env defaults when omitted. Optional: `errors`, `metadata` (JSON). |
+| `create_memory_block` | Create a new memory block. Requires `content` **and** `lessons_learned`. `agent_id` must reference an existing agent¹. `conversation_id` is optional; when omitted the server auto-generates one and returns it for reuse. Optional: `errors`, `metadata` (JSON). |
 | `create_agent` | Create a new agent. `agent_name` is required. Scope is derived from `HINDSIGHT_ORGANIZATION_ID` when set, otherwise from the token's embedded organization³. |
 | `retrieve_relevant_memories` | Retrieve memories for keywords (comma-separated string or array). Optional `limit`. Uses the resolved agent context and errors if the agent is unknown¹. |
 | `retrieve_all_memory_blocks` | Page through memory blocks for the current agent. Optional `limit`. Requires a valid agent context¹. |
@@ -63,10 +69,11 @@ npm install && npm run build && npm link
 | `report_memory_feedback` | Record positive/negative/neutral feedback on a memory block. Optional `feedback_details`. |
 | `get_memory_details` | Return metadata and content for one memory block by ID. |
 | `search_agents` | Search agent names via a query string. |
-| `advanced_search_memories` | Run full-text, semantic, or hybrid search. Accepts optional `agent_id` / `conversation_id` arguments and falls back to the environment. Requires a valid agent context¹. Tuning knobs: `limit`, `min_score`, `similarity_threshold`, `fulltext_weight`, `semantic_weight`, `min_combined_score`, `include_archived`. |
+| `show_capture_checklist` | Return the capture checklist so an MCP client can surface the operating loop guidance on demand. |
+| `advanced_search_memories` | Run full-text, semantic, or hybrid search. Accepts optional `agent_id` (falls back to env) and optional `conversation_id` filters. Requires a valid agent context¹. Tuning knobs: `limit`, `min_score`, `similarity_threshold`, `fulltext_weight`, `semantic_weight`, `min_combined_score`, `include_archived`. |
 | `whoami` | Return the authenticated user and memberships as seen by the Hindsight service. |
 
-> **Usage notes:** ¹ Agent IDs must exist; the service returns an error if the resolved agent is unknown. ² Conversation IDs can be any UUID—new values are accepted when writing or searching memories. ³ If `HINDSIGHT_ORGANIZATION_ID` is set it overrides the token's organization scope; a mismatch between the env override and the token causes an error. We recommend issuing organization-scoped tokens and leaving the override unset to avoid configuration drift.
+> **Usage notes:** ¹ Agent IDs must exist; the service returns an error if the resolved agent is unknown. ² If no `conversation_id` is supplied when creating a memory, the server generates one and returns it (any UUID is accepted when you provide one explicitly). ³ If `HINDSIGHT_ORGANIZATION_ID` is set it overrides the token's organization scope; a mismatch between the env override and the token causes an error. We recommend issuing organization-scoped tokens and leaving the override unset to avoid configuration drift.
 
 ## Core Configuration: Environment & Authentication
 
@@ -84,11 +91,11 @@ Configuration is driven entirely through environment variables so secrets never 
 | --- | --- |
 | `HINDSIGHT_API_BASE_URL` | Base URL override. Defaults to `https://api.hindsight-ai.com`; set this only for self-hosted or local deployments. |
 | `DEFAULT_AGENT_ID` | Fallback agent UUID when a tool omits `agent_id`. Must reference an existing agent. |
-| `DEFAULT_CONVERSATION_ID` | Fallback conversation UUID when a tool omits `conversation_id`. Any UUID is acceptable; new values are created as needed. |
+| `DEFAULT_CONVERSATION_ID` | Optional fallback conversation UUID when you want every request to reuse a fixed conversation. When omitted, the server auto-generates one during `create_memory_block` and returns it for future calls. |
 | `HINDSIGHT_ACTIVE_SCOPE` | Override scope header (`personal`, `organization`, `public`). Defaults based on token/org inference. |
 | `HINDSIGHT_ORGANIZATION_ID` | Organization override. Takes precedence over the token scope—set sparingly and ensure it matches the token’s organization. |
 
-> **Important:** The server does not automatically discover agent or conversation IDs. Supply them via arguments or environment; otherwise the request fails with `InvalidParams`.
+> **Important:** The server does not automatically discover agent IDs. Supply them via arguments or environment; otherwise the request fails with `InvalidParams`. When a `conversation_id` is missing during `create_memory_block`, a new UUID is generated and returned in the response so downstream calls can reuse it.
 
 ### Authentication, scope & security
 
@@ -137,7 +144,6 @@ Different MCP clients use different configuration mechanisms (JSON/TOML/YAML fil
       "timeout": 60,
       "env": {
         "DEFAULT_AGENT_ID": "00000000-0000-0000-0000-000000000000",
-        "DEFAULT_CONVERSATION_ID": "00000000-0000-0000-0000-000000000000",
         "HINDSIGHT_API_TOKEN": "hs_pat_xxx"
       }
     }
@@ -163,7 +169,6 @@ Install the [Cline extension](https://github.com/cline/cline) and make sure the 
 ```json
 {
   "DEFAULT_AGENT_ID": "00000000-0000-0000-0000-000000000000",
-  "DEFAULT_CONVERSATION_ID": "00000000-0000-0000-0000-000000000000",
   "HINDSIGHT_API_TOKEN": "hs_pat_xxx"
 }
 ```
@@ -189,7 +194,6 @@ Install the [Cline extension](https://github.com/cline/cline) and make sure the 
     "transport": "stdio",
     "env": {
       "DEFAULT_AGENT_ID": "00000000-0000-0000-0000-000000000000",
-      "DEFAULT_CONVERSATION_ID": "00000000-0000-0000-0000-000000000000",
       "HINDSIGHT_API_TOKEN": "hs_pat_xxx"
     }
   }
@@ -213,7 +217,6 @@ command = "hindsight-mcp"
 args = []
 env = {
   DEFAULT_AGENT_ID = "00000000-0000-0000-0000-000000000000",
-  DEFAULT_CONVERSATION_ID = "00000000-0000-0000-0000-000000000000",
   HINDSIGHT_API_TOKEN = "hs_pat_your_token_here"
 }
 ```

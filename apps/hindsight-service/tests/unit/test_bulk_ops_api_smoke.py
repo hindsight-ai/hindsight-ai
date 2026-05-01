@@ -24,10 +24,13 @@ def test_bulk_ops_inventory_and_dry_runs():
     inv = r_inv.json()
     assert set(inv.keys()) == {"agent_count", "memory_block_count", "keyword_count"}
 
-    # Dry-run bulk move with destination_owner_user_id only (allowed membership path)
+    # Dry-run bulk move with destination_owner_user_id = actor's own id
+    # (the only non-superadmin recipient allowed; see fix B).
+    r_info = client.get("/user-info", headers=_h("owner", owner_email))
+    actor_id = r_info.json()["user_id"]
     payload_move = {
         "dry_run": True,
-        "destination_owner_user_id": str(uuid.uuid4()),
+        "destination_owner_user_id": actor_id,
         "resource_types": ["agents", "memory_blocks", "keywords"],
     }
     r_move = client.post(f"/bulk-operations/organizations/{org_id}/bulk-move", json=payload_move, headers=_h("owner", owner_email))

@@ -35,12 +35,36 @@ class BulkOperationTask:
         self.errors = []
 
     async def execute(self) -> Dict[str, Any]:
-        """Execute the bulk operation asynchronously."""
+        """Execute the bulk operation asynchronously.
+
+        Correctness guarantee (#76): the DB row is ALWAYS transitioned to a
+        terminal state before this coroutine returns, even on uncaught
+        exceptions. Without this, a worker crash mid-operation left the DB
+        row stuck at "running" forever while the in-memory dict said "failed",
+        which is the SF-5 / SM-4 impossible-but-coded path that the
+        state-machine verifier flagged.
+        """
         try:
             async with get_async_db_session() as db:
                 return await self._execute_operation(db)
         except Exception as e:
             logger.error(f"Error executing bulk operation {self.operation_id}: {e}")
+            # Best-effort terminal-state write so the DB row converges.
+            # If the row is already in a terminal state (e.g. _execute_operation
+            # set "completed" then raised after commit), preserve it.
+            try:
+                async with get_async_db_session() as db:
+                    op = crud.get_bulk_operation(db, self.operation_id)
+                    if op and op.status not in ("completed", "failed", "cancelled"):
+                        op.status = "failed"
+                        op.finished_at = datetime.now(timezone.utc)
+                        op.error_log = {"errors": [str(e)]}
+                        db.commit()
+            except Exception as inner:
+                logger.error(
+                    "Failed to write terminal DB status for %s: %s",
+                    self.operation_id, inner,
+                )
             return {"status": "failed", "error": str(e)}
 
     async def _execute_operation(self, db: Session) -> Dict[str, Any]:
@@ -182,17 +206,26 @@ class BulkOperationTask:
             return await self._delete_keywords(db, org_id, errors)
         return 0
 
+    @staticmethod
+    def _destination_visibility_scope(dest_org_id, dest_owner_id) -> str:
+        # Org→org: stays organization. Org→personal (no dest_org): becomes personal.
+        # Without this, rows produce visibility_scope='organization' AND
+        # organization_id=NULL, which violates the ck_*_org_has_org constraints.
+        return "organization" if dest_org_id is not None else "personal"
+
     async def _move_agents(self, db: Session, org_id: uuid.UUID,
                           dest_org_id: Optional[uuid.UUID], dest_owner_id: Optional[uuid.UUID],
                           errors: list) -> int:
         """Move agents with proper error handling."""
         agents = db.query(models.Agent).filter(models.Agent.organization_id == org_id).all()
         moved_count = 0
+        new_scope = self._destination_visibility_scope(dest_org_id, dest_owner_id)
 
         for agent in agents:
             try:
                 agent.organization_id = dest_org_id
                 agent.owner_user_id = dest_owner_id
+                agent.visibility_scope = new_scope
                 db.commit()
                 moved_count += 1
             except (StaleDataError, ObjectDeletedError) as e:
@@ -201,7 +234,7 @@ class BulkOperationTask:
             except Exception as e:
                 db.rollback()
                 errors.append(f"Failed to move agent {agent.agent_id}: {e}")
-        
+
         return moved_count
 
     async def _move_memory_blocks(self, db: Session, org_id: uuid.UUID,
@@ -210,11 +243,13 @@ class BulkOperationTask:
         """Move memory blocks with proper error handling."""
         memory_blocks = db.query(models.MemoryBlock).filter(models.MemoryBlock.organization_id == org_id).all()
         moved_count = 0
+        new_scope = self._destination_visibility_scope(dest_org_id, dest_owner_id)
 
         for mb in memory_blocks:
             try:
                 mb.organization_id = dest_org_id
                 mb.owner_user_id = dest_owner_id
+                mb.visibility_scope = new_scope
                 db.commit()
                 moved_count += 1
             except (StaleDataError, ObjectDeletedError) as e:
@@ -223,7 +258,7 @@ class BulkOperationTask:
             except Exception as e:
                 db.rollback()
                 errors.append(f"Failed to move memory block {mb.id}: {e}")
-        
+
         return moved_count
 
     async def _move_keywords(self, db: Session, org_id: uuid.UUID,
@@ -232,11 +267,13 @@ class BulkOperationTask:
         """Move keywords with proper error handling."""
         keywords = db.query(models.Keyword).filter(models.Keyword.organization_id == org_id).all()
         moved_count = 0
+        new_scope = self._destination_visibility_scope(dest_org_id, dest_owner_id)
 
         for keyword in keywords:
             try:
                 keyword.organization_id = dest_org_id
                 keyword.owner_user_id = dest_owner_id
+                keyword.visibility_scope = new_scope
                 db.commit()
                 moved_count += 1
             except (StaleDataError, ObjectDeletedError) as e:
@@ -245,7 +282,7 @@ class BulkOperationTask:
             except Exception as e:
                 db.rollback()
                 errors.append(f"Failed to move keyword {keyword.keyword_id}: {e}")
-        
+
         return moved_count
 
     async def _delete_agents(self, db: Session, org_id: uuid.UUID, errors: list) -> int:
@@ -315,12 +352,23 @@ class AsyncBulkOperationsManager:
 
     def _on_task_complete(self, operation_id: uuid.UUID, task: asyncio.Task) -> None:
         """Handle task completion."""
+        # If cancel_task() already recorded "cancelled", preserve it — the
+        # task.result() call below would raise CancelledError and clobber it
+        # with "failed".
+        already_cancelled = (
+            self._task_results.get(operation_id, {}).get("status") == "cancelled"
+        )
         try:
             result = task.result()
-            self._task_results[operation_id] = result
+            if not already_cancelled:
+                self._task_results[operation_id] = result
+        except asyncio.CancelledError:
+            if not already_cancelled:
+                self._task_results[operation_id] = {"status": "cancelled"}
         except Exception as e:
             logger.error(f"Task {operation_id} failed with exception: {e}")
-            self._task_results[operation_id] = {"status": "failed", "error": str(e)}
+            if not already_cancelled:
+                self._task_results[operation_id] = {"status": "failed", "error": str(e)}
         finally:
             # Clean up completed task
             self._running_tasks.pop(operation_id, None)
@@ -336,10 +384,20 @@ class AsyncBulkOperationsManager:
         return None
 
     def cancel_task(self, operation_id: uuid.UUID) -> bool:
-        """Cancel a running bulk operation task."""
+        """Cancel a running bulk operation task.
+
+        Reconciles the in-memory state with the cancel intent:
+        - Cancels the asyncio task (the existing behavior).
+        - Records "cancelled" in `_task_results` so a subsequent
+          `get_task_status` returns the cancel state instead of "failed"
+          (the asyncio.CancelledError propagating through `_on_task_complete`
+          would otherwise classify it as failed).
+        Caller (the cancel endpoint) is responsible for the DB write.
+        """
         if operation_id in self._running_tasks:
             task = self._running_tasks[operation_id]
             task.cancel()
+            self._task_results[operation_id] = {"status": "cancelled"}
             return True
         return False
 
@@ -370,6 +428,67 @@ async def execute_bulk_operation_async(operation_id: uuid.UUID, task_type: str,
     await _bulk_operations_manager.submit_task(
         operation_id, task_type, actor_user_id, organization_id, payload
     )
+
+
+def reconcile_stuck_bulk_operations(
+    min_age_seconds: int = 60,
+    session: Optional[Any] = None,
+) -> int:
+    """Mark abandoned `running` bulk operations as failed.
+
+    Closes the rolling-deploy gap from #88: when the API process is killed
+    (e.g. `docker stop`) while a bulk operation is mid-flight, the
+    in-memory task dict dies with the process but the DB row stays at
+    `status='running'` indefinitely. The status endpoint then reports the
+    operation as live forever.
+
+    Called from the FastAPI `lifespan` startup hook in `core/api/main.py`
+    BEFORE the new process accepts traffic. Reconciles any rows whose
+    `started_at` is older than `min_age_seconds` (default 60s) — that
+    grace window prevents a graceful-restart blue/green deploy from
+    falsely failing in-flight operations whose worker is still alive.
+
+    `session` is an optional injected SQLAlchemy session — used by tests
+    that seed rows in a SAVEPOINT-wrapped transaction (where a separate
+    `SessionLocal()` connection cannot see the uncommitted seeds). When
+    omitted, the function opens and closes its own session as in production.
+
+    Returns the number of rows reconciled.
+    """
+    from datetime import datetime, timedelta, timezone
+    from core.db import models
+    owns_session = session is None
+    if owns_session:
+        from core.db.database import SessionLocal
+        db = SessionLocal()
+    else:
+        db = session
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=min_age_seconds)
+        stuck = (
+            db.query(models.BulkOperation)
+            .filter(
+                models.BulkOperation.status == 'running',
+                models.BulkOperation.started_at != None,  # noqa: E711 — SQLAlchemy needs `!=` not `is not`
+                models.BulkOperation.started_at < cutoff,
+            )
+            .all()
+        )
+        for op in stuck:
+            op.status = 'failed'
+            op.finished_at = datetime.now(timezone.utc)
+            existing_log = op.error_log or {}
+            errors = list(existing_log.get('errors') or [])
+            errors.append('server restarted before operation could complete')
+            op.error_log = {**existing_log, 'errors': errors}
+        if stuck and owns_session:
+            db.commit()
+        elif stuck:
+            db.flush()
+        return len(stuck)
+    finally:
+        if owns_session:
+            db.close()
 
 
 def get_bulk_operation_status(operation_id: uuid.UUID) -> Optional[Dict[str, Any]]:

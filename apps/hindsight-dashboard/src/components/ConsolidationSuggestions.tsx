@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getConsolidationSuggestions, validateConsolidationSuggestion, rejectConsolidationSuggestion, triggerConsolidation, deleteConsolidationSuggestion, ConsolidationSuggestion } from '../api/memoryService';
+import { getConsolidationSuggestions, validateConsolidationSuggestion, rejectConsolidationSuggestion, triggerConsolidation, deleteConsolidationSuggestion } from '../api/consolidationService';
+import type { ConsolidationSuggestion } from '../api/consolidationService';
 import notificationService from '../services/notificationService';
 import ConsolidationSuggestionModal from './ConsolidationSuggestionModal';
 import { useAuth } from '../context/AuthContext';
 import RefreshIndicator from './RefreshIndicator';
 import usePageHeader from '../hooks/usePageHeader';
+import Button from './Button';
 
 interface PaginationState {
   page: number;
@@ -175,15 +177,6 @@ const ConsolidationSuggestions: React.FC = () => {
     }
   };
 
-  const refreshData = (): void => {
-    if (featureDisabled) {
-      notificationService.showInfo('Feature coming soon');
-      return;
-    }
-    const abortController = new AbortController();
-    fetchSuggestions(abortController.signal);
-  };
-
   const handleValidate = async (suggestionId: string): Promise<void> => {
     try {
       const updatedSuggestion = await validateConsolidationSuggestion(suggestionId);
@@ -306,35 +299,51 @@ const ConsolidationSuggestions: React.FC = () => {
     );
   }
 
-  if (loading) return <p className="loading-message">Loading consolidation suggestions...</p>;
-  if (error) return <p className="error-message">Error: {error}</p>;
+  if (loading) {
+    return (
+      <p className="px-6 py-4 text-sm text-gray-500" data-testid="loading-message">
+        Loading consolidation suggestions...
+      </p>
+    );
+  }
+  if (error) {
+    return (
+      <p
+        className="mx-6 my-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        data-testid="error-message"
+      >
+        Error: {error}
+      </p>
+    );
+  }
 
   return (
-    <div className="memory-block-list-container">
-      {/* Filter Controls - Always render these */}
-      <div className="bulk-actions-bar">
-        <button
+    <div className="flex flex-col gap-4 p-4 sm:p-6">
+      {/* Toolbar: bulk-delete + trigger + status filter. Always rendered. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="secondary"
           onClick={handleDeleteSelected}
           disabled={selectedSuggestionIds.length === 0}
-          className="delete-selected-button"
         >
           Delete Selected ({selectedSuggestionIds.length})
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={handleTriggerConsolidation}
-          className={`add-button ${llmDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           disabled={llmDisabled}
           title={llmDisabled ? 'LLM features are currently disabled' : undefined}
         >
           Trigger Consolidation
-        </button>
-        <div className="filter-controls">
-          <label htmlFor="status-filter">Filter by Status:</label>
+        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <label htmlFor="status-filter" className="text-sm font-medium text-gray-700">
+            Filter by Status:
+          </label>
           <select
             id="status-filter"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="filter-select"
+            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
           >
             <option value="all">All</option>
             <option value="pending">Pending</option>
@@ -344,79 +353,7 @@ const ConsolidationSuggestions: React.FC = () => {
         </div>
       </div>
 
-      {/* Empty State Message when no filters are active and no results */}
-      {!loading && !error && suggestions.length === 0 && !areFiltersActive() && (
-        <div className="empty-state-message">
-          <p>No Consolidation Suggestions Found</p>
-          <p>
-            It looks like there are no consolidation suggestions in your system at the moment.
-            Try triggering the consolidation process manually if needed.
-          </p>
-          <button
-            onClick={handleTriggerConsolidation}
-            className={`add-button ${llmDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-            disabled={llmDisabled}
-            title={llmDisabled ? 'LLM features are currently disabled' : undefined}
-          >
-            Trigger Consolidation
-          </button>
-        </div>
-      )}
-
-      {/* Empty State Message when filters are active but no results */}
-      {!loading && !error && suggestions.length === 0 && areFiltersActive() && (
-        <div className="empty-state-message">
-          <p>No Consolidation Suggestions Match Your Criteria</p>
-          <p>
-            We couldn't find any consolidation suggestions that match your current criteria.
-            Try adjusting your filters or clearing them to see all suggestions.
-          </p>
-          {/* No filters to clear yet, but keeping the structure for future */}
-        </div>
-      )}
-
-      {/* Suggestions Grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, index) => (
-            <div key={index} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 animate-pulse">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-start gap-4 flex-1">
-                  <div className="bg-gray-200 p-3 rounded-lg flex-shrink-0 w-12 h-12"></div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
-                    <div className="h-3 bg-gray-200 rounded w-24"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className="h-4 bg-gray-200 rounded w-full"></div>
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                <div className="flex gap-2">
-                  <div className="h-6 bg-gray-200 rounded-full w-16"></div>
-                  <div className="h-6 bg-gray-200 rounded-full w-20"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : error ? (
-        <div className="text-center py-12">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md mx-auto">
-            <svg className="w-12 h-12 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-            <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Suggestions</h3>
-            <p className="text-red-700 mb-4">{error}</p>
-            <button
-              onClick={() => refreshData()}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Try Again
-            </button>
-          </div>
-        </div>
-      ) : suggestions.length === 0 ? (
+      {suggestions.length === 0 ? (
         <div className="text-center py-12">
           <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
