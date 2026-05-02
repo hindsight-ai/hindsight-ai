@@ -66,6 +66,7 @@ test.describe('Journey 13 — Compaction trigger (LLM-disabled path) @full', () 
     // (per MemoryBlockCard.tsx around line 95).
     const compactBtn = page.getByTitle(/Compact Memory/i).first();
     await expect(compactBtn).toBeVisible({ timeout: 10_000 });
+    await expect(compactBtn).toBeEnabled();
 
     // Track if the modal opens — it shouldn't, because LLM is disabled in CI.
     // The modal heading should never appear on screen.

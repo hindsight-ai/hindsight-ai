@@ -96,6 +96,7 @@ test.describe('Journey 9 — Org invitations + accept flow @full', () => {
     // ── 7. Verify revoked invitation reflects status ──────────────────────────
     const afterRes = await request.get(`${BACKEND}/organizations/${org.id}/invitations`, {
       headers: ownerHeaders,
+      params: { status: 'all' },
     });
     const afterData = await afterRes.json();
     const afterItems: Array<{ id: string; status: string }> = afterData.items || afterData;
