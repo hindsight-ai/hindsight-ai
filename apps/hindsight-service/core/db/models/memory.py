@@ -63,7 +63,7 @@ class FeedbackLog(Base):
 
 class MemoryBlockKeyword(Base):
     __tablename__ = 'memory_block_keywords'
-    memory_id = Column(UUID(as_uuid=True), ForeignKey('memory_blocks.id'), primary_key=True)
+    memory_id = Column(UUID(as_uuid=True), ForeignKey('memory_blocks.id', ondelete='CASCADE'), primary_key=True)
     keyword_id = Column(UUID(as_uuid=True), ForeignKey('keywords.keyword_id'), primary_key=True)
 
     memory_block = relationship("MemoryBlock", back_populates="memory_block_keywords")

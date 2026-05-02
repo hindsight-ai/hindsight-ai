@@ -13,7 +13,7 @@ def _headers(email: str) -> dict[str, str]:
     }
 
 
-def test_delete_agent_cascades_feedback_logs_for_memory_blocks(client, db_session: Session):
+def test_delete_agent_cascades_dependent_rows_for_memory_blocks(client, db_session: Session):
     email = f"cascade_{uuid.uuid4().hex}@example.com"
     user = models.User(email=email, display_name="Cascade Owner")
     db_session.add(user)
@@ -46,9 +46,23 @@ def test_delete_agent_cascades_feedback_logs_for_memory_blocks(client, db_sessio
             feedback_details="kept until the parent memory is deleted",
         )
     )
+    keyword = models.Keyword(
+        keyword_text=f"cascade-keyword-{uuid.uuid4().hex}",
+        visibility_scope="personal",
+        owner_user_id=user.id,
+    )
+    db_session.add(keyword)
+    db_session.flush()
+    db_session.add(
+        models.MemoryBlockKeyword(
+            memory_id=memory_block.id,
+            keyword_id=keyword.keyword_id,
+        )
+    )
     db_session.commit()
     agent_id = agent.agent_id
     memory_id = memory_block.id
+    keyword_id = keyword.keyword_id
 
     response = client.delete(f"/agents/{agent_id}", headers=_headers(email))
 
@@ -56,3 +70,5 @@ def test_delete_agent_cascades_feedback_logs_for_memory_blocks(client, db_sessio
     assert db_session.query(models.Agent).filter_by(agent_id=agent_id).count() == 0
     assert db_session.query(models.MemoryBlock).filter_by(id=memory_id).count() == 0
     assert db_session.query(models.FeedbackLog).filter_by(memory_id=memory_id).count() == 0
+    assert db_session.query(models.MemoryBlockKeyword).filter_by(memory_id=memory_id).count() == 0
+    assert db_session.query(models.Keyword).filter_by(keyword_id=keyword_id).count() == 1
