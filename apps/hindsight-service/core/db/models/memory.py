@@ -53,7 +53,7 @@ class MemoryBlock(Base):
 class FeedbackLog(Base):
     __tablename__ = 'feedback_logs'
     feedback_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    memory_id = Column(UUID(as_uuid=True), ForeignKey('memory_blocks.id'), nullable=False)
+    memory_id = Column(UUID(as_uuid=True), ForeignKey('memory_blocks.id', ondelete='CASCADE'), nullable=False)
     feedback_type = Column(String(50), nullable=False)
     feedback_details = Column(Text)
     created_at = Column(DateTime(timezone=True), default=now_utc)
@@ -63,7 +63,7 @@ class FeedbackLog(Base):
 
 class MemoryBlockKeyword(Base):
     __tablename__ = 'memory_block_keywords'
-    memory_id = Column(UUID(as_uuid=True), ForeignKey('memory_blocks.id'), primary_key=True)
+    memory_id = Column(UUID(as_uuid=True), ForeignKey('memory_blocks.id', ondelete='CASCADE'), primary_key=True)
     keyword_id = Column(UUID(as_uuid=True), ForeignKey('keywords.keyword_id'), primary_key=True)
 
     memory_block = relationship("MemoryBlock", back_populates="memory_block_keywords")
