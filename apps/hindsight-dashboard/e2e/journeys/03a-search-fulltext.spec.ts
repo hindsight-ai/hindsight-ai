@@ -41,8 +41,11 @@ test.describe('Journey 3a — Memory block fulltext search @smoke', () => {
     await searchInput.press('Enter');
 
     // The block whose `marker` is `python-fastapi` should appear in the rendered list.
-    // Card content includes the lessons string: "python pattern: use python-fastapi for ..."
-    await expect(page.getByText('python-fastapi', { exact: false })).toBeVisible({
+    // The card renders BOTH `content` and `lessons_learned` — and both contain the
+    // substring "python-fastapi" (see fixtures/referenceDataset.ts buildReferenceBlocks),
+    // so a non-anchored `getByText` match resolves to 2+ elements and trips
+    // strict-mode. Use `.first()` — same pattern as line below + journey 8 fix (#116).
+    await expect(page.getByText('python-fastapi', { exact: false }).first()).toBeVisible({
       timeout: 15_000,
     });
 

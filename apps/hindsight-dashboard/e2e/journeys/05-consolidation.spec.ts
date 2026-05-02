@@ -97,11 +97,15 @@ test.describe('Journey 5 — Consolidation validate / reject @full', () => {
     await expect(page.getByText(suggestion2ToReject, { exact: false })).toBeVisible({ timeout: 5_000 });
 
     // ── 4. Validate the first suggestion via UI ──────────────────────────────
-    const card1 = page.locator('article,div,li,tr').filter({ hasText: suggestion1ToValidate }).first();
+    const card1 = page
+      .getByText(suggestion1ToValidate, { exact: false })
+      .locator('xpath=ancestor::div[.//button[normalize-space()="Accept"]][1]');
     await card1.getByRole('button', { name: /^accept$/i }).click();
 
     // ── 5. Reject the second suggestion ──────────────────────────────────────
-    const card2 = page.locator('article,div,li,tr').filter({ hasText: suggestion2ToReject }).first();
+    const card2 = page
+      .getByText(suggestion2ToReject, { exact: false })
+      .locator('xpath=ancestor::div[.//button[normalize-space()="Reject"]][1]');
     await card2.getByRole('button', { name: /^reject$/i }).click();
 
     // ── 6. Verify status flips via API ───────────────────────────────────────
