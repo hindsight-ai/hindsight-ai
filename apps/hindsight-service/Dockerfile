@@ -23,9 +23,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip install --upgrade pip setuptools wheel
 
-# Copy project files and install dependencies using pip
+# Copy project files and install the EXACT dependency versions from uv.lock
+# (the same versions CI tests). A plain `pip install .` resolves the open-ended
+# ranges in pyproject.toml to whatever is newest at build time, which silently
+# shipped untested majors (e.g. SQLAlchemy 2.1 switched the default PostgreSQL
+# driver to psycopg 3, so the image could not even run migrations).
 COPY . ./
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir uv \
+    && uv export --frozen --no-dev --no-emit-project --no-hashes -o /tmp/requirements.lock.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.lock.txt \
+    && pip install --no-cache-dir --no-deps . \
+    && rm /tmp/requirements.lock.txt
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
