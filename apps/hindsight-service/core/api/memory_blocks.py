@@ -18,6 +18,7 @@ from core.db import schemas, crud, models
 from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
 from core.api.permissions import can_read, can_write, ensure_can_publish
+from core.api.keyword_redaction import redact_block, redact_blocks, visible_keywords
 from core.utils.scopes import (
     ALL_SCOPES,
     SCOPE_PUBLIC,
@@ -170,7 +171,7 @@ def get_all_memory_blocks_endpoint(
     total_pages = math.ceil(total_items / limit) if limit and limit > 0 else 0
 
     return {
-        "items": memory_blocks,
+        "items": redact_blocks(memory_blocks, current_user),
         "total_items": total_items,
         "total_pages": total_pages
     }
@@ -191,7 +192,7 @@ def get_memory_block_keywords_endpoint(
     if not can_read(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
     keywords = crud.get_memory_block_keywords(db, memory_id=memory_id)
-    return keywords
+    return visible_keywords(keywords, current_user)
 
 @router.post("/{memory_id}/keywords/{keyword_id}", response_model=schemas.MemoryBlockKeywordAssociation, status_code=status.HTTP_201_CREATED)
 def associate_keyword_with_memory_block_endpoint(
@@ -323,7 +324,7 @@ def get_archived_memory_blocks_endpoint(
     total_pages = math.ceil(total_items / limit) if limit and limit > 0 else 0
 
     return {
-        "items": memory_blocks,
+        "items": redact_blocks(memory_blocks, current_user),
         "total_items": total_items,
         "total_pages": total_pages
     }
@@ -344,7 +345,7 @@ def get_memory_block_endpoint(
     ensure_pat_allows_read(current_user, getattr(db_memory_block, 'organization_id', None))
     if not can_read(db_memory_block, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
-    return db_memory_block
+    return redact_block(db_memory_block, current_user)
 
 @router.put("/{memory_id}", response_model=schemas.MemoryBlock)
 def update_memory_block_endpoint(
@@ -569,7 +570,9 @@ def search_memory_blocks_endpoint(
         **search_params,
     )
 
-    sanitized_results = [_strip_search_fields(result) for result in results]
+    sanitized_results = redact_blocks(
+        [_strip_search_fields(result) for result in results], current_user
+    )
 
     if metadata:
         header_payload = {
