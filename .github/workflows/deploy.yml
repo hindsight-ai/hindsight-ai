@@ -430,6 +430,23 @@ jobs:
               rm -f "$QE_TMP"
             fi
 
+            # Backend must actually serve /health (a crash-looping backend used to pass
+            # the container-status check below, e.g. when migrations failed at startup).
+            echo "Waiting for hindsight-service /health..."
+            backend_ok=false
+            for i in $(seq 1 45); do
+              if docker compose -f ${{ env.COMPOSE_FILE }} exec -T hindsight-service curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then
+                backend_ok=true; break
+              fi
+              sleep 4
+            done
+            if [ "$backend_ok" != true ]; then
+              echo "❌ hindsight-service did not become healthy. Recent logs:"
+              docker compose -f ${{ env.COMPOSE_FILE }} logs --tail 40 hindsight-service
+              exit 1
+            fi
+            echo "✅ hindsight-service is healthy"
+
             # Simple health check: wait 10 seconds and verify containers are still running
             echo "Performing simple health check - waiting 10 seconds..."
             sleep 10
