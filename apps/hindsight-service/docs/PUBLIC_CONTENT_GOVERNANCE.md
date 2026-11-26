@@ -39,7 +39,8 @@ All tests are in `tests/integration/permissions/test_public_publish_governance.p
 | Keyword auto-creation on memory create | Inherits the memory block's scope; personal/org never becomes public | `crud.create_memory_block` uses block scope | `test_public_memory_create_keywords_inherit_public_scope`, `test_personal_memory_create_never_creates_public_keywords` |
 | `POST /consolidation-suggestions/{id}/validate/` | Merged block copies originals' scope; originals must share scope/owner/org and caller needs write on all | `can_write` (public: superadmin only), mismatch check | `test_consolidation_*` |
 | Bulk move (`/bulk-operations/.../bulk-move`, `core/async_bulk_operations.py`) | No: destination scope is only organization or personal | `_destination_visibility_scope` | `test_bulk_move_destination_scope_is_never_public` |
-| `/memory-blocks/bulk-*`, compress, prune, optimization execute, suggest-keywords, consolidation reject/delete | No: only a `scope` hint, no scope write | none needed | `test_scope_hint_on_other_write_routes_cannot_publish` |
+| `POST /memory-blocks/{id}/compress/apply`, `/memory/prune/confirm`, `/memory-blocks/bulk-apply-keywords` | Overwriting or archiving a public row is effectively publishing/tampering | `ensure_can_write_memory_block` on every target block (403 for compress/apply; skipped and reported per item for prune and bulk); refusals audited as failure rows; bulk keywords take the block's scope/owner/org | `test_*_via_write_routes`, `test_bulk_apply_keywords_*` |
+| `/memory-blocks/bulk-generate-keywords`, `/bulk-compact`, compress (suggest), prune suggest, optimization execute, suggest-keywords, consolidation reject/delete | No: only a `scope` hint, no scope write | none needed | `test_scope_hint_on_other_write_routes_cannot_publish` |
 | PAT-authenticated calls to any of the above | Same code paths; PAT never widens permissions | `ensure_pat_allows_write` + `ensure_can_publish` | `*_pat*` parametrizations |
 | MCP-facing endpoints | They call the same REST endpoints with a PAT | as above | PAT tests |
 
@@ -54,8 +55,5 @@ A stale allowlist entry also fails. New endpoint: route public decisions through
 
 ## Known adjacent gaps (not visibility, not changed)
 
-- `POST /memory-blocks/{id}/compress/apply`, `/memory/prune/confirm` and
-  `/memory-blocks/bulk-apply-keywords` do not check `can_write` on the target
-  block (content tampering, including of public blocks, by any authenticated user).
-- `bulk-apply-keywords` creates a keyword without an owner, which violates
-  `ck_keywords_personal_owner` and fails.
+- `change-scope` to an organization checks only the caller's rights in the target
+  org, not their rights over the resource (apart from the personal-to-org consent check).

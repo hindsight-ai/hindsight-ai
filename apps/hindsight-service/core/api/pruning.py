@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 from core.db import crud
 from core.db.database import get_db
 from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_write
+from core.api.permissions import ensure_can_write_memory_block
+from core.audit import AuditAction
 from core.pruning.pruning_service import get_pruning_service
 from core.utils.feature_flags import llm_features_enabled
 
@@ -107,6 +109,14 @@ def confirm_pruning_endpoint(
         for memory_id_str in memory_block_ids:
             try:
                 memory_id = uuid.UUID(memory_id_str)
+                block = crud.get_memory_block(db, memory_id)
+                if block is not None and not ensure_can_write_memory_block(
+                    current_user, block, db=db, audit_action=AuditAction.MEMORY_ARCHIVE
+                ):
+                    # Not permitted: skip and report like any other failure.
+                    failed_count += 1
+                    failed_blocks.append(memory_id_str)
+                    continue
                 success = crud.archive_memory_block(db, memory_id=memory_id)
                 if success:
                     archived_count += 1

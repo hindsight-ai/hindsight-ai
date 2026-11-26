@@ -439,6 +439,83 @@ def test_bulk_move_destination_scope_is_never_public():
             assert S._destination_visibility_scope(dest_org, dest_owner) in ("organization", "personal")
 
 
+# --------------------------------------------------------------------------- block write guards (compress/apply, prune, bulk keywords)
+
+def _write_requests(mem_id):
+    return {
+        "compress_apply": lambda c, h: c.post(f"/memory-blocks/{mem_id}/compress/apply",
+                                              json={"compressed_content": "overwritten"}, headers=h),
+        "prune_confirm": lambda c, h: c.post("/memory/prune/confirm",
+                                             json={"memory_block_ids": [str(mem_id)]}, headers=h),
+        "bulk_keywords": lambda c, h: c.post(
+            "/memory-blocks/bulk-apply-keywords",
+            json={"applications": [{"memory_block_id": str(mem_id), "selected_keywords": ["govkw"]}]}, headers=h),
+    }
+
+
+def _ok(route: str, r) -> bool:
+    """Did the call actually modify the block?"""
+    if route == "compress_apply":
+        return r.status_code == 200
+    body = r.json() if r.status_code == 200 else {}
+    return bool(body.get("archived_count") if route == "prune_confirm" else body.get("successful_count"))
+
+
+ROUTES = ["compress_apply", "prune_confirm", "bulk_keywords"]
+
+
+@pytest.mark.parametrize("route", ROUTES)
+@pytest.mark.parametrize("target", ["other_personal", "public"])
+def test_non_owner_cannot_modify_block_via_write_routes(client, db_session, route, target):
+    owner = _user(db_session, "owner")
+    ag = _agent(db_session, "personal", owner=owner) if target == "other_personal" else _agent(db_session, "public")
+    mem = _memory(db_session, ag, target.replace("other_", ""), owner=owner if target == "other_personal" else None)
+    intruder = _user(db_session, "intruder")
+    r = _write_requests(mem.id)[route](client, _hdr(intruder, **{"X-Active-Scope": "personal"}))
+    assert not _ok(route, r), r.text
+    if route == "compress_apply":
+        assert r.status_code == 403
+    db_session.expire_all()
+    db_session.refresh(mem)
+    assert mem.content == "generic content" and not mem.archived
+    assert db_session.query(models.MemoryBlockKeyword).filter_by(memory_id=mem.id).count() == 0
+    assert _audit(db_session, intruder, "memory_update" if route != "prune_confirm" else "memory_archive", "failure")
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_owner_can_modify_own_block_via_write_routes(client, db_session, route):
+    owner = _user(db_session, "owner")
+    mem = _memory(db_session, _agent(db_session, "personal", owner=owner), "personal", owner=owner)
+    r = _write_requests(mem.id)[route](client, _hdr(owner, **{"X-Active-Scope": "personal"}))
+    assert _ok(route, r), r.text
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_superadmin_can_modify_public_block_via_write_routes(client, db_session, route):
+    admin = _user(db_session, "root", superadmin=True)
+    mem = _memory(db_session, _agent(db_session, "public"), "public")
+    r = _write_requests(mem.id)[route](client, _hdr(admin, **PUBLIC))
+    assert _ok(route, r), r.text
+
+
+def test_bulk_apply_keywords_uses_block_scope_and_owner(client, db_session):
+    owner = _user(db_session, "owner")
+    mem = _memory(db_session, _agent(db_session, "personal", owner=owner), "personal", owner=owner)
+    r = _write_requests(mem.id)["bulk_keywords"](client, _hdr(owner, **{"X-Active-Scope": "personal"}))
+    assert r.json()["successful_count"] == 1, r.text
+    kw = db_session.query(models.Keyword).filter_by(keyword_text="govkw").one()
+    assert (kw.visibility_scope, kw.owner_user_id) == ("personal", owner.id)
+
+
+def test_bulk_apply_keywords_on_public_block_creates_public_keyword_only_for_superadmin(client, db_session):
+    admin = _user(db_session, "root", superadmin=True)
+    mem = _memory(db_session, _agent(db_session, "public"), "public")
+    r = _write_requests(mem.id)["bulk_keywords"](client, _hdr(admin, **PUBLIC))
+    assert r.json()["successful_count"] == 1, r.text
+    kw = db_session.query(models.Keyword).filter_by(keyword_text="govkw").one()
+    assert kw.visibility_scope == "public"
+
+
 # --------------------------------------------------------------------------- scope hints on other write routes
 
 def _sweep_requests(mem_id, kw_id, sugg_id):
@@ -483,6 +560,7 @@ def test_scope_hint_on_other_write_routes_cannot_publish(client, db_session, mak
 # deliberately classified. Add a governance test, then list the route here.
 GATED = "publish-gated: ensure_can_publish + tests above"
 SWEEP = "scope hint only; no publish path, covered by test_scope_hint_on_other_write_routes_cannot_publish"
+BLOCKW = "writes an existing block: can_write on every target; tests: test_*_via_write_routes"
 BULK = "cannot yield public: test_bulk_move_destination_scope_is_never_public"
 UNRELATED = "opaque body unrelated to content visibility (users/orgs/support)"
 
@@ -499,11 +577,11 @@ PUBLISH_ROUTE_ALLOWLIST = {
     ("POST", "/consolidation-suggestions/{suggestion_id}/reject/"): SWEEP,
     ("DELETE", "/consolidation-suggestions/{suggestion_id}"): SWEEP,
     ("POST", "/memory/prune/suggest"): SWEEP,
-    ("POST", "/memory/prune/confirm"): SWEEP,
+    ("POST", "/memory/prune/confirm"): BLOCKW,
     ("POST", "/memory-blocks/{memory_id}/compress"): SWEEP,
-    ("POST", "/memory-blocks/{memory_id}/compress/apply"): SWEEP,
+    ("POST", "/memory-blocks/{memory_id}/compress/apply"): BLOCKW,
     ("POST", "/memory-blocks/bulk-generate-keywords"): SWEEP,
-    ("POST", "/memory-blocks/bulk-apply-keywords"): SWEEP,
+    ("POST", "/memory-blocks/bulk-apply-keywords"): BLOCKW,
     ("POST", "/memory-blocks/bulk-compact"): SWEEP,
     ("POST", "/memory-optimization/suggestions/{suggestion_id}/execute"): SWEEP,
     ("POST", "/bulk-operations/organizations/{org_id}/bulk-move"): BULK,
