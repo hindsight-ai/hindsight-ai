@@ -34,11 +34,8 @@ services:
     networks:
       - hindsight-ai
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DASHBOARD_HOST}`)"
-      - "traefik.http.routers.dashboard.service=api@internal"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      # Traefik dashboard/API intentionally not exposed (it had no auth). Use an SSH tunnel.
+      - "traefik.enable=false"
     depends_on:
       - oauth2-proxy
 
