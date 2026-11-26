@@ -40,7 +40,7 @@ jobs:
     # until issue #105 promotes it to a required check after 1 week of green.
     name: E2E smoke (@smoke)
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true # promote to required via #105 after 1 week green
 
@@ -122,7 +122,7 @@ jobs:
     # This is the staging-promotion gate.
     name: E2E full
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     services:
