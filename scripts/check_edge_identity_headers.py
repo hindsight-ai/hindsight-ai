@@ -80,6 +80,17 @@ def main(root: Path) -> int:
         if h not in blanked:
             errors.append(f"middleware '{MIDDLEWARE}' does not blank identity header '{h}'")
 
+    # Only the edge proxy may listen on public interfaces. Any other published
+    # port (Ollama, Postgres, backend...) must be bound to 127.0.0.1.
+    compose = yaml.safe_load((root / "docker-compose.app.yml").read_text())
+    for name, svc in (compose.get("services") or {}).items():
+        for port in svc.get("ports") or []:
+            spec = str(port)
+            if spec in ("80:80", "443:443") and name == "traefik":
+                continue
+            if not spec.startswith("127.0.0.1:"):
+                errors.append(f"docker-compose.app.yml: service '{name}' publishes '{spec}' on all interfaces; bind it to 127.0.0.1")
+
     if errors:
         print("Edge identity-header contract FAILED:")
         for e in errors:
