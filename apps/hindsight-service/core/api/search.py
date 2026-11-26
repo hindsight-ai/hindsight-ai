@@ -23,6 +23,8 @@ from core.services.search_service import (
 
 logger = logging.getLogger(__name__)
 
+from core.api.keyword_redaction import redact_blocks
+
 router = APIRouter()
 
 
@@ -67,7 +69,7 @@ def search_memory_blocks_fulltext_endpoint(
         )
 
         logger.info(f"Full-text search for '{query}' returned {len(results)} results")
-        return results
+        return redact_blocks(results, current_user, schemas.MemoryBlockWithScore)
 
     except HTTPException:
         raise
@@ -122,7 +124,7 @@ def search_memory_blocks_semantic_endpoint(
             metadata.get("fallback_reason"),
             expansion_meta.get("expansion_applied"),
         )
-        return results
+        return redact_blocks(results, current_user, schemas.MemoryBlockWithScore)
 
     except HTTPException:
         raise
@@ -183,7 +185,7 @@ def search_memory_blocks_hybrid_endpoint(
             len(results),
             expansion_meta.get("expansion_applied"),
         )
-        return results
+        return redact_blocks(results, current_user, schemas.MemoryBlockWithScore)
 
     except HTTPException:
         raise
