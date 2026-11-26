@@ -21,6 +21,10 @@ class TestSearchService:
         mock_memory_block.lessons_learned = "Test lessons"
         mock_memory_block.metadata_col = {"key": "value"}
         mock_memory_block.feedback_score = 1
+        mock_memory_block.retrieval_count = 0
+        mock_memory_block.visibility_scope = "public"
+        mock_memory_block.owner_user_id = uuid.uuid4()
+        mock_memory_block.organization_id = None
         mock_memory_block.archived = False
         mock_memory_block.archived_at = None
         mock_memory_block.timestamp = "2023-01-01T00:00:00Z"
@@ -43,6 +47,8 @@ class TestSearchService:
         assert len(result.keywords) == 1
         assert result.keywords[0].keyword_text == "test"
         assert result.score_components == {}
+        assert result.visibility_scope == "public"
+        assert result.owner_user_id == mock_memory_block.owner_user_id
 
     @patch('core.services.search.fulltext_strategy.func')
     def test_search_memory_blocks_fulltext_empty_query(self, mock_func):

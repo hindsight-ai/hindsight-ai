@@ -55,6 +55,12 @@ def _create_memory_block_with_score(
         'lessons_learned': memory_block.lessons_learned,
         'metadata_col': memory_block.metadata_col,
         'feedback_score': memory_block.feedback_score,
+        'retrieval_count': memory_block.retrieval_count,
+        # Scope/ownership must reflect the DB row, never the schema defaults
+        # (which would label public rows as personal with no owner).
+        'visibility_scope': memory_block.visibility_scope,
+        'owner_user_id': memory_block.owner_user_id,
+        'organization_id': memory_block.organization_id,
         'archived': memory_block.archived,
         'archived_at': memory_block.archived_at,
         'timestamp': memory_block.timestamp,

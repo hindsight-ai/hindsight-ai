@@ -74,8 +74,8 @@ def trigger_consolidation_endpoint(
 
 
 def _user_can_view_suggestion(db: Session, suggestion, current_user) -> bool:
+    # Write-path pre-check (validate/reject/...): at least one original readable.
     try:
-        # Check at least one original memory is readable
         for mid in suggestion.original_memory_ids or []:
             try:
                 mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
@@ -86,6 +86,28 @@ def _user_can_view_suggestion(db: Session, suggestion, current_user) -> bool:
     except Exception:
         pass
     return False
+
+
+def _user_can_read_suggestion_content(db: Session, suggestion, current_user) -> bool:
+    """Read-path rule for GET endpoints. A suggestion's text is derived from ALL
+    of its source blocks, so the caller must be able to read every one of them
+    (readable-any would leak a private block's content through a suggestion that
+    also merges a public one).
+    """
+    try:
+        originals = suggestion.original_memory_ids or []
+        if not originals:
+            return False
+        for mid in originals:
+            try:
+                mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
+            except Exception:
+                mem = None
+            if not (mem and can_read(mem, current_user)):
+                return False
+        return True
+    except Exception:
+        return False
 
 def _user_can_write_suggestion(db: Session, suggestion, current_user) -> bool:
     try:
@@ -150,18 +172,20 @@ def get_consolidation_suggestions_endpoint(
 
     scoped_suggestions = []
     for s in raw_suggestions:
-        ok = False
+        # Every source block must be readable (see _user_can_read_suggestion_content);
+        # at least one must also be in the requested scope.
+        if not _user_can_read_suggestion_content(db, s, current_user):
+            continue
+        in_scope = False
         for mid in (s.original_memory_ids or []):
             try:
                 mem = db.query(models.MemoryBlock).filter(models.MemoryBlock.id == uuid.UUID(str(mid))).first()
             except Exception:
                 mem = None
-            if not mem:
-                continue
-            if can_read(mem, current_user) and _in_scope(mem):
-                ok = True
+            if mem and _in_scope(mem):
+                in_scope = True
                 break
-        if ok:
+        if in_scope:
             scoped_suggestions.append(s)
 
     total_items = len(scoped_suggestions)
@@ -187,7 +211,7 @@ def get_consolidation_suggestion_endpoint(
     if not suggestion:
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
     # Enforce visibility based on original memories
-    if not _user_can_view_suggestion(db, suggestion, current_user):
+    if not _user_can_read_suggestion_content(db, suggestion, current_user):
         raise HTTPException(status_code=404, detail="Consolidation suggestion not found")
     return suggestion
 

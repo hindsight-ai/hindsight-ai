@@ -26,6 +26,8 @@ from core.api.deps import (
     get_scoped_user_and_context,
 )
 
+from core.api.keyword_redaction import redact_blocks
+
 router = APIRouter(prefix="/keywords", tags=["keywords"])  # normalized prefix
 
 @router.post("/", response_model=schemas.Keyword, status_code=status.HTTP_201_CREATED)
@@ -225,7 +227,7 @@ def get_keyword_memory_blocks_endpoint(
         current_user=current_user,
         scope_ctx=scope_ctx,
     )
-    return memory_blocks
+    return redact_blocks(memory_blocks, current_user)
 
 @router.get("/{keyword_id}/memory-blocks/count")
 def get_keyword_memory_blocks_count_endpoint(
