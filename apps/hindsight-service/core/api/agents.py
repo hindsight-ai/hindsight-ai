@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from core.db import schemas, crud
 from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
-from core.api.permissions import can_read, can_write
+from core.api.permissions import can_read, can_write, ensure_can_publish
 from core.utils.scopes import (
     ALL_SCOPES,
     SCOPE_PUBLIC,
@@ -52,8 +52,11 @@ def create_agent_endpoint(
         can_write = bool((m or {}).get('can_write'))
         if not m or not (can_write or role in ('owner', 'admin', 'editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
-    if scope == SCOPE_PUBLIC and not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Only superadmin can create public agents")
+    from core.audit import AuditAction as _AA
+    ensure_can_publish(
+        current_user, scope, db=db, target_type="agent",
+        audit_action=_AA.AGENT_CREATE, metadata={"from_scope": None, "name": agent.agent_name},
+    )
 
     existing = crud.get_agent_by_name(
         db,
@@ -83,6 +86,8 @@ def create_agent_endpoint(
             action=AuditAction.AGENT_CREATE,
             name=created.agent_name,
             extra_metadata={
+                "from_scope": None,
+                "to_scope": created.visibility_scope,
                 "scope": created.visibility_scope,
                 "organization_id": str(created.organization_id) if created.organization_id else None,
             },
@@ -338,9 +343,11 @@ def change_agent_scope(
         if not can_move_scope(agent, SCOPE_PERSONAL, None, current_user):
             if not current_user.is_superadmin:
                 raise HTTPException(status_code=403, detail="Forbidden")
-    elif target_scope == SCOPE_PUBLIC:
-        if not current_user.is_superadmin:
-            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+    from core.audit import AuditAction as _AA
+    ensure_can_publish(
+        current_user, target_scope, db=db, target_type="agent", target_id=agent.agent_id,
+        audit_action=_AA.AGENT_SCOPE_CHANGE, metadata={"from_scope": agent.visibility_scope},
+    )
     owner_id = None
     org_uuid = None
     if target_scope == SCOPE_ORGANIZATION:
@@ -386,6 +393,8 @@ def change_agent_scope(
             actor_user_id=current_user.id,
             organization_id=agent.organization_id or previous_org_id,
             metadata={
+                "from_scope": previous_scope,
+                "to_scope": agent.visibility_scope,
                 "old_scope": previous_scope,
                 "new_scope": agent.visibility_scope,
                 "old_org_id": str(previous_org_id) if previous_org_id else None,

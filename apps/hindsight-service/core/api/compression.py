@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 from core.db import crud, schemas
 from core.db.database import get_db
 from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_write
+from core.api.permissions import ensure_can_write_memory_block
+from core.audit import AuditAction
 from core.pruning.compression_service import get_compression_service
 from core.utils.feature_flags import llm_features_enabled
 
@@ -102,7 +104,12 @@ def apply_memory_compression_endpoint(
     _scope_ctx = scoped.scope
     if user is None or current_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    ensure_pat_allows_write(current_user)
+    block = crud.get_memory_block(db, memory_id)
+    if not block:
+        raise HTTPException(status_code=404, detail="Memory block not found")
+    ensure_pat_allows_write(current_user, getattr(block, "organization_id", None))
+    if not ensure_can_write_memory_block(current_user, block, db=db, audit_action=AuditAction.MEMORY_UPDATE):
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     try:
         # Update the memory block with compressed content

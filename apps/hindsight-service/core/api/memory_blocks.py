@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from core.db import schemas, crud, models
 from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user, get_user_memberships
-from core.api.permissions import can_read, can_write
+from core.api.permissions import can_read, can_write, ensure_can_publish
 from core.utils.scopes import (
     ALL_SCOPES,
     SCOPE_PUBLIC,
@@ -74,8 +74,11 @@ def create_memory_block_endpoint(
     memberships_by_org = current_user.memberships_by_org
     scope = sc.scope or SCOPE_PERSONAL
     org_id = str(sc.organization_id) if sc.organization_id and scope == SCOPE_ORGANIZATION else None
-    if scope == SCOPE_PUBLIC and not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Only superadmin can create public data")
+    from core.audit import AuditAction
+    ensure_can_publish(
+        current_user, scope, db=db, target_type="memory_block",
+        audit_action=AuditAction.MEMORY_CREATE, metadata={"from_scope": None, "agent_id": str(memory_block.agent_id)},
+    )
     if scope == SCOPE_ORGANIZATION:
         if not org_id or org_id not in memberships_by_org:
             raise HTTPException(status_code=403, detail="Not a member of target organization")
@@ -91,6 +94,21 @@ def create_memory_block_endpoint(
         'organization_id': sc.organization_id if scope == SCOPE_ORGANIZATION else None,
     })
     db_memory_block = crud.create_memory_block(db=db, memory_block=mb)
+    if scope == SCOPE_PUBLIC:
+        # Every public publication is audited (who published what).
+        try:
+            from core.audit import log_memory, AuditStatus
+            log_memory(
+                db,
+                actor_user_id=current_user.id,
+                organization_id=None,
+                memory_block_id=db_memory_block.id,
+                action=AuditAction.MEMORY_CREATE,
+                status=AuditStatus.SUCCESS,
+                metadata={"from_scope": None, "to_scope": SCOPE_PUBLIC, "scope": SCOPE_PUBLIC},
+            )
+        except Exception:
+            db.rollback()
     return db_memory_block
 
 @router.get("/", response_model=schemas.PaginatedMemoryBlocks)
@@ -626,9 +644,15 @@ def change_memory_block_scope(
             # Superadmin override allowed
             if not current_user.is_superadmin:
                 raise HTTPException(status_code=403, detail="Forbidden")
-    elif target_scope == SCOPE_PUBLIC:
-        if not current_user.is_superadmin:
-            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+    # Public targets are gated by the single publish helper (audits refusals).
+    from core.audit import AuditAction as _AA
+    ensure_can_publish(
+        current_user, target_scope, db=db, target_type="memory_block", target_id=mb.id,
+        audit_action=_AA.MEMORY_SCOPE_CHANGE, metadata={"from_scope": mb.visibility_scope},
+    )
+    if target_scope != SCOPE_ORGANIZATION:
+        # PAT write scope applies to every target (org targets checked above).
+        ensure_pat_allows_write(current_user, None)
 
     # Determine new ownership fields (capture previous state first)
     previous_scope = mb.visibility_scope
@@ -651,9 +675,7 @@ def change_memory_block_scope(
         mb.visibility_scope = SCOPE_PERSONAL
         mb.owner_user_id = owner_id
         mb.organization_id = None
-    else:  # public
-        if not current_user.is_superadmin:
-            raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+    else:  # public (superadmin already enforced by ensure_can_publish above)
         mb.visibility_scope = SCOPE_PUBLIC
         mb.organization_id = None
         mb.owner_user_id = None
@@ -672,6 +694,8 @@ def change_memory_block_scope(
             actor_user_id=current_user.id,
             organization_id=mb.organization_id or previous_org_id,
             metadata={
+                "from_scope": previous_scope,
+                "to_scope": mb.visibility_scope,
                 "old_scope": previous_scope,
                 "new_scope": mb.visibility_scope,
                 "old_org_id": str(previous_org_id) if previous_org_id else None,
