@@ -95,7 +95,7 @@ services:
     image: ollama/ollama:latest
     restart: unless-stopped
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"  # never public: an open Ollama API gets abused
     environment:
       OLLAMA_HOST: 0.0.0.0
     volumes:

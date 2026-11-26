@@ -2,6 +2,28 @@
 
 http:
   middlewares:
+    # Baseline browser hardening for every response (clickjacking, MIME sniffing, referrer leaks).
+    edge-security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+    # Security: drop client-supplied identity headers at the edge. Only
+    # oauth2-proxy (which runs after this) may set them. Without this, any
+    # client could send X-Auth-Request-Email and be authenticated as anyone.
+    strip-identity-headers:
+      headers:
+        customRequestHeaders:
+          X-Auth-Request-User: ""
+          X-Auth-Request-Email: ""
+          X-Auth-Request-Access-Token: ""
+          X-Auth-Request-Preferred-Username: ""
+          X-Auth-Request-Groups: ""
+          X-Forwarded-User: ""
+          X-Forwarded-Email: ""
+          X-Forwarded-Preferred-Username: ""
+          X-Forwarded-Groups: ""
+          X-Forwarded-Access-Token: ""
     auth-errors:
       errors:
         status:

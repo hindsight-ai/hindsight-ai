@@ -34,11 +34,8 @@ services:
     networks:
       - hindsight-ai
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.hindsight-ai.com`)"
-      - "traefik.http.routers.dashboard.service=api@internal"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      # Traefik dashboard/API intentionally not exposed (it had no auth). Use an SSH tunnel.
+      - "traefik.enable=false"
     depends_on:
       - oauth2-proxy
 
@@ -213,7 +210,7 @@ services:
     image: ollama/ollama:latest
     restart: unless-stopped
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"  # never public: an open Ollama API gets abused
     environment:
       - OLLAMA_HOST=0.0.0.0
     volumes:

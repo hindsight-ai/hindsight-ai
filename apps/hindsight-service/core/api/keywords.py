@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from core.db import schemas, crud, models
 from core.db.database import get_db
 from core.api.auth import resolve_identity_from_headers, get_or_create_user
-from core.api.permissions import can_read, can_write
+from core.api.permissions import can_read, can_write, ensure_can_publish
 from core.utils.scopes import (
     SCOPE_PUBLIC,
     SCOPE_ORGANIZATION,
@@ -25,6 +25,8 @@ from core.api.deps import (
     ensure_pat_allows_read,
     get_scoped_user_and_context,
 )
+
+from core.api.keyword_redaction import redact_blocks
 
 router = APIRouter(prefix="/keywords", tags=["keywords"])  # normalized prefix
 
@@ -48,8 +50,11 @@ def create_keyword_endpoint(
         can_write_flag = bool((m or {}).get('can_write'))
         if not m or not (can_write_flag or role in ('owner', 'admin', 'editor')):
             raise HTTPException(status_code=403, detail="No write permission in target organization")
-    if scope == SCOPE_PUBLIC and not current_user.is_superadmin:
-        raise HTTPException(status_code=403, detail="Only superadmin can create public keywords")
+    from core.audit import AuditAction as _AA
+    ensure_can_publish(
+        current_user, scope, db=db, target_type="keyword",
+        audit_action=_AA.KEYWORD_CREATE, metadata={"from_scope": None, "text": keyword.keyword_text},
+    )
     existing = crud.get_scoped_keyword_by_text(
         db,
         keyword_text=keyword.keyword_text,
@@ -77,6 +82,8 @@ def create_keyword_endpoint(
             action=AuditAction.KEYWORD_CREATE,
             text=created.keyword_text,
             extra_metadata={
+                "from_scope": None,
+                "to_scope": created.visibility_scope,
                 "scope": created.visibility_scope,
                 "organization_id": str(created.organization_id) if created.organization_id else None,
             },
@@ -140,6 +147,17 @@ def update_keyword_endpoint(
     ensure_pat_allows_write(current_user, getattr(existing, 'organization_id', None))
     if not can_write(existing, current_user):
         raise HTTPException(status_code=403, detail="Forbidden")
+    # The update body may carry visibility_scope: that is a scope change and must
+    # never be a way around the publish gate.
+    previous_scope = existing.visibility_scope
+    requested_scope = getattr(keyword.visibility_scope, "value", keyword.visibility_scope)
+    if requested_scope is not None and requested_scope != previous_scope:
+        from core.audit import AuditAction as _AA
+        ensure_can_publish(
+            current_user, requested_scope, db=db, target_type="keyword", target_id=existing.keyword_id,
+            audit_action=_AA.KEYWORD_UPDATE, metadata={"from_scope": previous_scope},
+        )
+        raise HTTPException(status_code=422, detail="Changing a keyword's scope via update is not supported")
     db_keyword = crud.update_keyword(db, keyword_id=keyword_id, keyword=keyword)
     try:
         from core.audit import log_keyword, AuditAction, AuditStatus
@@ -225,7 +243,7 @@ def get_keyword_memory_blocks_endpoint(
         current_user=current_user,
         scope_ctx=scope_ctx,
     )
-    return memory_blocks
+    return redact_blocks(memory_blocks, current_user)
 
 @router.get("/{keyword_id}/memory-blocks/count")
 def get_keyword_memory_blocks_count_endpoint(

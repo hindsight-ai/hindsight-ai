@@ -12,6 +12,19 @@ on:
         default: false
 
 jobs:
+  edge-security-contract:
+    name: Edge identity-header contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml==6.0.2
+      - name: Edge must strip client-supplied identity headers
+        run: python3 scripts/check_edge_identity_headers.py
+
   hindsight-service-tests:
     name: Hindsight Service (pytest)
     runs-on: ubuntu-latest
@@ -52,7 +65,7 @@ jobs:
         run: npm run test:coverage -- --ci
 
   build-and-push-hindsight-service:
-    needs: [hindsight-service-tests, dashboard-tests]
+    needs: [edge-security-contract, hindsight-service-tests, dashboard-tests]
     runs-on: ubuntu-latest
     # Select environment based on branch so we can use env-scoped secrets
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
@@ -101,7 +114,7 @@ jobs:
             VERSION=${{ env.BACKEND_VERSION }}
 
   build-and-push-hindsight-dashboard:
-    needs: [hindsight-service-tests, dashboard-tests]
+    needs: [edge-security-contract, hindsight-service-tests, dashboard-tests]
     runs-on: ubuntu-latest
     # Select environment based on branch so we can use env-scoped secrets
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
@@ -417,6 +430,23 @@ jobs:
               rm -f "$QE_TMP"
             fi
 
+            # Backend must actually serve /health (a crash-looping backend used to pass
+            # the container-status check below, e.g. when migrations failed at startup).
+            echo "Waiting for hindsight-service /health..."
+            backend_ok=false
+            for i in $(seq 1 45); do
+              if docker compose -f ${{ env.COMPOSE_FILE }} exec -T hindsight-service curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then
+                backend_ok=true; break
+              fi
+              sleep 4
+            done
+            if [ "$backend_ok" != true ]; then
+              echo "❌ hindsight-service did not become healthy. Recent logs:"
+              docker compose -f ${{ env.COMPOSE_FILE }} logs --tail 40 hindsight-service
+              exit 1
+            fi
+            echo "✅ hindsight-service is healthy"
+
             # Simple health check: wait 10 seconds and verify containers are still running
             echo "Performing simple health check - waiting 10 seconds..."
             sleep 10
@@ -433,3 +463,24 @@ jobs:
               docker compose -f ${{ env.COMPOSE_FILE }} logs --tail 20
               exit 1
             fi
+
+      - name: Post-deploy security smoke test (identity headers cannot be spoofed)
+        env:
+          API_HOST: ${{ github.ref == 'refs/heads/main' && 'api.hindsight-ai.com' || 'api-staging.hindsight-ai.com' }}
+        run: |
+          set -u
+          # A client-supplied identity header must NOT authenticate. If this ever
+          # returns 2xx, the edge stopped stripping identity headers and anyone
+          # could act as any user (including a superadmin). Fail loudly.
+          for header in X-Auth-Request-Email X-Forwarded-Email; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+              -H "$header: deploy-smoke@invalid.example" \
+              "https://${API_HOST}/organizations/")
+            echo "$header spoof -> HTTP $code"
+            case "$code" in
+              401) ;;
+              2*) echo "::error::Identity header $header was trusted on $API_HOST (HTTP $code). Edge header stripping is broken."
+                  exit 1 ;;
+              *)  echo "::warning::Spoof check on $API_HOST was inconclusive (HTTP $code, expected 401)." ;;
+            esac
+          done

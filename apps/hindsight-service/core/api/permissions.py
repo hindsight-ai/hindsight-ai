@@ -211,3 +211,83 @@ def can_move_scope(resource, target_scope: str, target_org_id, current_user: Opt
         return False
     except (AttributeError, TypeError):
         return False
+
+
+def ensure_can_publish(
+    current_user,
+    target_scope,
+    *,
+    db=None,
+    target_type: Optional[str] = None,
+    target_id=None,
+    audit_action=None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Single gate for every write that would make content publicly visible.
+
+    Raises HTTP 403 unless ``target_scope`` is non-public or the caller is a
+    superadmin. When a non-superadmin is refused and ``db`` plus ``audit_action``
+    are supplied, a failure audit row is recorded (best effort; skipped for
+    anonymous callers because audit_logs.actor_user_id is NOT NULL).
+    """
+    from fastapi import HTTPException
+
+    scope_value = getattr(target_scope, "value", target_scope)
+    if scope_value != SCOPE_PUBLIC:
+        return
+    if current_user is not None and getattr(current_user, "is_superadmin", False):
+        return
+    actor_id = getattr(current_user, "id", None)
+    if db is not None and audit_action is not None and actor_id is not None:
+        try:
+            from core.audit import log, AuditStatus
+
+            md = {"to_scope": SCOPE_PUBLIC, "reason": "only superadmin can publish"}
+            if metadata:
+                md.update(metadata)
+            log(
+                db,
+                action=audit_action,
+                status=AuditStatus.FAILURE,
+                target_type=target_type or "unknown",
+                target_id=target_id,
+                actor_user_id=actor_id,
+                metadata=md,
+            )
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+    raise HTTPException(status_code=403, detail="Only superadmin can publish to public")
+
+
+def ensure_can_write_memory_block(current_user, block, *, db=None, audit_action=None) -> bool:
+    """Return True if ``current_user`` may modify ``block``.
+
+    On refusal, records a failure audit row (best effort) and returns False so
+    callers can raise 403 or skip-and-report per item. Public rows are
+    superadmin-only (see can_write).
+    """
+    if can_write(block, current_user):
+        return True
+    actor_id = getattr(current_user, "id", None)
+    if db is not None and audit_action is not None and actor_id is not None and block is not None:
+        try:
+            from core.audit import log, AuditStatus
+
+            log(
+                db,
+                action=audit_action,
+                status=AuditStatus.FAILURE,
+                target_type="memory_block",
+                target_id=block.id,
+                actor_user_id=actor_id,
+                metadata={"scope": block.visibility_scope, "reason": "no write permission"},
+            )
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+    return False

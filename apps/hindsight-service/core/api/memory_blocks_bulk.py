@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session
 from core.db import crud, models, schemas
 from core.db.database import get_db
 from core.api.deps import get_scoped_user_and_context, ensure_pat_allows_write
+from core.api.permissions import ensure_can_write_memory_block
+from core.audit import AuditAction
 from core.pruning.compression_service import get_compression_service
 from core.services.keyword_extraction_service import extract_keywords_enhanced
 from core.utils.feature_flags import llm_features_enabled
@@ -148,14 +150,38 @@ def bulk_apply_keywords_endpoint(
                     failed_count += 1
                     continue
 
+                ensure_pat_allows_write(current_user, getattr(memory_block, "organization_id", None))
+                if not ensure_can_write_memory_block(
+                    current_user, memory_block, db=db, audit_action=AuditAction.MEMORY_UPDATE
+                ):
+                    results.append({
+                        "memory_block_id": memory_block_id,
+                        "error": "Forbidden",
+                        "success": False,
+                    })
+                    failed_count += 1
+                    continue
+
                 added_keywords = []
                 skipped_keywords = []
 
                 for keyword_text in selected_keywords:
                     # Get or create keyword
-                    keyword = crud.get_keyword_by_text(db, keyword_text=keyword_text)
+                    # Keywords always take the block's scope/owner/org (never wider).
+                    keyword = crud.get_scoped_keyword_by_text(
+                        db,
+                        keyword_text=keyword_text,
+                        visibility_scope=memory_block.visibility_scope,
+                        owner_user_id=memory_block.owner_user_id,
+                        organization_id=memory_block.organization_id,
+                    )
                     if not keyword:
-                        keyword_create = schemas.KeywordCreate(keyword_text=keyword_text)
+                        keyword_create = schemas.KeywordCreate(
+                            keyword_text=keyword_text,
+                            visibility_scope=memory_block.visibility_scope,
+                            owner_user_id=memory_block.owner_user_id,
+                            organization_id=memory_block.organization_id,
+                        )
                         keyword = crud.create_keyword(db=db, keyword=keyword_create)
 
                     # Check if association already exists

@@ -9,9 +9,8 @@ global:
 log:
   level: DEBUG
 
-# API and dashboard configuration
-api:
-  dashboard: true
+# API and dashboard: disabled. The dashboard router had no authentication,
+# so the whole routing config was public. Use an SSH tunnel if needed.
 
 # Define entrypoints for web (HTTP) and websecure (HTTPS)
 entryPoints:
@@ -25,6 +24,10 @@ entryPoints:
           scheme: https
   websecure:
     address: ":443"
+    http:
+      middlewares:
+        - strip-identity-headers@file
+        - edge-security-headers@file
 
 # Configure providers
 providers:
